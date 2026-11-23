@@ -143,3 +143,9 @@
 "Classic" = "Класична";
 "Glass" = "Скло";
 "Light" = "Світла";
+
+"Test chat" = "Тест чату";
+"Test transcription" = "Тест транскрипції";
+"Supports transcription" = "Підтримує транскрипцію";
+"Off hides this provider from the engine chain" = "Вимкнено — провайдер не буде в ланцюжку рушіїв";
+"No API key saved" = "Ключ API не збережено";

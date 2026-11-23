@@ -14,12 +14,17 @@ enum ProviderTester {
             return .failure(ModelCatalog.Failure.noBaseURL)
         }
 
+        let apiKey = ProviderCatalog.key(for: spec)
+        if spec.requiresKey, apiKey == nil {
+            return .failure(ModelCatalog.Failure.http(401, "No API key saved"))
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let key = ProviderCatalog.key(for: spec) {
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        if let apiKey {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
         let payload: [String: Any] = [

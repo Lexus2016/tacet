@@ -105,6 +105,7 @@ struct ProviderTestRow: View {
     var baseURL: String?
     var model: String
     var kind: Kind = .chat
+    var title: String = "Test connection"
 
     enum Kind { case chat, transcription }
 
@@ -115,7 +116,7 @@ struct ProviderTestRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
-                Text("Test connection")
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13))
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }

@@ -83,6 +83,19 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(asrModels, forKey: "asrModels") }
     }
 
+    @Published var asrEnabled: [String: Bool] {
+        didSet { defaults.set(asrEnabled, forKey: "asrEnabled") }
+    }
+
+    func isASREnabled(for provider: String) -> Bool {
+        if let stored = asrEnabled[provider] { return stored }
+        return provider == EngineID.groq || provider == EngineID.openAI || provider == EngineID.parakeet
+    }
+
+    func setASREnabled(_ enabled: Bool, for provider: String) {
+        asrEnabled[provider] = enabled
+    }
+
     func asrModel(for provider: String) -> String {
         let stored = asrModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return stored.isEmpty ? ProviderCatalog.defaultASRModel(for: provider) : stored
@@ -240,6 +253,7 @@ final class AppSettings: ObservableObject {
         indicatorTheme = defaults.string(forKey: "indicatorTheme") ?? "classic"
         uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"
         asrModels = defaults.dictionary(forKey: "asrModels") as? [String: String] ?? [:]
+        asrEnabled = defaults.dictionary(forKey: "asrEnabled") as? [String: Bool] ?? [:]
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true

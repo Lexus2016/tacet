@@ -84,6 +84,20 @@ private struct ProviderConfigCard: View {
             if spec.supportsTranscription {
                 SoftDivider()
 
+                SoftRow("Supports transcription", subtitle: "Off hides this provider from the engine chain") {
+                    Toggle("", isOn: Binding(
+                        get: { settings.isASREnabled(for: spec.id) },
+                        set: { settings.setASREnabled($0, for: spec.id) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+            }
+
+            if spec.supportsTranscription, settings.isASREnabled(for: spec.id) {
+                SoftDivider()
+
                 SoftRow("Transcription model", subtitle: "Used when this provider is in the engine chain") {
                     HStack(spacing: 8) {
                         TextField("", text: asrBinding)
@@ -102,13 +116,14 @@ private struct ProviderConfigCard: View {
 
             SoftDivider()
 
-            ProviderTestRow(spec: spec, model: settings.chatModel(for: spec.id))
+            ProviderTestRow(spec: spec, model: settings.chatModel(for: spec.id), title: "Test chat")
 
-            if spec.supportsTranscription {
+            if spec.supportsTranscription, settings.isASREnabled(for: spec.id) {
                 SoftDivider()
                 ProviderTestRow(spec: spec,
                                 model: settings.asrModel(for: spec.id),
-                                kind: .transcription)
+                                kind: .transcription,
+                                title: "Test transcription")
             }
         }
         .sheet(isPresented: $showingChatModels) {
@@ -194,6 +209,7 @@ struct ChainSettingsView: View {
             $0.id != EngineID.parakeet
                 && !settings.engineOrder.contains($0.id)
                 && ProviderCatalog.isConfigured($0)
+                && settings.isASREnabled(for: $0.id)
         }
     }
 
