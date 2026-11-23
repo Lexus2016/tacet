@@ -25,6 +25,7 @@ final class DictationController: ObservableObject {
     private let pipeline = TranscriptionPipeline()
     private let cleanupPipeline = CleanupPipeline()
     private let hotkey = HotkeyManager()
+    private let languageMemory = LanguageMemory()
 
     private var isStarting = false
     private var hotkeyIsDown = false
@@ -201,11 +202,16 @@ final class DictationController: ObservableObject {
             openAIModel: settings.openAIModel,
             cloudTimeout: settings.cloudTimeout
         )
+        let expectedLanguage: String? = targetApplication
+            .flatMap { $0.bundleIdentifier }
+            .flatMap { languageMemory.language(for: $0) }
+
         let pipelineSettings = PipelineSettings(
             languageOverride: settings.languageOverride,
             engineOrder: settings.engineOrder,
             dualLanguageCheck: settings.dualLanguageCheck,
-            cloudTimeout: settings.cloudTimeout
+            cloudTimeout: settings.cloudTimeout,
+            expectedLanguage: expectedLanguage
         )
 
         let result = await pipeline.transcribe(clip, settings: pipelineSettings, engines: engineConfiguration)
@@ -271,6 +277,11 @@ final class DictationController: ObservableObject {
         let canPaste = allowPaste && restoreTargetApplication()
         TextInserter.copy(text)
         let pasted = canPaste && settings.pasteAutomatically && TextInserter.paste()
+
+        if let bundleID = targetApplication?.bundleIdentifier,
+           let language = transcript.language {
+            languageMemory.remember(language, for: bundleID)
+        }
 
         let entryID: String
         if let existingEntryID {

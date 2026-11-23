@@ -46,7 +46,8 @@ final class TranscriptionPipeline {
 
                 if settings.languageOverride == nil,
                    settings.dualLanguageCheck,
-                   let alternate = LanguagePolicy.alternate(for: transcript) {
+                   let alternate = LanguagePolicy.alternate(for: transcript,
+                                                           expected: settings.expectedLanguage) {
                     if let second = try? await withTimeout(timeout, operation: {
                         try await recognizer.transcribe(clip, language: alternate)
                     }), Plausibility.isAcceptable(second.text, duration: clip.duration) {

@@ -162,7 +162,7 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
-                Text("The language is detected for every dictation separately, so you can switch chats and languages without touching settings.")
+                Text("The language is detected for every dictation separately, so you can switch chats and languages without touching settings. Tacet also remembers the language you last used in each app, which skips the extra check when you come back.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

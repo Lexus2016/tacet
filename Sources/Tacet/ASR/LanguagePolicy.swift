@@ -37,13 +37,18 @@ enum LanguagePolicy {
     }
 
     /// The second language to try, or nil when a second decode would add
-    /// nothing.
-    static func alternate(for transcript: Transcript) -> String? {
+    /// nothing. `expected` is the language last used in this app.
+    static func alternate(for transcript: Transcript, expected: String? = nil) -> String? {
         let detected = normalize(transcript.language)
         let verdict = cyrillicVerdict(transcript.text)
 
         if let verdict, verdict != detected {
             return verdict
+        }
+        // The engine agrees with what this app usually dictates: no second
+        // request needed.
+        if let expected, detected == expected {
+            return nil
         }
         guard isCyrillic(transcript.text) else { return nil }
 
@@ -51,7 +56,7 @@ enum LanguagePolicy {
         case "uk": return "ru"
         case "ru": return "uk"
         case .some(let other) where isConfusable(other):
-            return "uk"
+            return expected ?? "uk"
         default:
             return nil
         }

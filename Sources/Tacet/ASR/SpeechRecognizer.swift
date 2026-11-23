@@ -79,6 +79,9 @@ struct PipelineSettings: Sendable {
     let engineOrder: [String]
     let dualLanguageCheck: Bool
     let cloudTimeout: TimeInterval
+    /// Language last used in the current app, used to skip a redundant second
+    /// decode. Never used to force a decode.
+    var expectedLanguage: String? = nil
 }
 
 // MARK: - Plausibility

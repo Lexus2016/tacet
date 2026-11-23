@@ -47,6 +47,16 @@ final class LanguagePolicyTests: XCTestCase {
         XCTAssertNil(LanguagePolicy.alternate(for: result))
     }
 
+    func testRememberedLanguageSkipsTheSecondDecode() {
+        let result = transcript("Добрий день", language: "uk")
+        XCTAssertNil(LanguagePolicy.alternate(for: result, expected: "uk"))
+    }
+
+    func testRememberedLanguageIsCheckedWhenDetectionDisagrees() {
+        let result = transcript("Добрий день", language: "uk")
+        XCTAssertEqual(LanguagePolicy.alternate(for: result, expected: "ru"), "ru")
+    }
+
     func testMismatchedScriptIsPenalised() {
         let russianTextDecodedAsUkrainian = transcript("Это был съёмочный день", language: "ru", score: 0.9)
         let ukrainian = transcript("Це був знімальний день", language: "uk", score: 0.85)
