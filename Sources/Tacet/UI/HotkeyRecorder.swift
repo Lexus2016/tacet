@@ -21,7 +21,7 @@ struct HotkeyRecorder: View {
                 HStack(spacing: 6) {
                     Image(systemName: isRecording ? "record.circle.fill" : "keyboard")
                         .foregroundStyle(isRecording ? Theme.danger : .secondary)
-                    Text(isRecording ? "Press keys…" : HotkeyFormat.title(modifiers: modifiers, label: label))
+                    Text(isRecording ? "Press keys…" : HotkeyFormat.title(keyCode: keyCode, modifiers: modifiers, label: label))
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .frame(minWidth: 110)
                 }
@@ -52,7 +52,7 @@ struct HotkeyRecorder: View {
             let pressed = singles.filter { flags.contains($0) }
             guard pressed.count == 1 else { return event }
 
-            keyCode = 0
+            keyCode = Int(event.keyCode)
             modifiers = HotkeyFormat.carbon(flags)
             label = ""
             stop()
@@ -101,9 +101,39 @@ enum HotkeyFormat {
         return value
     }
 
-    static func title(modifiers: Int, label: String) -> String {
+    static func title(keyCode: Int, modifiers: Int, label: String) -> String {
+        if let side = modifierKeyName(keyCode), singleModifier(modifiers) != nil {
+            return side
+        }
         if label.isEmpty, modifiers != 0 { return symbols(modifiers) }
         return symbols(modifiers) + (label.isEmpty ? "Key" : label)
+    }
+
+    /// The physical modifier keys, so Left and Right Command are distinct.
+    static func isModifierKeyCode(_ keyCode: Int) -> Bool {
+        modifierKeyName(keyCode) != nil
+    }
+
+    static func modifierKeyName(_ keyCode: Int) -> String? {
+        switch keyCode {
+        case 54: return "Right ⌘"
+        case 55: return "Left ⌘"
+        case 58: return "Left ⌥"
+        case 61: return "Right ⌥"
+        case 59: return "Left ⌃"
+        case 62: return "Right ⌃"
+        case 56: return "Left ⇧"
+        case 60: return "Right ⇧"
+        default: return nil
+        }
+    }
+
+    /// One of command/option/control/shift, or nil when the combination has
+    /// zero or several modifiers.
+    static func singleModifier(_ carbon: Int) -> Int? {
+        let flags = [Int(cmdKey), Int(optionKey), Int(controlKey), Int(shiftKey)]
+        let matched = flags.filter { carbon & $0 != 0 }
+        return matched.count == 1 ? matched[0] : nil
     }
 
     /// Carbon masks back to AppKit flags, for the modifier-only monitor.

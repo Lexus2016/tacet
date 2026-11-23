@@ -54,7 +54,7 @@ enum ProviderCatalog {
     /// picker and the test button exist precisely because catalogues change.
     static func defaultChatModel(for id: String) -> String {
         switch id {
-        case "groq": return "openai/gpt-oss-20b"
+        case "groq": return "openai/gpt-oss-120b"
         case "openai": return "gpt-4o-mini"
         case "openrouter": return "openai/gpt-4o-mini"
         case "cerebras": return "llama3.1-8b"

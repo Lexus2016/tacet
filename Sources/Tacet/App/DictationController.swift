@@ -153,10 +153,12 @@ final class DictationController: ObservableObject {
 
         // A single modifier cannot be a Carbon hotkey; it is monitored through
         // flagsChanged and always behaves as push-to-talk.
-        if settings.hotkeyKeyCode == 0, settings.hotkeyModifiers != 0 {
+        if isModifierOnlyHotkey {
             let flags = HotkeyFormat.eventFlags(from: settings.hotkeyModifiers)
-            if hotkey.registerModifierOnly(flags) {
-                activeHotkey = HotkeyFormat.title(modifiers: settings.hotkeyModifiers, label: "")
+            if hotkey.registerModifierOnly(flags, keyCode: settings.hotkeyKeyCode) {
+                activeHotkey = HotkeyFormat.title(keyCode: settings.hotkeyKeyCode,
+                                                  modifiers: settings.hotkeyModifiers,
+                                                  label: "")
                 hotkeyConflict = false
                 status("Hold \(activeHotkey) to dictate")
             } else {
@@ -167,7 +169,8 @@ final class DictationController: ObservableObject {
             return
         }
 
-        let preferred = HotkeyFormat.title(modifiers: settings.hotkeyModifiers,
+        let preferred = HotkeyFormat.title(keyCode: settings.hotkeyKeyCode,
+                                           modifiers: settings.hotkeyModifiers,
                                            label: settings.hotkeyLabel)
 
         if hotkey.register(keyCode: UInt32(settings.hotkeyKeyCode),
@@ -199,7 +202,7 @@ final class DictationController: ObservableObject {
         hotkeyIsDown = true
         guard phase == .idle || phase == .recording else { return }
 
-        if settings.hotkeyKeyCode == 0 {
+        if isModifierOnlyHotkey {
             if phase == .idle { startRecording() }
             return
         }
@@ -215,7 +218,7 @@ final class DictationController: ObservableObject {
         hotkeyIsDown = false
         guard phase == .recording else { return }
 
-        if settings.hotkeyKeyCode == 0 {
+        if isModifierOnlyHotkey {
             stopRecording()
             return
         }
@@ -834,6 +837,12 @@ final class DictationController: ObservableObject {
 
     /// Recordings whose text never arrived, still on disk.
     @Published private(set) var pendingCount = 0
+
+    /// A lone modifier, optionally a specific side of it.
+    private var isModifierOnlyHotkey: Bool {
+        guard HotkeyFormat.singleModifier(settings.hotkeyModifiers) != nil else { return false }
+        return settings.hotkeyKeyCode == 0 || HotkeyFormat.isModifierKeyCode(settings.hotkeyKeyCode)
+    }
 
     /// Shown in the menu so the hotkey is discoverable without opening Settings.
     var hotkeyHint: String {

@@ -26,10 +26,20 @@ REPO="Lexus2016/tacet"
 SPARKLE_BIN=".tools/bin"
 DIST="dist"
 ARCHS_LIST=(arm64 x86_64)
+NOTARY_PROFILE=${NOTARY_PROFILE:-murable}
 
 if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   echo "Sparkle tools are missing. Expected $SPARKLE_BIN/generate_appcast" >&2
   exit 1
+fi
+
+if [ "${SKIP_NOTARIZATION:-0}" != "1" ]; then
+  if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+    echo "Notary profile '$NOTARY_PROFILE' is missing." >&2
+    echo "Create it once (the password is an app-specific password from appleid.apple.com):" >&2
+    echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <APPLE_ID> --password <APP_PASSWORD> --team-id BKZ6Y9W9MF" >&2
+    exit 1
+  fi
 fi
 
 if [ -n "$(git status --porcelain)" ]; then
@@ -79,17 +89,51 @@ for ARCH in "${ARCHS_LIST[@]}"; do
     *) echo "Wrong architecture for ${ARCH}: $ARCH_INFO" >&2; exit 1 ;;
   esac
 
-  if [ -n "${NOTARY_PROFILE:-}" ]; then
+  if [ "${SKIP_NOTARIZATION:-0}" != "1" ]; then
     echo "Notarizing ${ARCH}…"
     ditto -c -k --keepParent "$APP" "$DIST/notarize-$ARCH.zip"
     xcrun notarytool submit "$DIST/notarize-$ARCH.zip" --keychain-profile "$NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"
+    xcrun stapler validate "$APP"
+    spctl --assess --type execute --verbose "$APP" || {
+      echo "Gatekeeper still rejects the ${ARCH} app after stapling." >&2
+      exit 1
+    }
     rm -f "$DIST/notarize-$ARCH.zip"
   fi
 
   ZIP="$DIST/Tacet-$VERSION-$ARCH.zip"
   ditto -c -k --keepParent "$APP" "$ZIP"
-  hdiutil create -volname "Tacet" -srcfolder "$APP" -ov -format UDZO "$DIST/Tacet-$VERSION-$ARCH.dmg" >/dev/null
+
+  DMG="$DIST/Tacet-$VERSION-$ARCH.dmg"
+  BG="assets/dmg-background-$ARCH.png"
+  [ -f "$BG" ] || BG="assets/dmg-background-arm64.png"
+
+  rm -f "$DMG"
+  if command -v create-dmg >/dev/null 2>&1; then
+    timeout 120 create-dmg \
+      --volname "Tacet $VERSION" \
+      --background "$BG" \
+      --window-pos 200 120 \
+      --window-size 660 400 \
+      --icon-size 128 \
+      --icon "Tacet.app" 180 200 \
+      --hide-extension "Tacet.app" \
+      --app-drop-link 480 200 \
+      --no-internet-enable \
+      "$DMG" "$APP" >/dev/null 2>&1 || true
+  fi
+
+  if [ ! -f "$DMG" ]; then
+    echo "create-dmg failed for ${ARCH}; using a plain image" >&2
+    hdiutil create -volname "Tacet $VERSION" -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+  fi
+
+  if [ "${SKIP_NOTARIZATION:-0}" != "1" ]; then
+    echo "Notarizing the ${ARCH} disk image…"
+    xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$DMG"
+  fi
 
   mkdir -p "$DIST/appcast-$ARCH"
   cp "$ZIP" "$DIST/appcast-$ARCH/"

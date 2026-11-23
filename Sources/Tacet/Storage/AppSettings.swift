@@ -203,9 +203,14 @@ final class AppSettings: ObservableObject {
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"
-        hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") as? Int ?? 49
-        hotkeyModifiers = defaults.object(forKey: "hotkeyModifiers") as? Int ?? 0x1800 // control + option
-        hotkeyLabel = defaults.string(forKey: "hotkeyLabel") ?? "Space"
+        // The old default (Control-Option-Space) is migrated to the new one
+        // (right Command); a combination the user picked is kept.
+        let storedKey = defaults.object(forKey: "hotkeyKeyCode") as? Int
+        let storedMods = defaults.object(forKey: "hotkeyModifiers") as? Int
+        let wasOldDefault = storedKey == 49 && storedMods == 0x1800
+        hotkeyKeyCode = wasOldDefault ? 54 : (storedKey ?? 54)
+        hotkeyModifiers = wasOldDefault ? 0x0100 : (storedMods ?? 0x0100)
+        hotkeyLabel = wasOldDefault ? "" : (defaults.string(forKey: "hotkeyLabel") ?? "")
     }
 }
 

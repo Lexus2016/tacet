@@ -17,6 +17,7 @@ final class HotkeyManager {
 
     private var modifierMonitor: Any?
     private var modifierMask: NSEvent.ModifierFlags = []
+    private var modifierKeyCode: Int = 0
     private var modifierDown = false
     private var modifierStarted = false
     private var modifierSawKey = false
@@ -32,9 +33,10 @@ final class HotkeyManager {
     /// a key press. The monitor waits a moment before starting, so Command-C
     /// does not flash a recording.
     @discardableResult
-    func registerModifierOnly(_ mask: NSEvent.ModifierFlags) -> Bool {
+    func registerModifierOnly(_ mask: NSEvent.ModifierFlags, keyCode: Int = 0) -> Bool {
         unregister()
         modifierMask = mask
+        modifierKeyCode = keyCode
 
         guard AXIsProcessTrusted() else {
             NSLog("Tacet: modifier-only hotkey needs Accessibility")
@@ -55,6 +57,7 @@ final class HotkeyManager {
         switch event.type {
         case .flagsChanged:
             let isDown = relevant == modifierMask
+                && (modifierKeyCode == 0 || Int(event.keyCode) == modifierKeyCode)
 
             if isDown, !modifierDown {
                 modifierDown = true

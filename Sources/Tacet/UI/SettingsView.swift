@@ -136,13 +136,14 @@ struct GeneralSettingsView: View {
                     }
                     .padding(.vertical, 7)
                 } else if !controller.activeHotkey.isEmpty,
-                          controller.activeHotkey != HotkeyFormat.title(modifiers: settings.hotkeyModifiers,
+                          controller.activeHotkey != HotkeyFormat.title(keyCode: settings.hotkeyKeyCode,
+                                                                         modifiers: settings.hotkeyModifiers,
                                                                          label: settings.hotkeyLabel) {
                     SoftDivider()
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle.fill")
                             .foregroundStyle(Theme.accent)
-                        Text("\(HotkeyFormat.title(modifiers: settings.hotkeyModifiers, label: settings.hotkeyLabel)) is taken. Tacet is listening on \(controller.activeHotkey).")
+                        Text("\(HotkeyFormat.title(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers, label: settings.hotkeyLabel)) is taken. Tacet is listening on \(controller.activeHotkey).")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
