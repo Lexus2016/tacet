@@ -14,6 +14,9 @@ packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
     from: 0.17.5
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.1
 
 configFiles:
   Debug: Configuration/Signing.local.xcconfig
@@ -50,6 +53,8 @@ targets:
     dependencies:
       - package: FluidAudio
         product: FluidAudio
+      - package: Sparkle
+        product: Sparkle
 
   TacetTests:
     type: bundle.unit-test

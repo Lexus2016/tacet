@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CLIHarness.runIfRequested() { return }
 
         _ = DictationController.shared
+        _ = Updater.shared
 
         // A menu bar app with no engine looks broken: every dictation fails with
         // "not configured". Open the one window that fixes it.
@@ -88,6 +89,10 @@ struct MenuBarView: View {
 
             Button("Settings…") {
                 AppWindows.shared.showSettings()
+            }
+
+            Button("Check for Updates…") {
+                Updater.shared.checkForUpdates()
             }
 
             Divider()
