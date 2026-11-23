@@ -45,17 +45,81 @@ final class HUDModel: ObservableObject {
 /// Ported from TypeWhisper's AudioWaveformBarModel: center-weighted bars, a
 /// per-bar drift so they keep moving while the level holds, and attack/release
 /// smoothing so they do not twitch between level updates.
+/// Drives the bars from a reference-type model, so the 30 Hz animation does not
+/// depend on the parent view being re-created by level updates.
+final class WaveformModel: ObservableObject {
+    @Published private(set) var heights: [CGFloat]
+
+    var level: Float = 0
+    private let barCount: Int
+    private var timer: Timer?
+    private var lastTick: TimeInterval = 0
+
+    init(barCount: Int) {
+        self.barCount = max(1, barCount)
+        heights = Array(repeating: 0, count: self.barCount)
+    }
+
+    deinit { timer?.invalidate() }
+
+    func start() {
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func tick() {
+        let now = Date().timeIntervalSinceReferenceDate
+        let elapsed = lastTick == 0 ? 1.0 / 30.0 : min(0.1, max(0.001, now - lastTick))
+        lastTick = now
+
+        let level = CGFloat(min(1, max(0, self.level) * 1.8))
+        var updated = heights
+
+        for index in 0..<barCount {
+            let position = (Double(index) + 0.5) / Double(barCount)
+            let shape = 0.55 + 0.45 * CGFloat(sin(.pi * position))
+            let rate = 2.2 + 0.65 * Double(index)
+            let phase = Double(index) * 2.1
+            let drift = 0.8 + 0.2 * CGFloat(sin(now * rate + phase))
+            let target = level * shape * drift
+            let tau: CGFloat = target > updated[index] ? 0.04 : 0.16
+            updated[index] += (target - updated[index]) * CGFloat(1 - exp(-elapsed / Double(tau)))
+        }
+
+        heights = updated
+    }
+}
+
 struct IndicatorWaveform: View {
     let level: Float
     var barCount: Int = 5
-    var height: CGFloat = 16
+    var height: CGFloat = 22
     var tint: Color = .white
     var barWidth: CGFloat = 3
 
-    @State private var heights: [CGFloat] = []
-    @State private var lastTick: TimeInterval = 0
+    @StateObject private var model: WaveformModel
 
-    private let timer = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
+    init(level: Float,
+         barCount: Int = 5,
+         height: CGFloat = 22,
+         tint: Color = .white,
+         barWidth: CGFloat = 3) {
+        self.level = level
+        self.barCount = barCount
+        self.height = height
+        self.tint = tint
+        self.barWidth = barWidth
+        _model = StateObject(wrappedValue: WaveformModel(barCount: barCount))
+    }
 
     var body: some View {
         HStack(spacing: 2) {
@@ -63,38 +127,18 @@ struct IndicatorWaveform: View {
                 Capsule()
                     .fill(tint)
                     .frame(width: barWidth,
-                           height: max(2, heights.indices.contains(index) ? heights[index] * height : 2))
+                           height: max(2, (model.heights.indices.contains(index) ? model.heights[index] : 0) * height))
             }
         }
         .frame(height: height)
-        .onReceive(timer) { advance($0) }
         .onAppear {
-            if heights.count != barCount {
-                heights = Array(repeating: 0, count: barCount)
-            }
+            model.level = level
+            model.start()
         }
-    }
-
-    private func advance(_ now: Date) {
-        let time = now.timeIntervalSinceReferenceDate
-        let elapsed = lastTick == 0 ? 1.0 / 30.0 : min(0.1, max(0.001, time - lastTick))
-        lastTick = time
-
-        if heights.count != barCount {
-            heights = Array(repeating: 0, count: barCount)
+        .onChange(of: level) { _, newValue in
+            model.level = newValue
         }
-
-        let level = CGFloat(min(1, max(0, self.level)))
-        for index in 0..<barCount {
-            let position = (Double(index) + 0.5) / Double(barCount)
-            let shape = 0.55 + 0.45 * CGFloat(sin(.pi * position))
-            let rate = 2.2 + 0.65 * Double(index)
-            let phase = Double(index) * 2.1
-            let drift = 0.8 + 0.2 * CGFloat(sin(time * rate + phase))
-            let target = level * shape * drift
-            let tau: CGFloat = target > heights[index] ? 0.04 : 0.16
-            heights[index] += (target - heights[index]) * CGFloat(1 - exp(-elapsed / Double(tau)))
-        }
+        .onDisappear { model.stop() }
     }
 }
 
