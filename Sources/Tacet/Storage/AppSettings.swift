@@ -109,6 +109,12 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(indicatorStyle, forKey: "indicatorStyle") }
     }
 
+    /// "auto" keeps the spoken language; a code translates the transcript
+    /// before it is inserted.
+    @Published var outputLanguage: String {
+        didSet { defaults.set(outputLanguage, forKey: "outputLanguage") }
+    }
+
     @Published var showHUD: Bool {
         didSet { defaults.set(showHUD, forKey: "showHUD") }
     }
@@ -176,6 +182,7 @@ final class AppSettings: ObservableObject {
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
+        outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"

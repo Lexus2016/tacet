@@ -127,8 +127,16 @@ final class PlausibilityTests: XCTestCase {
     }
 }
 
-final class AudioChunkTests: XCTestCase {
-    private func makeClip(seconds: Double) -> AudioClip {
+final class TranslatorTests: XCTestCase {
+    func testLanguageNames() {
+        XCTAssertEqual(Translator.languageName("uk"), "Ukrainian")
+        XCTAssertEqual(Translator.languageName("en"), "English")
+        XCTAssertEqual(Translator.languageName("ru"), "Russian")
+        XCTAssertEqual(Translator.languageName("pl"), "Polish")
+    }
+}
+
+final class AudioChunkTests: XCTestCase {    private func makeClip(seconds: Double) -> AudioClip {
         let count = Int(seconds * 16_000)
         let samples = (0..<count).map { Float(sin(Double($0) * 0.01) * 0.2) }
         return AudioClip(url: URL(fileURLWithPath: "/tmp/tacet-none.wav"),

@@ -165,6 +165,20 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Output language",
+                        subtitle: "Dictate in any language; the inserted text is in this one") {
+                    Picker("", selection: $settings.outputLanguage) {
+                        Text("Same as spoken").tag("auto")
+                        ForEach(LanguageOption.allCases.filter { $0 != .auto }) { option in
+                            Text(option.title).tag(option.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
+
+                SoftDivider()
+
                 SoftRow("Second language check",
                         subtitle: "When the script is ambiguous, try the likely alternative: Ukrainian/Russian, Belarusian/Russian, Polish/Ukrainian and similar pairs") {
                     Toggle("", isOn: $settings.dualLanguageCheck)

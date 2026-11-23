@@ -24,6 +24,7 @@ final class DictationController: ObservableObject {
     private let capture = AudioCaptureService()
     private let pipeline = TranscriptionPipeline()
     private let cleanupPipeline = CleanupPipeline()
+    private let translator = Translator()
     private let hotkey = HotkeyManager()
     private let languageMemory = LanguageMemory()
 
@@ -373,24 +374,46 @@ final class DictationController: ObservableObject {
         case .success(let output):
             var text = output.transcript.text
             var cleanupEngine: String?
+            var notes: [String] = []
+
+            if output.partial {
+                notes.append("Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts")
+            }
+
+            let secondary = settings.cleanupProvider == KeychainAccount.groq
+                ? (Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY") != nil ? KeychainAccount.openAI : nil)
+                : (Keychain.secret(KeychainAccount.groq, environment: "GROQ_API_KEY") != nil ? KeychainAccount.groq : nil)
+
+            let configuration = CleanupConfiguration(
+                provider: settings.cleanupProvider,
+                baseURL: settings.cleanupBaseURL,
+                model: settings.chatModel(for: settings.cleanupProvider),
+                timeout: settings.cleanupTimeout,
+                secondaryProvider: secondary
+            )
 
             if settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
-                let secondary = settings.cleanupProvider == KeychainAccount.groq
-                    ? (Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY") != nil ? KeychainAccount.openAI : nil)
-                    : (Keychain.secret(KeychainAccount.groq, environment: "GROQ_API_KEY") != nil ? KeychainAccount.groq : nil)
-
-                let configuration = CleanupConfiguration(
-                    provider: settings.cleanupProvider,
-                    baseURL: settings.cleanupBaseURL,
-                    model: settings.chatModel(for: settings.cleanupProvider),
-                    timeout: settings.cleanupTimeout,
-                    secondaryProvider: secondary
-                )
                 let cleaned = await cleanupPipeline.clean(text, configuration: configuration)
                 if cleaned.changed {
                     text = cleaned.text
                     cleanupEngine = cleaned.engine
+                }
+            }
+
+            // Translation runs after cleanup: the model gets clean text and the
+            // transcript keeps its original wording in History.
+            if settings.outputLanguage != "auto" {
+                let spoken = LanguagePolicy.normalize(output.transcript.language)
+                if spoken != settings.outputLanguage {
+                    let outcome = await translator.translate(text,
+                                                              to: settings.outputLanguage,
+                                                              configuration: configuration)
+                    if outcome.translated {
+                        text = outcome.text
+                    } else {
+                        notes.append("Translation to \(settings.outputLanguage) failed — original inserted")
+                    }
                 }
             }
 
@@ -404,9 +427,7 @@ final class DictationController: ObservableObject {
                     existingEntryID: existingEntryID,
                     allowPaste: allowPaste,
                     allowClipboard: allowClipboard,
-                    note: output.partial
-                        ? "Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts"
-                        : nil)
+                    note: notes.isEmpty ? nil : notes.joined(separator: "; "))
 
         case .failure(let failure):
             recordFailure(failure,
