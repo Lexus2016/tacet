@@ -96,7 +96,10 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   "$SPARKLE_BIN/generate_appcast" "$DIST/appcast-$ARCH" \
     --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
     --link "https://github.com/$REPO"
-  cp "$DIST/appcast-$ARCH/appcast.xml" "$DIST/appcast-$ARCH.xml"
+  if [ -f "$DIST/appcast-$ARCH/appcast.xml" ]; then
+    cp "$DIST/appcast-$ARCH/appcast.xml" "$DIST/appcast-$ARCH.xml"
+  fi
+  [ -f "$DIST/appcast-$ARCH.xml" ] || { echo "generate_appcast produced nothing for $ARCH" >&2; exit 1; }
 
   if ! grep -q "sparkle:edSignature=" "$DIST/appcast-$ARCH.xml"; then
     echo "The $ARCH appcast has no EdDSA signature; Sparkle would reject it." >&2
