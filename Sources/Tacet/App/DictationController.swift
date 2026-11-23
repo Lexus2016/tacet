@@ -404,10 +404,13 @@ final class DictationController: ObservableObject {
         let appName = TextInserter.frontmostAppName
 
         let engineConfiguration = EngineConfiguration(
-            groqModel: settings.groqModel,
+            groqModel: settings.asrModel(for: EngineID.groq),
             openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.openAIModel,
-            cloudTimeout: settings.cloudTimeout
+            openAIModel: settings.asrModel(for: EngineID.openAI),
+            cloudTimeout: settings.cloudTimeout,
+            asrModels: Dictionary(uniqueKeysWithValues: ProviderCatalog.all.map {
+                ($0.id, settings.asrModel(for: $0.id))
+            })
         )
         let expectedLanguage: String? = targetApplication
             .flatMap { $0.bundleIdentifier }
@@ -471,6 +474,27 @@ final class DictationController: ObservableObject {
                         notes.append("Translation to \(settings.outputLanguage) failed — original inserted")
                     }
                 }
+            }
+
+            // A selection we cannot read must not be overwritten by the
+            // spoken words: copy the transcript instead.
+            if settings.selectionEditing,
+               capturedSelection == nil,
+               SelectionReader.hasUnreadableSelection() {
+                TextInserter.copy(text)
+                notes.append("Selection could not be read — text copied, selection untouched")
+                deliver(text: text,
+                        raw: output.transcript.text,
+                        transcript: output.transcript,
+                        clip: clip,
+                        latency: Date().timeIntervalSince(started),
+                        appName: appName,
+                        cleanupEngine: cleanupEngine,
+                        existingEntryID: existingEntryID,
+                        allowPaste: false,
+                        allowClipboard: true,
+                        note: notes.joined(separator: "; "))
+                return
             }
 
             // A selection turns the dictation into an edit of that selection.

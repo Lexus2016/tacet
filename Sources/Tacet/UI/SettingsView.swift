@@ -462,6 +462,21 @@ struct EnginesSettingsView: View {
                     }
                     .padding(.vertical, 6)
                 }
+
+                if !availableProviders.isEmpty {
+                    SoftDivider()
+                    Menu("Add provider…") {
+                        ForEach(availableProviders) { provider in
+                            Button(provider.name) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    settings.engineOrder.append(provider.id)
+                                }
+                            }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .padding(.vertical, 6)
+                }
             }
 
             SoftCard(title: "Groq", systemImage: "bolt.fill") {
@@ -526,6 +541,12 @@ struct EnginesSettingsView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var availableProviders: [ProviderSpec] {
+        ProviderCatalog.transcriptionProviders.filter {
+            $0.id != EngineID.parakeet && !settings.engineOrder.contains($0.id)
         }
     }
 

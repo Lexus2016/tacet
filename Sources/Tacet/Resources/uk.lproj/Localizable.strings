@@ -130,3 +130,5 @@
 "With text selected, the dictation rewrites, translates or removes it instead of inserting after it" = "Коли текст виділений, диктант переписує, перекладає або видаляє його замість вставки після";
 "Where the indicator appears" = "Де показувати індикатор";
 "The cleanup model never translates, never summarises, and its answer is discarded when it looks wrong or takes too long. The raw transcript stays available in History." = "Модель обробки не перекладає і не скорочує, а її відповідь відкидається, якщо вона виглядає підозріло або не встигла. Сирий текст завжди лишається в Історії.";
+
+"Add provider…" = "Додати провайдера…";

@@ -79,6 +79,19 @@ final class AppSettings: ObservableObject {
         "llama-3.3-70b-versatile",
     ]
 
+    @Published var asrModels: [String: String] {
+        didSet { defaults.set(asrModels, forKey: "asrModels") }
+    }
+
+    func asrModel(for provider: String) -> String {
+        let stored = asrModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? ProviderCatalog.defaultASRModel(for: provider) : stored
+    }
+
+    func setASRModel(_ model: String, for provider: String) {
+        asrModels[provider] = model.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func chatModel(for provider: String) -> String {
         let stored = chatModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if stored.isEmpty || Self.retiredModels.contains(stored) {
@@ -220,6 +233,7 @@ final class AppSettings: ObservableObject {
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
         uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"
+        asrModels = defaults.dictionary(forKey: "asrModels") as? [String: String] ?? [:]
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true

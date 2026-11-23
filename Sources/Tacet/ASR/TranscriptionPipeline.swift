@@ -5,6 +5,7 @@ struct EngineConfiguration: Sendable {
     let openAIBaseURL: String
     let openAIModel: String
     let cloudTimeout: TimeInterval
+    var asrModels: [String: String] = [:]
 }
 
 /// Runs the configured engine chain for one clip.
@@ -190,7 +191,21 @@ final class TranscriptionPipeline {
             return parakeet
 
         default:
-            return nil
+            // Any other provider is tried through the OpenAI-compatible
+            // transcription endpoint with its own key and model.
+            guard let spec = ProviderCatalog.spec(id),
+                  let url = URL(string: spec.baseURL)
+            else { return nil }
+
+            return CloudRecognizer(configuration: .init(
+                id: spec.id,
+                displayName: spec.name,
+                baseURL: url,
+                model: engines.asrModels[spec.id] ?? ProviderCatalog.defaultASRModel(for: spec.id),
+                keychainAccount: spec.id,
+                environmentKey: spec.environmentKey ?? "",
+                timeout: engines.cloudTimeout
+            ))
         }
     }
 

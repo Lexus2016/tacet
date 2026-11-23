@@ -27,19 +27,19 @@ enum ProviderCatalog {
                      environmentKey: "OPENAI_API_KEY"),
         ProviderSpec(id: "openrouter", name: "OpenRouter",
                      baseURL: "https://openrouter.ai/api/v1",
-                     requiresKey: true, supportsTranscription: false, supportsChat: true,
+                     requiresKey: true, supportsTranscription: true, supportsChat: true,
                      environmentKey: "OPENROUTER_API_KEY"),
         ProviderSpec(id: "cerebras", name: "Cerebras",
                      baseURL: "https://api.cerebras.ai/v1",
-                     requiresKey: true, supportsTranscription: false, supportsChat: true,
+                     requiresKey: true, supportsTranscription: true, supportsChat: true,
                      environmentKey: "CEREBRAS_API_KEY"),
         ProviderSpec(id: "ollama", name: "Ollama (local)",
                      baseURL: "http://localhost:11434/v1",
-                     requiresKey: false, supportsTranscription: false, supportsChat: true,
+                     requiresKey: false, supportsTranscription: true, supportsChat: true,
                      environmentKey: nil),
         ProviderSpec(id: "ollamaCloud", name: "Ollama Cloud",
                      baseURL: "https://ollama.com/v1",
-                     requiresKey: true, supportsTranscription: false, supportsChat: true,
+                     requiresKey: true, supportsTranscription: true, supportsChat: true,
                      environmentKey: "OLLAMA_API_KEY"),
     ]
 
@@ -52,6 +52,14 @@ enum ProviderCatalog {
 
     /// Sensible first model per provider. Wrong guesses are harmless: the model
     /// picker and the test button exist precisely because catalogues change.
+    static func defaultASRModel(for id: String) -> String {
+        switch id {
+        case "groq": return "whisper-large-v3-turbo"
+        case "openrouter": return "openai/whisper-large-v3"
+        default: return "whisper-1"
+        }
+    }
+
     static func defaultChatModel(for id: String) -> String {
         switch id {
         case "groq": return "openai/gpt-oss-120b"
