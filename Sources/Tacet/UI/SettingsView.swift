@@ -671,8 +671,13 @@ struct CleanupSettingsView: View {
                             TextField("", text: modelBinding)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 200)
-                            Button("Browse") { showingModels = true }
-                                .buttonStyle(SoftButtonStyle())
+                            Button {
+                                showingModels = true
+                            } label: {
+                                Image(systemName: "list.bullet")
+                            }
+                            .buttonStyle(SoftButtonStyle())
+                            .help(Text("Browse"))
                         }
                     }
 

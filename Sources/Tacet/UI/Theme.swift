@@ -281,6 +281,7 @@ struct SoftSegmented<Item: Hashable>: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .focusEffectDisabled()
             }
         }
         .padding(4)

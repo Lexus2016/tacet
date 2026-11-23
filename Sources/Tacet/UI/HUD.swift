@@ -381,7 +381,7 @@ final class HUDController {
                       autoHide: TimeInterval?) {
         hideTask?.cancel()
 
-        model.title = title
+        model.title = NSLocalizedString(title, comment: "")
         model.symbol = symbol
         model.tint = tint
         model.showsLevel = level

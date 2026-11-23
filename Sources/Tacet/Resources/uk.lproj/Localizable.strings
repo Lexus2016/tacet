@@ -111,3 +111,13 @@
 "System" = "Системна";
 "Restart" = "Перезапустити";
 "Restart Tacet to apply the language" = "Перезапусти Tacet, щоб застосувати мову";
+
+"Transcribing…" = "Розпізнавання…";
+"Inserted" = "Вставлено";
+"Copied" = "Скопійовано";
+"Copied, press ⌘V" = "Скопійовано, натисни ⌘V";
+"Selection replaced" = "Виділення замінено";
+"Selection removed" = "Виділення видалено";
+"Microphone blocked" = "Мікрофон заблоковано";
+"Recovered — in History" = "Відновлено — в Історії";
+"Preview" = "Перегляд";

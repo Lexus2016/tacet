@@ -37,7 +37,11 @@ final class AudioCaptureService {
 
     static let sampleRate: Double = 16_000
 
-    private let engine = AVAudioEngine()
+    /// A fresh engine per recording: after a call app (Meet, Zoom) has used the
+    /// microphone, a long-lived engine can stay bound to a dead device. Building
+    /// one per dictation and releasing it afterwards is what keeps capture
+    /// working without restarting the app.
+    private var engine: AVAudioEngine?
     private let writeQueue = DispatchQueue(label: "ua.rawira.tacet.wav-writer", qos: .utility)
 
     private var file: AVAudioFile?
@@ -63,16 +67,7 @@ final class AudioCaptureService {
 
     private var observer: NSObjectProtocol?
 
-    init() {
-        observer = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self, self.isRecording else { return }
-            self.configurationChangeHandler?()
-        }
-    }
+    init() {}
 
     deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
@@ -83,6 +78,8 @@ final class AudioCaptureService {
     func start() throws {
         guard !isRecording else { return }
 
+        let engine = AVAudioEngine()
+        self.engine = engine
         let input = engine.inputNode
         let hardwareFormat = input.outputFormat(forBus: 0)
         guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else {
@@ -149,11 +146,32 @@ final class AudioCaptureService {
             input.removeTap(onBus: 0)
             file = nil
             self.converter = nil
+            self.engine = nil
             try? FileManager.default.removeItem(at: url)
             throw CaptureError.engineStart(error.localizedDescription)
         }
 
         isRecording = true
+        installObserver(for: engine)
+    }
+
+    private func installObserver(for engine: AVAudioEngine) {
+        removeObserver()
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isRecording else { return }
+            self.configurationChangeHandler?()
+        }
+    }
+
+    private func removeObserver() {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+            self.observer = nil
+        }
     }
 
     /// Stops capture and returns what was recorded. Audio written before a
@@ -163,8 +181,10 @@ final class AudioCaptureService {
         guard isRecording else { return nil }
         isRecording = false
 
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
+        engine = nil
+        removeObserver()
 
         // Flush the writer before closing the file.
         writeQueue.sync {}
@@ -201,8 +221,10 @@ final class AudioCaptureService {
     func cancel() {
         guard isRecording else { return }
         isRecording = false
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
+        engine = nil
+        removeObserver()
         writeQueue.sync {}
         file = nil
         converter = nil
