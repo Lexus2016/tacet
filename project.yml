@@ -37,6 +37,7 @@ targets:
         INFOPLIST_FILE: Sources/Tacet/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Tacet/Resources/Tacet.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
         SWIFT_STRICT_CONCURRENCY: minimal
         ENABLE_HARDENED_RUNTIME: YES
