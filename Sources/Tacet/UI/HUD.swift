@@ -34,6 +34,7 @@ final class HUDModel: ObservableObject {
     @Published var symbol: String = "mic.fill"
     @Published var level: Float = 0
     @Published var showsLevel: Bool = false
+    @Published var showsSpinner: Bool = false
     @Published var isError: Bool = false
     @Published var tint: Color = Theme.danger
     @Published var style: IndicatorStyle = .island
@@ -181,7 +182,12 @@ private struct IslandIndicator: View {
                 }
             }
 
-            if model.showsLevel {
+            if model.showsSpinner {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(model.tint)
+                    .padding(.leading, 2)
+            } else if model.showsLevel {
                 IndicatorWaveform(level: model.level, tint: model.tint)
                     .padding(.leading, 2)
             }
@@ -232,7 +238,9 @@ private struct NotchIndicator: View {
 
             Spacer(minLength: 6)
 
-            if model.showsLevel {
+            if model.showsSpinner {
+                ProgressView().controlSize(.small).tint(model.tint)
+            } else if model.showsLevel {
                 IndicatorWaveform(level: model.level, barCount: 6, tint: model.tint)
             }
         }
@@ -267,7 +275,10 @@ private struct OverlayIndicator: View {
                 }
             }
 
-            if model.showsLevel {
+            if model.showsSpinner {
+                ProgressView().controlSize(.small).tint(model.tint)
+                    .padding(.leading, 2)
+            } else if model.showsLevel {
                 IndicatorWaveform(level: model.level, barCount: 6, tint: model.tint)
                     .padding(.leading, 2)
             }
@@ -293,7 +304,9 @@ private struct MinimalIndicator: View {
                 .shadow(color: model.tint.opacity(0.9), radius: 4)
                 .overlay(Circle().stroke(Color.white.opacity(0.4), lineWidth: 0.6))
 
-            if model.showsLevel {
+            if model.showsSpinner {
+                ProgressView().controlSize(.mini).tint(model.tint)
+            } else if model.showsLevel {
                 IndicatorWaveform(level: model.level, barCount: 4, height: 12, tint: .white, barWidth: 2.5)
             }
         }
@@ -324,10 +337,19 @@ final class HUDController {
         IndicatorStyle(rawValue: AppSettings.shared.indicatorStyle) ?? .island
     }
 
+    func showPreparing() {
+        stopTicking()
+        startedAt = nil
+        model.subtitle = nil
+        show(title: "Preparing microphone…", symbol: "mic.fill", tint: Theme.accent,
+             level: false, error: false, autoHide: nil, spinner: true)
+    }
+
     func showRecording() {
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Recording", symbol: "mic.fill", tint: Theme.danger, level: true, error: false, autoHide: nil)
+        show(title: "Recording", symbol: "mic.fill", tint: Theme.danger,
+             level: true, error: false, autoHide: nil)
         startTicking()
     }
 
@@ -378,13 +400,15 @@ final class HUDController {
                       tint: Color,
                       level: Bool,
                       error: Bool,
-                      autoHide: TimeInterval?) {
+                      autoHide: TimeInterval?,
+                      spinner: Bool = false) {
         hideTask?.cancel()
 
         model.title = NSLocalizedString(title, comment: "")
         model.symbol = symbol
         model.tint = tint
         model.showsLevel = level
+        model.showsSpinner = spinner
         model.isError = error
         if !level { model.level = 0 }
 

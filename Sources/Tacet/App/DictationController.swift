@@ -8,6 +8,7 @@ final class DictationController: ObservableObject {
 
     enum Phase: Equatable {
         case idle
+        case preparing
         case recording
         case processing
     }
@@ -37,6 +38,8 @@ final class DictationController: ObservableObject {
     private var idleUnloadTask: Task<Void, Never>?
     /// The text that was selected when the recording started.
     private var capturedSelection: String?
+    /// The key was released while the microphone was still starting.
+    private var stopRequested = false
     private var didOpenMicrophoneSettings = false
     /// The combination actually registered, which may differ from the stored
     /// one when another app owns it. Formatted for display.
@@ -221,6 +224,11 @@ final class DictationController: ObservableObject {
 
     private func hotkeyReleased() {
         hotkeyIsDown = false
+
+        if phase == .preparing {
+            stopRequested = true
+            return
+        }
         guard phase == .recording else { return }
 
         if isModifierOnlyHotkey {
@@ -235,6 +243,10 @@ final class DictationController: ObservableObject {
     /// The modifier was only part of a shortcut (Command-C): throw the empty
     /// recording away without a sound or a message.
     private func cancelModifierPress() {
+        if phase == .preparing {
+            stopRequested = true
+            return
+        }
         guard phase == .recording else { return }
         capture.cancel()
         phase = .idle
@@ -245,6 +257,8 @@ final class DictationController: ObservableObject {
     func toggle() {
         if phase == .recording {
             stopRecording()
+        } else if phase == .preparing {
+            stopRequested = true
         } else if phase == .idle {
             startRecording()
         }
@@ -255,6 +269,11 @@ final class DictationController: ObservableObject {
     func startRecording() {
         guard phase == .idle, !isStarting else { return }
         isStarting = true
+        stopRequested = false
+
+        // The indicator appears immediately; the engine is still starting.
+        phase = .preparing
+        if settings.showHUD { HUDController.shared.showPreparing() }
 
         // The microphone always wins over background recovery and model
         // housekeeping.
@@ -271,10 +290,26 @@ final class DictationController: ObservableObject {
                 return
             }
 
+            if stopRequested {
+                stopRequested = false
+                phase = .idle
+                HUDController.shared.hide()
+                return
+            }
+
             do {
                 targetApplication = NSWorkspace.shared.frontmostApplication
                 capturedSelection = settings.selectionEditing ? SelectionReader.selectedText() : nil
                 try capture.start()
+
+                if stopRequested {
+                    stopRequested = false
+                    capture.cancel()
+                    phase = .idle
+                    HUDController.shared.hide()
+                    return
+                }
+
                 phase = .recording
                 lastFailure = nil
                 status("Recording…")
@@ -862,6 +897,7 @@ final class DictationController: ObservableObject {
 
     var menuBarSymbol: String {
         switch phase {
+        case .preparing: return "mic.circle"
         case .recording: return "waveform.circle.fill"
         case .processing: return "ellipsis.circle"
         case .idle: return lastFailure == nil ? "mic.circle" : "exclamationmark.circle"
