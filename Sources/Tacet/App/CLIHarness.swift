@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// Diagnostic entry points, useful for regression tests and for checking an
 /// engine without using the microphone:
@@ -13,7 +14,11 @@ enum CLIHarness {
 
         if let index = arguments.firstIndex(of: "--render-ui"), index + 1 < arguments.count {
             let path = arguments[index + 1]
-            Task { @MainActor in
+            DispatchQueue.main.async {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    print("render timed out")
+                    exit(2)
+                }
                 renderSettings(to: path)
                 exit(0)
             }
@@ -21,9 +26,11 @@ enum CLIHarness {
         }
 
         if arguments.contains("--preview-ui") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 NSApp.activate()
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                let window = makeSettingsWindow()
+                previewWindow = window
+                window.makeKeyAndOrderFront(nil)
             }
             return false
         }
@@ -118,21 +125,31 @@ enum CLIHarness {
         }
     }
 
-    /// Renders the settings window off-screen and writes a PNG. Used to check
-    /// layout changes without clicking through the app.
-    static func renderSettings(to path: String) {
+    static var previewWindow: NSWindow?
+
+    private static func makeSettingsWindow() -> NSWindow {
         let root = SettingsView().environmentObject(DictationController.shared)
         let hosting = NSHostingView(rootView: root)
-        hosting.frame = NSRect(x: 0, y: 0, width: 600, height: 520)
-        hosting.layoutSubtreeIfNeeded()
+        hosting.setFrameSize(NSSize(width: 600, height: 560))
 
         let window = NSWindow(
-            contentRect: hosting.frame,
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 560),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
+        window.title = "Tacet Settings"
         window.contentView = hosting
+        window.center()
+        window.level = .floating // harness only: keeps the preview above the terminal
+        return window
+    }
+
+    /// Renders the settings window off-screen and writes a PNG. Used to check
+    /// layout changes without clicking through the app.
+    static func renderSettings(to path: String) {
+        let window = makeSettingsWindow()
+        guard let hosting = window.contentView else { return }
         window.orderFrontRegardless()
         hosting.layoutSubtreeIfNeeded()
 

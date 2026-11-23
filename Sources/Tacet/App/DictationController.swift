@@ -44,6 +44,27 @@ final class DictationController: ObservableObject {
         configureHotkey()
         refreshHistory()
         purgeAudio()
+        adoptOrphanRecordings()
+    }
+
+    /// A recording written to disk with no history row means the app died
+    /// between capture and transcription. Adopt it instead of leaving an
+    /// invisible file behind.
+    private func adoptOrphanRecordings() {
+        let known = store.knownAudioPaths()
+        let cutoff = Date().addingTimeInterval(-7 * 86_400)
+        for url in AudioStore.recentRecordings(modifiedAfter: cutoff) where !known.contains(url.path) {
+            _ = store.insert(text: "",
+                             rawText: nil,
+                             engine: nil,
+                             language: nil,
+                             duration: AudioStore.duration(of: url),
+                             latency: 0,
+                             appName: nil,
+                             audioPath: url.path,
+                             status: .unrecovered,
+                             cleanupEngine: nil)
+        }
     }
 
     // MARK: Hotkey
@@ -61,8 +82,9 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyPressed() {
+        guard phase == .idle || phase == .recording else { return }
         if settings.hotkeyMode == "hold" {
-            if phase != .recording { startRecording() }
+            if phase == .idle { startRecording() }
         } else {
             toggle()
         }
@@ -134,6 +156,15 @@ final class DictationController: ObservableObject {
         if settings.showHUD { HUDController.shared.showProcessing() }
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
+
+        if clip.isSilent {
+            phase = .idle
+            AudioStore.delete(path: result.url.path)
+            status("No speech detected")
+            HUDController.shared.hide()
+            return
+        }
+
         Task { await process(clip: clip, existingEntryID: nil) }
     }
 

@@ -248,6 +248,22 @@ final class HistoryStore {
         }
     }
 
+    func knownAudioPaths() -> Set<String> {
+        queue.sync {
+            guard let stmt = prepare("SELECT audio_path FROM entries WHERE audio_path IS NOT NULL;") else {
+                return []
+            }
+            defer { sqlite3_finalize(stmt) }
+            var paths = Set<String>()
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let cString = sqlite3_column_text(stmt, 0) {
+                    paths.insert(String(cString: cString))
+                }
+            }
+            return paths
+        }
+    }
+
     // MARK: Plumbing
 
     private func exec(_ sql: String) {

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 enum AppPaths {
@@ -58,5 +59,31 @@ enum AudioStore {
         Set(HistoryStore.shared.entries(limit: 5_000)
             .filter { $0.status == .unrecovered }
             .compactMap(\.audioPath))
+    }
+
+    static func recentRecordings(modifiedAfter date: Date) -> [URL] {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: AppPaths.recordingsDirectory,
+            includingPropertiesForKeys: keys
+        ) else { return [] }
+
+        var result: [URL] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.lowercased() == "wav" else { continue }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            guard values?.isRegularFile == true else { continue }
+            if (values?.contentModificationDate ?? .distantPast) >= date {
+                result.append(url)
+            }
+        }
+        return result
+    }
+
+    static func duration(of url: URL) -> Double {
+        guard let file = try? AVAudioFile(forReading: url) else { return 0 }
+        let rate = file.processingFormat.sampleRate
+        guard rate > 0 else { return 0 }
+        return Double(file.length) / rate
     }
 }

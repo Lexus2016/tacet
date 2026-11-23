@@ -3,18 +3,46 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            EnginesSettingsView()
-                .tabItem { Label("Engines", systemImage: "cpu") }
-            CleanupSettingsView()
-                .tabItem { Label("Cleanup", systemImage: "wand.and.stars") }
-            AboutView()
-                .tabItem { Label("About", systemImage: "info.circle") }
+    enum Tab: String, CaseIterable, Identifiable {
+        case general, engines, cleanup, about
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .general: return "General"
+            case .engines: return "Engines"
+            case .cleanup: return "Cleanup"
+            case .about: return "About"
+            }
         }
-        .frame(width: 600, height: 520)
+    }
+
+    @State private var tab: Tab = .general
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                ForEach(Tab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
+
+            Group {
+                switch tab {
+                case .general: GeneralSettingsView()
+                case .engines: EnginesSettingsView()
+                case .cleanup: CleanupSettingsView()
+                case .about: AboutView()
+                }
+            }
+        }
+        .frame(width: 600, height: 560)
     }
 }
 
@@ -146,6 +174,10 @@ struct EnginesSettingsView: View {
         Form {
             Section("Order") {
                 Text("The first engine that returns text wins. Failed or unconfigured engines are skipped automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Audio is uploaded only to the cloud engines you enable here. The local engine keeps it on this Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -295,6 +327,8 @@ struct CleanupSettingsView: View {
                 Text("On timeout the raw transcript is inserted immediately. Cleanup must never make dictation feel slow.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                CleanupTestRow()
             }
         }
         .formStyle(.grouped)
@@ -304,6 +338,55 @@ struct CleanupSettingsView: View {
 
 // MARK: - About
 
+private struct CleanupTestRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var busy = false
+    @State private var message: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("Test cleanup") { run() }
+                    .disabled(busy || !settings.isCleanupConfigured)
+                if busy {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            if let message {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+    }
+
+    private func run() {
+        busy = true
+        message = nil
+
+        let secondary: String? = settings.cleanupProvider == KeychainAccount.groq
+            ? KeychainAccount.openAI
+            : KeychainAccount.groq
+        let configuration = CleanupConfiguration(
+            provider: settings.cleanupProvider,
+            baseURL: settings.cleanupBaseURL,
+            model: settings.cleanupModel,
+            timeout: settings.cleanupTimeout,
+            secondaryProvider: secondary
+        )
+
+        Task {
+            let result = await CleanupPipeline().clean("привіт як справи це тест пунктуації", configuration: configuration)
+            if result.engine == "none" {
+                message = "Failed, the raw transcript would be used. Check the model name and the key."
+            } else {
+                message = "\(result.engine): \(result.text)"
+            }
+            busy = false
+        }
+    }
+}
 struct AboutView: View {
     var body: some View {
         VStack(spacing: 12) {

@@ -15,10 +15,12 @@ struct TacetApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        Settings {
+        Window("Settings", id: "settings") {
             SettingsView()
                 .environmentObject(controller)
         }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 600, height: 540)
 
         Window("History", id: "history") {
             HistoryView()
@@ -75,8 +77,9 @@ struct MenuBarView: View {
                 NSApp.activate()
             }
 
-            SettingsLink {
-                Text("Settings…")
+            Button("Settings…") {
+                openWindow(id: "settings")
+                NSApp.activate()
             }
 
             Divider()
