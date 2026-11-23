@@ -46,6 +46,34 @@ The design rule behind the whole thing: **the audio is the source of truth, the 
 derived.** Audio hits disk before any network call. A failed transcription never destroys
 the recording.
 
+## Install
+
+Download the DMG from [Releases](https://github.com/Lexus2016/tacet/releases/latest),
+drag `Tacet.app` to `/Applications`, and launch it.
+
+The app is signed with a Developer ID. Until the release is notarized, the first
+launch of a browser-downloaded copy needs **right-click → Open**; after that
+macOS remembers it.
+
+## Updates
+
+Tacet checks the release feed once a day and offers the new version in a
+standard Sparkle window. **Check for Updates…** in the menu bar runs the check
+on demand. Updates are signed with the Sparkle EdDSA key, so a tampered build is
+refused.
+
+Publishing a release:
+
+```bash
+scripts/release.sh 0.2.1 3
+```
+
+The script builds a signed Release, packages a zip and a DMG, signs the update,
+generates `appcast.xml`, publishes a GitHub release and pushes the tag. The feed
+the app reads is `releases/latest/download/appcast.xml`, so the newest release
+is the newest update. Set `NOTARY_PROFILE` to a `notarytool` keychain profile to
+notarize before packaging.
+
 ## Requirements
 
 - macOS 14 or later, Apple Silicon recommended

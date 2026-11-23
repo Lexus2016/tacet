@@ -126,3 +126,30 @@ final class PlausibilityTests: XCTestCase {
         XCTAssertFalse(Plausibility.isAcceptable("ok", duration: 5))
     }
 }
+
+final class AudioChunkTests: XCTestCase {
+    private func makeClip(seconds: Double) -> AudioClip {
+        let count = Int(seconds * 16_000)
+        let samples = (0..<count).map { Float(sin(Double($0) * 0.01) * 0.2) }
+        return AudioClip(url: URL(fileURLWithPath: "/tmp/tacet-none.wav"),
+                         duration: seconds,
+                         samples: samples)
+    }
+
+    func testShortAudioIsNotSplit() {
+        let clip = makeClip(seconds: 5)
+        XCTAssertEqual(clip.chunked(seconds: 10).count, 1)
+    }
+
+    func testLongAudioIsSplitIntoPieces() {
+        let clip = makeClip(seconds: 30)
+        let chunks = clip.chunked(seconds: 10)
+
+        XCTAssertEqual(chunks.count, 3)
+        for chunk in chunks {
+            XCTAssertGreaterThan(chunk.duration, 5)
+            XCTAssertLessThanOrEqual(chunk.duration, 14)
+            try? FileManager.default.removeItem(at: chunk.url)
+        }
+    }
+}

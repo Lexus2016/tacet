@@ -87,8 +87,104 @@ struct AudioClip: Sendable {
         return []
     }
 
-    private static func resample(_ samples: [Float], from source: Double, to target: Double) -> [Float] {
-        guard let sourceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: source, channels: 1, interleaved: false),
+    /// Splits a long recording into pieces the cloud endpoints accept (25 MB is
+    /// about thirteen minutes of 16 kHz mono PCM). Cuts near silence so a word
+    /// is unlikely to be sliced in half.
+    func chunked(seconds: TimeInterval) -> [AudioClip] {
+        let chunkSamples = Int(seconds * Self.sampleRate)
+        guard chunkSamples > 0, samples.count > chunkSamples else { return [self] }
+
+        var result: [AudioClip] = []
+        var start = 0
+
+        while start < samples.count {
+            let hardEnd = min(samples.count, start + chunkSamples)
+            var end = hardEnd == samples.count ? hardEnd : quietCut(from: start, to: hardEnd)
+
+            // Do not leave a sliver behind: merge a short tail into this piece.
+            if samples.count - end < chunkSamples / 3 {
+                end = samples.count
+            }
+
+            let slice = Array(samples[start..<end])
+            guard !slice.isEmpty, let url = Self.writeTemporaryWav(slice) else { break }
+
+            result.append(AudioClip(url: url,
+                                    duration: Double(slice.count) / Self.sampleRate,
+                                    samples: slice))
+            start = end
+        }
+
+        return result.isEmpty ? [self] : result
+    }
+
+    /// The quietest 50 ms window in the last second before `hardEnd`.
+    private func quietCut(from start: Int, to hardEnd: Int) -> Int {
+        let window = Int(Self.sampleRate * 0.05)
+        let searchFrom = max(start + window, hardEnd - Int(Self.sampleRate))
+        guard searchFrom < hardEnd - window else { return hardEnd }
+
+        var bestStart = hardEnd - window
+        var bestEnergy = Double.greatestFiniteMagnitude
+        var index = searchFrom
+
+        while index + window < hardEnd {
+            var energy: Double = 0
+            for sample in stride(from: index, to: index + window, by: 8) {
+                let value = Double(samples[sample])
+                energy += value * value
+            }
+            if energy < bestEnergy {
+                bestEnergy = energy
+                bestStart = index
+            }
+            index += window
+        }
+
+        return min(hardEnd, bestStart + window / 2)
+    }
+
+    private static func writeTemporaryWav(_ samples: [Float]) -> URL? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Tacet-chunks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(UUID().uuidString).wav")
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+
+        do {
+            let file = try AVAudioFile(forWriting: url,
+                                       settings: settings,
+                                       commonFormat: .pcmFormatFloat32,
+                                       interleaved: false)
+            guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                             sampleRate: sampleRate,
+                                             channels: 1,
+                                             interleaved: false),
+                  let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                                frameCapacity: AVAudioFrameCount(samples.count)),
+                  let channel = buffer.floatChannelData?[0]
+            else { return nil }
+
+            buffer.frameLength = AVAudioFrameCount(samples.count)
+            samples.withUnsafeBufferPointer { source in
+                channel.update(from: source.baseAddress!, count: samples.count)
+            }
+            try file.write(from: buffer)
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+    }
+
+    private static func resample(_ samples: [Float], from source: Double, to target: Double) -> [Float] {        guard let sourceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: source, channels: 1, interleaved: false),
               let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: target, channels: 1, interleaved: false),
               let converter = AVAudioConverter(from: sourceFormat, to: targetFormat),
               let input = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(samples.count))

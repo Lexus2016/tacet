@@ -21,6 +21,12 @@ if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   exit 1
 fi
 
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Working tree is dirty. Commit before releasing: the tag must match the build." >&2
+  git status --short | head -10 >&2
+  exit 1
+fi
+
 ./scripts/bootstrap.sh >/dev/null
 xcodegen generate --spec project.yml >/dev/null
 
@@ -66,7 +72,7 @@ echo "Generating appcast…"
   --link "https://github.com/$REPO"
 cp "$DIST/appcast/appcast.xml" "$DIST/appcast.xml"
 
-echo "Publishing $TAG…"
+echo "Publishing ${TAG}…"
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
   gh release upload "$TAG" "$ZIP" "$DIST/Tacet-$VERSION.dmg" "$DIST/appcast.xml" \
     --repo "$REPO" --clobber

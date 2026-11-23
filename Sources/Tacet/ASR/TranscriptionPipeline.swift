@@ -18,6 +18,12 @@ final class TranscriptionPipeline {
     func transcribe(_ clip: AudioClip,
                     settings: PipelineSettings,
                     engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
+        // Cloud endpoints cap uploads at 25 MB, which is about thirteen minutes
+        // of 16 kHz mono PCM. Longer dictations are split near silence.
+        if clip.duration > 600 {
+            return await transcribeChunked(clip, settings: settings, engines: engines)
+        }
+
         var attempts: [Attempt] = []
 
         // Start the voice-based language check alongside the first engine: it
@@ -87,6 +93,47 @@ final class TranscriptionPipeline {
         }
 
         return .failure(PipelineFailure(attempts: attempts))
+    }
+
+    // MARK: Long audio
+
+    private func transcribeChunked(_ clip: AudioClip,
+                                   settings: PipelineSettings,
+                                   engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
+        let chunks = clip.chunked(seconds: 480)
+        var texts: [String] = []
+        var first: Transcript?
+        var attempts: [Attempt] = []
+
+        defer {
+            for chunk in chunks where chunk.url != clip.url {
+                try? FileManager.default.removeItem(at: chunk.url)
+            }
+        }
+
+        for chunk in chunks {
+            let result = await transcribe(chunk, settings: settings, engines: engines)
+            switch result {
+            case .success(let output):
+                texts.append(output.transcript.text)
+                if first == nil { first = output.transcript }
+                attempts.append(contentsOf: output.attempts)
+            case .failure(let failure):
+                return .failure(failure)
+            }
+        }
+
+        guard let first, !texts.isEmpty else {
+            return .failure(PipelineFailure(attempts: attempts))
+        }
+
+        let joined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let transcript = Transcript(text: joined,
+                                    language: first.language,
+                                    engine: first.engine,
+                                    score: first.score,
+                                    latency: first.latency)
+        return .success(PipelineResult(transcript: transcript, attempts: attempts))
     }
 
     // MARK: Engines
