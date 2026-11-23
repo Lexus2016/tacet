@@ -132,3 +132,9 @@
 "The cleanup model never translates, never summarises, and its answer is discarded when it looks wrong or takes too long. The raw transcript stays available in History." = "Модель обробки не перекладає і не скорочує, а її відповідь відкидається, якщо вона виглядає підозріло або не встигла. Сирий текст завжди лишається в Історії.";
 
 "Add provider…" = "Додати провайдера…";
+
+"Providers" = "Провайдери";
+"Used for cleanup, translation and editing" = "Для обробки, перекладу й редагування";
+"Used when this provider is in the engine chain" = "Коли провайдер у ланцюжку рушіїв";
+"Configure a provider once. Engines and Cleanup only offer the providers configured here." = "Налаштуй провайдера один раз. Рушії та Обробка пропонують лише налаштованих тут.";
+"Not configured — will be skipped" = "Не налаштований — буде пропущений";

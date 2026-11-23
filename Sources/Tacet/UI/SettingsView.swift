@@ -4,13 +4,14 @@ import SwiftUI
 
 struct SettingsView: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case general, engines, cleanup, about
+        case general, providers, engines, cleanup, about
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .general: return "General"
+            case .providers: return "Providers"
             case .engines: return "Engines"
             case .cleanup: return "Cleanup"
             case .about: return "About"
@@ -32,7 +33,8 @@ struct SettingsView: View {
                 VStack(spacing: 14) {
                     switch tab {
                     case .general: GeneralSettingsView()
-                    case .engines: EnginesSettingsView()
+                    case .providers: ProvidersSettingsView()
+                    case .engines: ChainSettingsView()
                     case .cleanup: CleanupSettingsView()
                     case .about: AboutView()
                     }
@@ -682,11 +684,6 @@ struct CleanupSettingsView: View {
                 }
 
                 if let spec = ProviderCatalog.spec(settings.cleanupProvider) {
-                    if spec.requiresKey {
-                        SoftDivider()
-                        APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey)
-                    }
-
                     if spec.id == "openai" {
                         SoftDivider()
                         SoftRow("Base URL") {
