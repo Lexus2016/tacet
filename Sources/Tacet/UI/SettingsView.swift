@@ -238,21 +238,11 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
-                SoftRow("Sounds", subtitle: "Short cues for start, success and errors") {
-                    HStack(spacing: 10) {
-                        Picker("", selection: $settings.soundStyle) {
-                            Text("Tacet").tag("bundled")
-                            Text("macOS").tag("system")
-                        }
+                SoftRow("Sounds", subtitle: "Short Tacet cues for start, success and errors") {
+                    Toggle("", isOn: $settings.playSounds)
                         .labelsHidden()
-                        .frame(width: 100)
-                        .disabled(!settings.playSounds)
-
-                        Toggle("", isOn: $settings.playSounds)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                 }
 
                 SoftDivider()

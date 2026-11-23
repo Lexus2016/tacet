@@ -131,6 +131,17 @@ enum ModelCatalog {
             ids = models.compactMap { ($0["id"] as? String) ?? ($0["name"] as? String) }
         }
 
+        // OpenRouter does not list audio models in /models, but they exist.
+        if spec.id == "openrouter" {
+            ids.append(contentsOf: [
+                "openai/whisper-large-v3",
+                "openai/whisper-large-v3-turbo",
+                "openai/whisper-1",
+                "openai/gpt-4o-transcribe",
+                "openai/gpt-4o-mini-transcribe",
+            ])
+        }
+
         let unique = Array(Set(ids)).sorted()
         guard !unique.isEmpty else { throw Failure.empty }
         return unique

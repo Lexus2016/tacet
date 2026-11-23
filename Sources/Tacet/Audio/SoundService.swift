@@ -35,11 +35,6 @@ final class SoundService {
     func play(_ cue: SoundCue, style: String) {
         guard style != "off" else { return }
 
-        if style == "system" {
-            NSSound(named: cue.systemName)?.play()
-            return
-        }
-
         guard let url = Bundle.main.url(forResource: cue.fileName, withExtension: "wav") else { return }
 
         do {
