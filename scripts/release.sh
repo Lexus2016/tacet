@@ -63,6 +63,7 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   xcodebuild -project Tacet.xcodeproj -scheme Tacet -configuration Release \
     -derivedDataPath "$DERIVED" -destination 'platform=macOS' \
     ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO \
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
     TACET_FEED_URL="$FEED" \
     build > "/tmp/tacet-release-$ARCH.log" 2>&1 || {
@@ -72,6 +73,23 @@ for ARCH in "${ARCHS_LIST[@]}"; do
     }
 
   [ -d "$APP" ] || { echo "No app at $APP" >&2; exit 1; }
+
+  echo "Re-signing embedded code for ${ARCH}…"
+  IDENTITY=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)
+  [ -n "$IDENTITY" ] || { echo "No Developer ID Application identity" >&2; exit 1; }
+
+  SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+  if [ -d "$SPARKLE" ]; then
+    for item in \
+      "$SPARKLE/Versions/B/Autoupdate" \
+      "$SPARKLE/Versions/B/XPCServices/Installer.xpc" \
+      "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
+      "$SPARKLE/Versions/B/Updater.app" \
+      "$SPARKLE"; do
+      [ -e "$item" ] && codesign --force --timestamp --options runtime --sign "$IDENTITY" "$item"
+    done
+  fi
+  codesign --force --timestamp --options runtime --sign "$IDENTITY" "$APP"
 
   echo "Signing check for ${ARCH}…"
   codesign --verify --deep --strict "$APP" || { echo "Signature is not valid" >&2; exit 1; }
