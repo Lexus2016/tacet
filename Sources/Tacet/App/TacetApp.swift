@@ -14,19 +14,6 @@ struct TacetApp: App {
             Image(systemName: controller.menuBarSymbol)
         }
         .menuBarExtraStyle(.menu)
-
-        Window("Settings", id: "settings") {
-            SettingsView()
-                .environmentObject(controller)
-        }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 600, height: 540)
-
-        Window("History", id: "history") {
-            HistoryView()
-                .environmentObject(controller)
-        }
-        .defaultSize(width: 780, height: 540)
     }
 }
 
@@ -35,7 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         if CLIHarness.runIfRequested() { return }
+
         _ = DictationController.shared
+
+        // A menu bar app with no engine looks broken: every dictation fails with
+        // "not configured". Open the one window that fixes it.
+        if !SetupState.hasUsableEngine {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                AppWindows.shared.showSettings()
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -45,7 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MenuBarView: View {
     @EnvironmentObject private var controller: DictationController
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -73,13 +68,11 @@ struct MenuBarView: View {
             }
 
             Button("History…") {
-                openWindow(id: "history")
-                NSApp.activate()
+                AppWindows.shared.showHistory()
             }
 
             Button("Settings…") {
-                openWindow(id: "settings")
-                NSApp.activate()
+                AppWindows.shared.showSettings()
             }
 
             Divider()
