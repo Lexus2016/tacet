@@ -5,6 +5,12 @@ import SwiftUI
 /// is configured here.
 struct ProvidersSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var custom = CustomProviderStore.shared
+
+    @State private var showingAdd = false
+    @State private var newName = ""
+    @State private var newURL = ""
+    @State private var newKey = ""
 
     var body: some View {
         VStack(spacing: 14) {
@@ -23,6 +29,43 @@ struct ProvidersSettingsView: View {
             }
 
             ParakeetCard()
+
+            Button {
+                showingAdd = true
+            } label: {
+                Label("Add provider…", systemImage: "plus.circle")
+            }
+            .buttonStyle(SoftProminentButtonStyle())
+            .padding(.top, 4)
+        }
+        .sheet(isPresented: $showingAdd) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("New provider").font(.system(size: 15, weight: .semibold))
+
+                TextField("Name", text: $newName).textFieldStyle(.roundedBorder)
+                TextField("Base URL (https://…/v1)", text: $newURL).textFieldStyle(.roundedBorder)
+                SecureField("API key (optional)", text: $newKey).textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showingAdd = false }
+                        .buttonStyle(SoftButtonStyle())
+                    Button("Add") {
+                        let id = CustomProviderStore.shared.add(name: newName.isEmpty ? "Custom" : newName,
+                                                                baseURL: newURL,
+                                                                requiresKey: !newKey.isEmpty)
+                        if !newKey.isEmpty {
+                            Keychain.set(newKey, account: id)
+                        }
+                        newName = ""; newURL = ""; newKey = ""
+                        showingAdd = false
+                    }
+                    .buttonStyle(SoftProminentButtonStyle())
+                    .disabled(newURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 420)
         }
     }
 }
@@ -112,6 +155,17 @@ private struct ProviderConfigCard: View {
                         .help(Text("Browse"))
                     }
                 }
+            }
+
+            SoftDivider()
+
+            if ProviderCatalog.isCustom(spec.id) {
+                SoftDivider()
+                Button("Remove provider") {
+                    CustomProviderStore.shared.remove(id: spec.id)
+                    Keychain.set(nil, account: spec.id)
+                }
+                .buttonStyle(SoftButtonStyle(destructive: true))
             }
 
             SoftDivider()

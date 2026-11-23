@@ -17,7 +17,7 @@ final class AppWindows {
     func showSettings() {
         if settingsWindow == nil {
             settingsWindow = makeWindow(
-                title: "Settings",
+                title: "Tacet — Settings",
                 size: NSSize(width: 620, height: 660),
                 resizable: false
             ) {
@@ -31,7 +31,7 @@ final class AppWindows {
     func showHistory() {
         if historyWindow == nil {
             historyWindow = makeWindow(
-                title: "History",
+                title: "Tacet — History",
                 size: NSSize(width: 900, height: 600),
                 resizable: true
             ) {

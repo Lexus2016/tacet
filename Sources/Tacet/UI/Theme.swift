@@ -125,9 +125,9 @@ private final class GlassReaderView: NSView {
         guard let window else { return }
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
+        window.styleMask.remove(.fullSizeContentView)
         window.isMovableByWindowBackground = true
     }
 }

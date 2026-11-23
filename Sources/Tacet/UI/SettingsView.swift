@@ -61,34 +61,10 @@ struct SettingsView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(colors: [Theme.accentStart, Theme.accentEnd],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                    .frame(width: 28, height: 28)
-                    .background(
-                        Circle()
-                            .fill(Theme.accent.opacity(0.14))
-                            .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 0.7))
-                    )
-
-                Text("Tacet")
-                    .font(.system(size: 15, weight: .semibold))
-                    .tracking(0.2)
-
-                Spacer()
-            }
-            .padding(.leading, 74)
-
-            SoftSegmented(items: Tab.allCases, selection: $tab) { $0.title }
-        }
-        .padding(.horizontal, 22)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
+        SoftSegmented(items: Tab.allCases, selection: $tab) { $0.title }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
     }
 }
 

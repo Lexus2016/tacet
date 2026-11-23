@@ -16,7 +16,21 @@ struct ProviderSpec: Identifiable, Sendable {
 /// a key, and what it can do. Base URLs are editable in Settings for providers
 /// that people self-host.
 enum ProviderCatalog {
-    static let all: [ProviderSpec] = [
+    static var all: [ProviderSpec] { builtin + customs }
+
+    private static var customs: [ProviderSpec] {
+        CustomProviderStore.shared.providers.map {
+            ProviderSpec(id: $0.id,
+                         name: $0.name,
+                         baseURL: $0.baseURL,
+                         requiresKey: $0.requiresKey,
+                         supportsTranscription: true,
+                         supportsChat: true,
+                         environmentKey: nil)
+        }
+    }
+
+    private static let builtin: [ProviderSpec] = [
         ProviderSpec(id: "groq", name: "Groq",
                      baseURL: "https://api.groq.com/openai/v1",
                      requiresKey: true, supportsTranscription: true, supportsChat: true,
