@@ -98,6 +98,8 @@ struct GeneralSettingsView: View {
 
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     @State private var accessibilityGranted = TextInserter.isAccessibilityTrusted()
+    @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var loginError: String?
 
     var body: some View {
         VStack(spacing: 18) {
@@ -222,6 +224,27 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Show in Dock", subtitle: "Click the icon to open settings") {
+                    Toggle("", isOn: $settings.showInDock)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .onChange(of: settings.showInDock) { _, _ in
+                            AppDelegate.applyActivationPolicy()
+                        }
+                }
+
+                SoftDivider()
+
+                SoftRow("Launch at login", subtitle: loginHint) {
+                    Toggle("", isOn: launchAtLoginBinding)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                SoftDivider()
+
                 SoftRow("Keep audio", subtitle: "Recordings older than this are deleted, except failed ones") {
                     Stepper("\(settings.keepAudioDays) d",
                             value: $settings.keepAudioDays, in: 1...90)
@@ -267,8 +290,7 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private var hotkeyBinding: Binding<HotkeyPreset> {
-        Binding(
+    private var hotkeyBinding: Binding<HotkeyPreset> {        Binding(
             get: {
                 HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
                                       modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
@@ -284,6 +306,29 @@ struct GeneralSettingsView: View {
     private func openAccessibilityPane() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         NSWorkspace.shared.open(url)
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLogin },
+            set: { value in
+                do {
+                    try LoginItem.set(value)
+                    loginError = nil
+                } catch {
+                    loginError = error.localizedDescription
+                }
+                launchAtLogin = LoginItem.isEnabled
+            }
+        )
+    }
+
+    private var loginHint: String {
+        if let loginError { return loginError }
+        if Bundle.main.bundlePath.hasPrefix("/Applications") {
+            return "Start Tacet when you log in"
+        }
+        return "Move Tacet to /Applications to enable this"
     }
 }
 

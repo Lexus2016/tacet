@@ -20,7 +20,7 @@ struct TacetApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        Self.applyActivationPolicy()
         if CLIHarness.runIfRequested() { return }
 
         _ = DictationController.shared
@@ -34,8 +34,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            AppWindows.shared.showSettings()
+        }
+        return true
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    static func applyActivationPolicy() {
+        let showInDock = AppSettings.shared.showInDock
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 }
 

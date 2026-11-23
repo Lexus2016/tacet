@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 /// Windows are created and owned here rather than by SwiftUI scenes: a menu bar
@@ -81,5 +82,19 @@ enum SetupState {
         if Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY") != nil { return true }
         if ParakeetRecognizer.shared.isConfigured() { return true }
         return false
+    }
+}
+
+enum LoginItem {
+    static var isEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    static func set(_ enabled: Bool) throws {
+        if enabled {
+            try SMAppService.mainApp.register()
+        } else {
+            try SMAppService.mainApp.unregister()
+        }
     }
 }
