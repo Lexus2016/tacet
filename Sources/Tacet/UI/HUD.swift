@@ -514,22 +514,31 @@ final class HUDController {
             panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
 
         case .notch:
-            // On a notched MacBook the panel must start below the notch, or the
-            // shape is hidden behind it. safeAreaInsets.top is the notch height.
-            let notch = screen.safeAreaInsets.top
-            if notch > 0 {
-                panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
-                                             y: frame.maxY - size.height - notch))
+            if atTop {
+                // On a notched MacBook the panel must start below the notch, or
+                // the shape is hidden behind it.
+                let notch = screen.safeAreaInsets.top
+                if notch > 0 {
+                    panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
+                                                 y: frame.maxY - size.height - notch))
+                } else {
+                    panel.setFrameOrigin(topOrigin(inset: 6))
+                }
             } else {
-                panel.setFrameOrigin(topOrigin(inset: 6))
+                panel.setFrameOrigin(bottomOrigin())
             }
 
         case .overlay:
             panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
 
         case .minimal:
-            panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,
-                                         y: visible.maxY - size.height - 8))
+            if atTop {
+                panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,
+                                             y: visible.maxY - size.height - 8))
+            } else {
+                panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,
+                                             y: visible.minY + 10))
+            }
         }
     }
 }

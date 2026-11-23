@@ -280,8 +280,13 @@ struct GeneralSettingsView: View {
                         .labelsHidden()
                         .frame(width: 150)
 
-                        Button("Restart") { relaunch() }
-                            .buttonStyle(SoftButtonStyle())
+                        Button {
+                            relaunch()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(SoftButtonStyle())
+                        .help(Text("Restart"))
                     }
                 }
 
@@ -305,18 +310,15 @@ struct GeneralSettingsView: View {
                     .frame(width: 150)
                 }
 
-                if IndicatorStyle(rawValue: settings.indicatorStyle) == .island
-                    || IndicatorStyle(rawValue: settings.indicatorStyle) == .overlay {
-                    SoftDivider()
+                SoftDivider()
 
-                    SoftRow("Position", subtitle: "Where the indicator appears") {
-                        Picker("", selection: $settings.indicatorPosition) {
-                            Text("Bottom").tag("bottom")
-                            Text("Top").tag("top")
-                        }
-                        .labelsHidden()
-                        .frame(width: 120)
+                SoftRow("Position", subtitle: "Where the indicator appears") {
+                    Picker("", selection: $settings.indicatorPosition) {
+                        Text("Bottom").tag("bottom")
+                        Text("Top").tag("top")
                     }
+                    .labelsHidden()
+                    .frame(width: 120)
                 }
 
                 SoftDivider()
