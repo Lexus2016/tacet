@@ -200,20 +200,19 @@ final class AudioCaptureService {
 
         guard status != .error, output.frameLength > 0 else { return }
 
-        do {
-            try file.write(from: output)
-        } catch {
-            return
+        // Keep the samples even if the WAV write fails: the local engine reads
+        // them from memory, and a half-written file only costs the cloud path.
+        if let channel = output.floatChannelData?[0] {
+            let count = Int(output.frameLength)
+            collected.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
+
+            var peak: Float = 0
+            for index in stride(from: 0, to: count, by: 8) {
+                peak = max(peak, abs(channel[index]))
+            }
+            levelHandler?(min(1, peak * 1.6))
         }
 
-        guard let channel = output.floatChannelData?[0] else { return }
-        let count = Int(output.frameLength)
-        collected.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
-
-        var peak: Float = 0
-        for index in stride(from: 0, to: count, by: 8) {
-            peak = max(peak, abs(channel[index]))
-        }
-        levelHandler?(min(1, peak * 1.6))
+        try? file.write(from: output)
     }
 }

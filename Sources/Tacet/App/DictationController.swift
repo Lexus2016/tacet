@@ -27,6 +27,7 @@ final class DictationController: ObservableObject {
     private let hotkey = HotkeyManager()
 
     private var isStarting = false
+    private var hotkeyIsDown = false
     private var noteTask: Task<Void, Never>?
     /// The app that was frontmost when the recording started. The text belongs
     /// there even if the user switches windows while it is being transcribed.
@@ -85,6 +86,7 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyPressed() {
+        hotkeyIsDown = true
         guard phase == .idle || phase == .recording else { return }
         if settings.hotkeyMode == "hold" {
             if phase == .idle { startRecording() }
@@ -94,6 +96,7 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyReleased() {
+        hotkeyIsDown = false
         guard settings.hotkeyMode == "hold", phase == .recording else { return }
         stopRecording()
     }
@@ -109,7 +112,7 @@ final class DictationController: ObservableObject {
     // MARK: Recording
 
     func startRecording() {
-        guard phase != .recording, !isStarting else { return }
+        guard phase == .idle, !isStarting else { return }
         isStarting = true
 
         Task {
@@ -128,6 +131,12 @@ final class DictationController: ObservableObject {
                 status("Recording…")
                 if settings.playSounds { NSSound(named: "Tink")?.play() }
                 if settings.showHUD { HUDController.shared.showRecording() }
+
+                // The key may have been released while the microphone
+                // permission prompt was on screen.
+                if settings.hotkeyMode == "hold", !hotkeyIsDown {
+                    stopRecording()
+                }
             } catch {
                 phase = .idle
                 lastFailure = error.localizedDescription
@@ -161,7 +170,7 @@ final class DictationController: ObservableObject {
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
 
-        if clip.isSilent {
+        if clip.isSilent, result.peak < 0.01 {
             phase = .idle
             AudioStore.delete(path: result.url.path)
             status("No speech detected")
@@ -169,7 +178,7 @@ final class DictationController: ObservableObject {
             return
         }
 
-        Task { await process(clip: clip, existingEntryID: nil) }
+        Task { await process(clip: clip, existingEntryID: nil, allowPaste: true) }
     }
 
     func cancelRecording() {
@@ -182,7 +191,7 @@ final class DictationController: ObservableObject {
 
     // MARK: Processing
 
-    private func process(clip: AudioClip, existingEntryID: String?) async {
+    private func process(clip: AudioClip, existingEntryID: String?, allowPaste: Bool) async {
         let started = Date()
         let appName = TextInserter.frontmostAppName
 
@@ -232,7 +241,8 @@ final class DictationController: ObservableObject {
                     latency: Date().timeIntervalSince(started),
                     appName: appName,
                     cleanupEngine: cleanupEngine,
-                    existingEntryID: existingEntryID)
+                    existingEntryID: existingEntryID,
+                    allowPaste: allowPaste)
 
         case .failure(let failure):
             recordFailure(failure,
@@ -250,13 +260,20 @@ final class DictationController: ObservableObject {
                          latency: TimeInterval,
                          appName: String?,
                          cleanupEngine: String?,
-                         existingEntryID: String?) {
-        restoreTargetApplication()
+                         existingEntryID: String?,
+                         allowPaste: Bool) {
+        // The entry may have been deleted while this transcribe was in flight.
+        if let existingEntryID, store.entry(id: existingEntryID) == nil {
+            phase = .idle
+            return
+        }
+
+        let canPaste = allowPaste && restoreTargetApplication()
         TextInserter.copy(text)
-        let pasted = settings.pasteAutomatically && TextInserter.paste()
+        let pasted = canPaste && settings.pasteAutomatically && TextInserter.paste()
 
         let entryID: String
-        if let existingEntryID, store.entry(id: existingEntryID) != nil {
+        if let existingEntryID {
             entryID = existingEntryID
             store.update(id: existingEntryID,
                          text: text,
@@ -301,15 +318,18 @@ final class DictationController: ObservableObject {
                                existingEntryID: String?) {
         let message = failure.localizedDescription
 
-        if let existingEntryID, store.entry(id: existingEntryID) != nil {
-            store.update(id: existingEntryID,
-                         text: "",
-                         rawText: nil,
-                         engine: nil,
-                         language: nil,
-                         latency: latency,
-                         status: .unrecovered,
-                         cleanupEngine: nil)
+        if let existingEntryID {
+            // Do not resurrect an entry the user deleted mid-retry.
+            if store.entry(id: existingEntryID) != nil {
+                store.update(id: existingEntryID,
+                             text: "",
+                             rawText: nil,
+                             engine: nil,
+                             language: nil,
+                             latency: latency,
+                             status: .unrecovered,
+                             cleanupEngine: nil)
+            }
         } else {
             _ = store.insert(text: "",
                              rawText: nil,
@@ -354,7 +374,7 @@ final class DictationController: ObservableObject {
             status("The recording is gone")
             return
         }
-        guard phase == .idle else { return }
+        guard phase == .idle, !isStarting else { return }
 
         phase = .processing
         status("Retrying…")
@@ -363,7 +383,7 @@ final class DictationController: ObservableObject {
         Task {
             do {
                 let clip = try AudioClip.load(url: url)
-                await process(clip: clip, existingEntryID: entry.id)
+                await process(clip: clip, existingEntryID: entry.id, allowPaste: false)
             } catch {
                 phase = .idle
                 status(error.localizedDescription)
@@ -414,12 +434,23 @@ final class DictationController: ObservableObject {
     /// Brings back the app that had focus when the recording started, so the
     /// text lands where the user was typing even if they switched windows
     /// during transcription.
-    private func restoreTargetApplication() {
-        guard settings.pasteAutomatically, let target = targetApplication else { return }
+    private func restoreTargetApplication() -> Bool {
+        guard let target = targetApplication, !target.isTerminated else { return false }
+
         let current = NSWorkspace.shared.frontmostApplication
-        guard current?.processIdentifier != target.processIdentifier else { return }
-        target.activate()
-        usleep(150_000)
+        if current?.processIdentifier == target.processIdentifier { return true }
+
+        guard target.activate() else { return false }
+
+        // Activation is asynchronous; give it a moment and verify instead of
+        // trusting a fixed delay.
+        for _ in 0..<12 {
+            usleep(30_000)
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+                return true
+            }
+        }
+        return false
     }
 
     private func ensureMicrophone() async -> Bool {

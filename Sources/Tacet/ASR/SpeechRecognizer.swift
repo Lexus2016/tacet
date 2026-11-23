@@ -116,21 +116,46 @@ enum Plausibility {
 
 // MARK: - Timeout
 
-func withTimeout<T>(_ seconds: TimeInterval,
-                    operation: @escaping () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
+/// Runs the operation with a hard deadline. The work is detached, so a stalled
+/// engine (a Core ML call that ignores cancellation, a hung socket) cannot keep
+/// the dictation in the processing state: the caller gets a timeout and moves
+/// to the next engine.
+private final class RaceBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var finished = false
+
+    init(_ continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ result: Result<T, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished, let continuation else { return }
+        finished = true
+        self.continuation = nil
+        continuation.resume(with: result)
+    }
+}
+
+func withTimeout<T: Sendable>(_ seconds: TimeInterval,
+                              operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        let box = RaceBox(continuation)
+
+        let work = Task.detached {
+            do {
+                box.resume(.success(try await operation()))
+            } catch {
+                box.resume(.failure(error))
+            }
         }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(max(0.05, seconds) * 1_000_000_000))
-            throw RecognitionError.timedOut("the engine")
+
+        Task.detached {
+            try? await Task.sleep(nanoseconds: UInt64(max(0.05, seconds) * 1_000_000_000))
+            work.cancel()
+            box.resume(.failure(RecognitionError.timedOut("the engine")))
         }
-        guard let result = try await group.next() else {
-            group.cancelAll()
-            throw RecognitionError.timedOut("the engine")
-        }
-        group.cancelAll()
-        return result
     }
 }
