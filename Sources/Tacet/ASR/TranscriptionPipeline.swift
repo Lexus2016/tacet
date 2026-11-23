@@ -20,6 +20,11 @@ final class TranscriptionPipeline {
                     engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
         var attempts: [Attempt] = []
 
+        // Start the voice-based language check alongside the first engine: it
+        // runs on the audio, so it catches Ukrainian speech decoded as Russian
+        // text, which no post-hoc text check can see.
+        let voiceCheck = startVoiceLanguageCheck(clip: clip, settings: settings)
+
         for engineID in settings.engineOrder {
             guard let recognizer = makeRecognizer(engineID, engines: engines) else {
                 attempts.append(Attempt(engine: engineID, error: "Unknown engine", latency: 0))
@@ -44,10 +49,25 @@ final class TranscriptionPipeline {
                     throw RecognitionError.noSpeech
                 }
 
-                if settings.languageOverride == nil,
-                   settings.dualLanguageCheck,
-                   let alternate = LanguagePolicy.alternate(for: transcript,
-                                                           expected: settings.expectedLanguage) {
+                let voice = await voiceCheck?.value
+                if let voice,
+                   let language = voice.language,
+                   voice.confidence >= 0.7,
+                   language != LanguagePolicy.normalize(transcript.language) {
+                    // The detector heard a different language than the engine
+                    // reported: decode again with the detected one and keep the
+                    // better result.
+                    if let second = try? await withTimeout(timeout, operation: {
+                        try await recognizer.transcribe(clip, language: language)
+                    }), Plausibility.isAcceptable(second.text, duration: clip.duration) {
+                        transcript = LanguagePolicy.pick(first: transcript,
+                                                         second: second,
+                                                         secondRequested: language)
+                    }
+                } else if settings.languageOverride == nil,
+                          settings.dualLanguageCheck,
+                          let alternate = LanguagePolicy.alternate(for: transcript,
+                                                                  expected: settings.expectedLanguage) {
                     if let second = try? await withTimeout(timeout, operation: {
                         try await recognizer.transcribe(clip, language: alternate)
                     }), Plausibility.isAcceptable(second.text, duration: clip.duration) {
@@ -70,6 +90,20 @@ final class TranscriptionPipeline {
     }
 
     // MARK: Engines
+
+    private func startVoiceLanguageCheck(clip: AudioClip,
+                                         settings: PipelineSettings) -> Task<LanguageDecision?, Never>? {
+        guard settings.voiceLanguageCheck, settings.languageOverride == nil else { return nil }
+
+        let detector = VoiceLanguageDetector(configuration: .init(
+            model: settings.voiceLanguageModel,
+            timeout: 2.5,
+            candidates: settings.voiceLanguageCandidates
+        ))
+        guard detector.isConfigured() else { return nil }
+
+        return Task { await detector.detect(clip) }
+    }
 
     private func makeRecognizer(_ id: String, engines: EngineConfiguration) -> SpeechRecognizer? {
         switch id {

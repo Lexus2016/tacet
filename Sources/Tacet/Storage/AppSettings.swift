@@ -22,6 +22,16 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(dualLanguageCheck, forKey: "dualLanguageCheck") }
     }
 
+    /// Asks a voice-based language detector (Gemini Decision via OpenRouter)
+    /// which language is actually spoken.
+    @Published var voiceLanguageCheck: Bool {
+        didSet { defaults.set(voiceLanguageCheck, forKey: "voiceLanguageCheck") }
+    }
+
+    @Published var openRouterModel: String {
+        didSet { defaults.set(openRouterModel, forKey: "openRouterModel") }
+    }
+
     // MARK: Engines
 
     /// Ordered engine identifiers. The first one that returns a plausible
@@ -115,6 +125,8 @@ final class AppSettings: ObservableObject {
     private init() {
         languageMode = defaults.string(forKey: "languageMode") ?? "auto"
         dualLanguageCheck = defaults.object(forKey: "dualLanguageCheck") as? Bool ?? true
+        voiceLanguageCheck = defaults.object(forKey: "voiceLanguageCheck") as? Bool ?? false
+        openRouterModel = defaults.string(forKey: "openRouterModel") ?? "google/gemini-decision-1"
         engineOrder = defaults.stringArray(forKey: "engineOrder") ?? ["groq", "parakeet", "openai"]
         groqModel = defaults.string(forKey: "groqModel") ?? "whisper-large-v3-turbo"
         openAIBaseURL = defaults.string(forKey: "openAIBaseURL") ?? "https://api.openai.com/v1"
@@ -131,7 +143,7 @@ final class AppSettings: ObservableObject {
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"
         hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") as? Int ?? 49
-        hotkeyModifiers = defaults.object(forKey: "hotkeyModifiers") as? Int ?? 0x0800 // optionKey
+        hotkeyModifiers = defaults.object(forKey: "hotkeyModifiers") as? Int ?? 0x1800 // control + option
     }
 }
 
@@ -155,6 +167,7 @@ enum EngineID {
 enum KeychainAccount {
     static let groq = "groq"
     static let openAI = "openai"
+    static let openRouter = "openrouter"
     static let cleanup = "cleanup"
 }
 

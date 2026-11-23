@@ -17,6 +17,34 @@ enum CLIHarness {
     static func runIfRequested() -> Bool {
         let arguments = CommandLine.arguments
 
+        if arguments.contains("--preview-hud") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                HUDController.shared.showRecording()
+                HUDController.shared.updateLevel(0.75)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                exit(0)
+            }
+            return false
+        }
+
+        if arguments.contains("--check-hotkey") {
+            let settings = AppSettings.shared
+            let preset = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
+                                               modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
+            let manager = HotkeyManager()
+            print("mode: \(settings.hotkeyMode)")
+            for candidate in [preset] + HotkeyPreset.allCases.filter({ $0 != preset }) {
+                if manager.register(keyCode: candidate.keyCode, modifiers: candidate.modifiers) {
+                    print("registered: \(candidate.title)")
+                    exit(0)
+                }
+                print("taken: \(candidate.title)")
+            }
+            print("no free hotkey")
+            exit(1)
+        }
+
         if let index = arguments.firstIndex(of: "--render-ui"), index + 1 < arguments.count {
             let path = arguments[index + 1]
             DispatchQueue.main.async {

@@ -82,6 +82,11 @@ struct PipelineSettings: Sendable {
     /// Language last used in the current app, used to skip a redundant second
     /// decode. Never used to force a decode.
     var expectedLanguage: String? = nil
+    /// Listen to the clip with a decision model instead of guessing from text.
+    var voiceLanguageCheck: Bool = false
+    var voiceLanguageModel: String = "google/gemini-decision-1"
+    /// Languages the detector may choose from.
+    var voiceLanguageCandidates: [String] = ["uk", "ru", "en"]
 }
 
 // MARK: - Plausibility

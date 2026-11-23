@@ -30,6 +30,9 @@ final class DictationController: ObservableObject {
     private var isStarting = false
     private var hotkeyIsDown = false
     private var noteTask: Task<Void, Never>?
+    /// The combination actually registered, which may differ from the one in
+    /// settings when another app owns it.
+    private(set) var activePreset: HotkeyPreset?
     /// The app that was frontmost when the recording started. The text belongs
     /// there even if the user switches windows while it is being transcribed.
     private var targetApplication: NSRunningApplication?
@@ -78,12 +81,32 @@ final class DictationController: ObservableObject {
         hotkey.onPress = { [weak self] in self?.hotkeyPressed() }
         hotkey.onRelease = { [weak self] in self?.hotkeyReleased() }
 
-        let preset = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
-                                           modifiers: settings.hotkeyModifiers) ?? .optionSpace
-        hotkeyConflict = !hotkey.register(keyCode: preset.keyCode, modifiers: preset.modifiers)
-        if hotkeyConflict {
-            status("Hotkey is taken by another app")
+        let preferred = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
+                                              modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
+
+        if hotkey.register(keyCode: preferred.keyCode, modifiers: preferred.modifiers) {
+            activePreset = preferred
+            hotkeyConflict = false
+            NSLog("Tacet: hotkey %@ registered", preferred.title)
+            return
         }
+        NSLog("Tacet: hotkey %@ is taken (eventHotKeyExistsErr)", preferred.title)
+
+        // The chosen combination is owned by another app (Carbon returns
+        // eventHotKeyExistsErr). Find a free one instead of leaving the app
+        // without a way to start dictation.
+        for candidate in HotkeyPreset.allCases where candidate != preferred {
+            if hotkey.register(keyCode: candidate.keyCode, modifiers: candidate.modifiers) {
+                activePreset = candidate
+                hotkeyConflict = false
+                status("\(preferred.title) is taken, using \(candidate.title)")
+                return
+            }
+        }
+
+        activePreset = nil
+        hotkeyConflict = true
+        status("No free hotkey, choose another in Settings")
     }
 
     private func hotkeyPressed() {
@@ -211,7 +234,10 @@ final class DictationController: ObservableObject {
             engineOrder: settings.engineOrder,
             dualLanguageCheck: settings.dualLanguageCheck,
             cloudTimeout: settings.cloudTimeout,
-            expectedLanguage: expectedLanguage
+            expectedLanguage: expectedLanguage,
+            voiceLanguageCheck: settings.voiceLanguageCheck,
+            voiceLanguageModel: settings.openRouterModel,
+            voiceLanguageCandidates: LanguageOption.allCases.filter { $0 != .auto }.map(\.rawValue)
         )
 
         let result = await pipeline.transcribe(clip, settings: pipelineSettings, engines: engineConfiguration)
@@ -482,5 +508,15 @@ final class DictationController: ObservableObject {
         case .processing: return "ellipsis.circle"
         case .idle: return lastFailure == nil ? "mic.circle" : "exclamationmark.circle"
         }
+    }
+
+    /// Shown in the menu so the hotkey is discoverable without opening Settings.
+    var hotkeyHint: String {
+        guard let preset = activePreset else {
+            return "No free hotkey — open Settings and pick another"
+        }
+        return settings.hotkeyMode == "hold"
+            ? "Hold \(preset.title) to dictate"
+            : "Press \(preset.title) to start and stop"
     }
 }

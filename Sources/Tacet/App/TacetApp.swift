@@ -45,6 +45,7 @@ struct MenuBarView: View {
     var body: some View {
         Group {
             Text(controller.statusNote)
+            Text(controller.hotkeyHint)
             if controller.hotkeyConflict {
                 Text("Hotkey conflict, choose another in Settings")
             }

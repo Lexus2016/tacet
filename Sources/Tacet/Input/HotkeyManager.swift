@@ -81,20 +81,24 @@ final class HotkeyManager {
     }
 }
 
-/// Presets instead of a full shortcut recorder: three well-known combinations
+/// Presets instead of a full shortcut recorder: a few well-known combinations
 /// cover dictation, and a recorder is a feature the lite app does not need.
 enum HotkeyPreset: String, CaseIterable, Identifiable {
-    case optionSpace
     case controlOptionSpace
+    case optionSpace
     case commandShiftSpace
+    case controlShiftSpace
+    case commandOptionSpace
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .optionSpace: return "⌥ Space"
         case .controlOptionSpace: return "⌃⌥ Space"
+        case .optionSpace: return "⌥ Space"
         case .commandShiftSpace: return "⌘⇧ Space"
+        case .controlShiftSpace: return "⌃⇧ Space"
+        case .commandOptionSpace: return "⌘⌥ Space"
         }
     }
 
@@ -102,9 +106,11 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
 
     var modifiers: UInt32 {
         switch self {
-        case .optionSpace: return UInt32(optionKey)
         case .controlOptionSpace: return UInt32(controlKey | optionKey)
+        case .optionSpace: return UInt32(optionKey)
         case .commandShiftSpace: return UInt32(cmdKey | shiftKey)
+        case .controlShiftSpace: return UInt32(controlKey | shiftKey)
+        case .commandOptionSpace: return UInt32(cmdKey | optionKey)
         }
     }
 

@@ -180,14 +180,38 @@ final class HUDController {
         let panel = ensurePanel()
         resize(panel)
         position(panel)
-        panel.orderFrontRegardless()
+
+        let wasHidden = !panel.isVisible
+        if wasHidden {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        } else {
+            panel.orderFrontRegardless()
+        }
 
         if let autoHide {
             hideTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(autoHide * 1_000_000_000))
                 guard !Task.isCancelled else { return }
-                await MainActor.run { self?.panel?.orderOut(nil) }
+                await MainActor.run { self?.fadeOut() }
             }
+        }
+    }
+
+    private func fadeOut() {
+        guard let panel, panel.isVisible else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
         }
     }
 
@@ -246,9 +270,10 @@ final class HUDController {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
         let size = panel.frame.size
+        // A small island just above the Dock, not a banner at the top.
         panel.setFrameOrigin(NSPoint(
             x: visible.midX - size.width / 2,
-            y: visible.maxY - size.height - 26
+            y: visible.minY + 10
         ))
     }
 }

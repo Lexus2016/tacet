@@ -136,6 +136,21 @@ struct GeneralSettingsView: View {
                         Spacer()
                     }
                     .padding(.vertical, 7)
+                } else if let active = controller.activePreset,
+                          let chosen = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
+                                                             modifiers: settings.hotkeyModifiers),
+                          active != chosen {
+                    SoftDivider()
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundStyle(Theme.accent)
+                        Text("\(chosen.title) is taken by another app. Tacet is listening on \(active.title) instead.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                    }
+                    .padding(.vertical, 7)
                 }
             }
 
@@ -155,6 +170,16 @@ struct GeneralSettingsView: View {
                 SoftRow("Re-check Ukrainian vs Russian",
                         subtitle: "One extra request, only when the script check is ambiguous") {
                     Toggle("", isOn: $settings.dualLanguageCheck)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                SoftDivider()
+
+                SoftRow("Voice language check",
+                        subtitle: "Listens to the clip with Gemini Decision, so Ukrainian speech decoded as Russian is caught. Needs an OpenRouter key.") {
+                    Toggle("", isOn: $settings.voiceLanguageCheck)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -246,7 +271,7 @@ struct GeneralSettingsView: View {
         Binding(
             get: {
                 HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
-                                      modifiers: settings.hotkeyModifiers) ?? .optionSpace
+                                      modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
             },
             set: { preset in
                 settings.hotkeyKeyCode = Int(preset.keyCode)
@@ -348,6 +373,21 @@ struct EnginesSettingsView: View {
 
             SoftCard(title: "Parakeet (local)", systemImage: "cpu") {
                 ParakeetRow()
+            }
+
+            SoftCard(title: "OpenRouter (voice language check)", systemImage: "ear") {
+                APIKeyRow(account: KeychainAccount.openRouter, environmentKey: "OPENROUTER_API_KEY")
+                SoftDivider()
+                SoftRow("Model") {
+                    TextField("", text: $settings.openRouterModel)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 250)
+                }
+                Text("google/gemini-decision-1 accepts the audio itself and returns the spoken language with a calibrated probability. Used only when the voice language check is on.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 7)
             }
 
             SoftCard(title: "Network", systemImage: "clock") {
