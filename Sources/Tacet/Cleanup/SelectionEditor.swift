@@ -1,0 +1,114 @@
+import Foundation
+
+struct SelectionEditOutcome: Sendable {
+    /// The text that replaces the selection. Empty means the selection is removed.
+    let text: String
+}
+
+/// Turns "selected text + spoken words" into the replacement text.
+///
+/// The spoken words may be an instruction about the selection ("translate this
+/// to English", "fix the mistakes", "remove it") or the replacement itself. One
+/// model call decides and applies it; the selection is replaced with the answer.
+final class SelectionEditor {
+    private var session: URLSession { SharedSession.cloud }
+
+    func edit(selection: String,
+              instruction: String,
+              configuration: CleanupConfiguration) async -> SelectionEditOutcome? {
+        let selected = selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        let spoken = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selected.isEmpty, !spoken.isEmpty, selected.count <= 8_000 else { return nil }
+
+        guard let spec = ProviderCatalog.spec(configuration.provider) else { return nil }
+        let key = ProviderCatalog.key(for: spec)
+        if spec.requiresKey, key == nil { return nil }
+
+        let base = configuration.provider == "openai" ? configuration.baseURL : spec.baseURL
+        guard let url = URL(string: base)?.appendingPathComponent("chat/completions") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = max(6, configuration.timeout + 4)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let key {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
+
+        let payload: [String: Any] = [
+            "model": configuration.model,
+            "temperature": 0,
+            "max_tokens": 4096,
+            "messages": [
+                ["role": "system", "content": Self.systemPrompt],
+                ["role": "user", "content": "SELECTED TEXT:\n\(selected)\n\nSPOKEN:\n\(spoken)"],
+            ],
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        guard let answer = try? await withTimeout(max(6, configuration.timeout + 4), operation: {
+            try await Self.send(request, session: self.session)
+        }) else { return nil }
+
+        return Self.normalize(answer, selection: selected)
+    }
+
+    /// Parses the model answer. `DELETE` means the selection must be removed;
+    /// an empty answer is a failure, not a deletion.
+    static func normalize(_ raw: String, selection: String) -> SelectionEditOutcome? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        if text.uppercased() == "DELETE" { return SelectionEditOutcome(text: "") }
+
+        let wrappers: [(Character, Character)] = [("\"", "\""), ("«", "»"), ("“", "”"), ("`", "`")]
+        for (opening, closing) in wrappers {
+            if text.count > 2, text.first == opening, text.last == closing {
+                text = String(text.dropFirst().dropLast())
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        guard !text.isEmpty else { return nil }
+
+        // A rewrite can be much shorter (summarise) or longer (expand), but not
+        // to the point of losing the content entirely.
+        let ratio = Double(text.count) / Double(max(1, selection.count))
+        guard ratio >= 0.15, ratio <= 4.0 else { return nil }
+
+        return SelectionEditOutcome(text: text)
+    }
+
+    private static func send(_ request: URLRequest, session: URLSession) async throws -> String {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw RecognitionError.failed("Selection edit failed")
+        }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = object["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String
+        else {
+            throw RecognitionError.failed("Unexpected selection edit response")
+        }
+        return content
+    }
+
+    static let systemPrompt = """
+    You edit a piece of text that the user selected, according to what the user said.
+
+    The user's spoken words are either:
+    - an instruction about the selected text (translate, fix spelling, shorten, rewrite, change tone, remove, ...), or
+    - the text that should replace the selection.
+
+    Decide which one it is and produce the final text that should replace the selection.
+
+    Rules:
+    - Return ONLY the replacement text. No quotes, no explanations, no preamble.
+    - If the selection must be removed, return exactly DELETE and nothing else.
+    - If the spoken words are a command, apply it; do not answer or comment on it.
+    - Keep names, numbers, technical terms, code and URLs exactly as they are, unless the instruction changes them.
+    - Keep the language of the selected text unless the instruction asks for another language.
+    - If the selection is already correct and nothing should change, return it unchanged.
+    """
+}

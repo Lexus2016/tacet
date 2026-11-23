@@ -216,6 +216,16 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Edit selected text",
+                        subtitle: "With text selected, the dictation rewrites, translates or removes it instead of inserting after it") {
+                    Toggle("", isOn: $settings.selectionEditing)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                SoftDivider()
+
                 SoftRow("Floating indicator") {
                     Toggle("", isOn: $settings.showHUD)
                         .labelsHidden()

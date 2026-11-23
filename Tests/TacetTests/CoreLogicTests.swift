@@ -127,6 +127,25 @@ final class PlausibilityTests: XCTestCase {
     }
 }
 
+final class SelectionEditorTests: XCTestCase {
+    func testDeleteKeywordMeansRemoval() {
+        XCTAssertEqual(SelectionEditor.normalize("DELETE", selection: "some long text")?.text, "")
+    }
+
+    func testEmptyAnswerIsAFailureNotADeletion() {
+        XCTAssertNil(SelectionEditor.normalize("   ", selection: "text"))
+    }
+
+    func testWrappingQuotesAreStripped() {
+        XCTAssertEqual(SelectionEditor.normalize("\"Hello\"", selection: "Привет")?.text, "Hello")
+    }
+
+    func testImplausibleShorteningIsRejected() {
+        let selection = String(repeating: "word ", count: 60)
+        XCTAssertNil(SelectionEditor.normalize("ok", selection: selection))
+    }
+}
+
 final class TranslatorTests: XCTestCase {
     func testLanguageNames() {
         XCTAssertEqual(Translator.languageName("uk"), "Ukrainian")

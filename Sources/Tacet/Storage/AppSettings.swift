@@ -125,6 +125,12 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(outputLanguage, forKey: "outputLanguage") }
     }
 
+    /// When text is selected, the dictation edits it instead of inserting new
+    /// text after it.
+    @Published var selectionEditing: Bool {
+        didSet { defaults.set(selectionEditing, forKey: "selectionEditing") }
+    }
+
     @Published var showHUD: Bool {
         didSet { defaults.set(showHUD, forKey: "showHUD") }
     }
@@ -193,6 +199,7 @@ final class AppSettings: ObservableObject {
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
+        selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"

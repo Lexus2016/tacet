@@ -38,6 +38,22 @@ enum TextInserter {
         return true
     }
 
+    /// Sends Backspace, which removes the current selection.
+    @discardableResult
+    static func deleteSelection() -> Bool {
+        guard isAccessibilityTrusted(), let source = CGEventSource(stateID: .combinedSessionState) else {
+            return false
+        }
+
+        usleep(45_000)
+
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x33, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x33, keyDown: false)
+        keyDown?.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp?.post(tap: .cgAnnotatedSessionEventTap)
+        return true
+    }
+
     static var frontmostAppName: String? {
         NSWorkspace.shared.frontmostApplication?.localizedName
     }

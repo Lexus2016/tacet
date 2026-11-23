@@ -25,6 +25,7 @@ final class DictationController: ObservableObject {
     private let pipeline = TranscriptionPipeline()
     private let cleanupPipeline = CleanupPipeline()
     private let translator = Translator()
+    private let selectionEditor = SelectionEditor()
     private let hotkey = HotkeyManager()
     private let languageMemory = LanguageMemory()
 
@@ -34,6 +35,8 @@ final class DictationController: ObservableObject {
     private var retryTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
+    /// The text that was selected when the recording started.
+    private var capturedSelection: String?
     /// The combination actually registered, which may differ from the stored
     /// one when another app owns it. Formatted for display.
     private(set) var activeHotkey: String = ""
@@ -262,6 +265,7 @@ final class DictationController: ObservableObject {
 
             do {
                 targetApplication = NSWorkspace.shared.frontmostApplication
+                capturedSelection = settings.selectionEditing ? SelectionReader.selectedText() : nil
                 try capture.start()
                 phase = .recording
                 lastFailure = nil
@@ -417,6 +421,41 @@ final class DictationController: ObservableObject {
                 }
             }
 
+            // A selection turns the dictation into an edit of that selection.
+            if let selection = capturedSelection, settings.selectionEditing {
+                let outcome = await selectionEditor.edit(selection: selection,
+                                                         instruction: text,
+                                                         configuration: configuration)
+                if let outcome {
+                    applySelectionEdit(outcome.text,
+                                       instruction: text,
+                                       selection: selection,
+                                       transcript: output.transcript,
+                                       clip: clip,
+                                       latency: Date().timeIntervalSince(started),
+                                       appName: appName,
+                                       cleanupEngine: cleanupEngine,
+                                       note: notes.isEmpty ? nil : notes.joined(separator: "; "))
+                } else {
+                    // Never destroy the selection on a failed edit: keep it and
+                    // put the transcript on the clipboard.
+                    TextInserter.copy(text)
+                    notes.append("Selection edit failed — text copied, selection untouched")
+                    deliver(text: text,
+                            raw: output.transcript.text,
+                            transcript: output.transcript,
+                            clip: clip,
+                            latency: Date().timeIntervalSince(started),
+                            appName: appName,
+                            cleanupEngine: cleanupEngine,
+                            existingEntryID: existingEntryID,
+                            allowPaste: false,
+                            allowClipboard: true,
+                            note: notes.joined(separator: "; "))
+                }
+                return
+            }
+
             deliver(text: text,
                     raw: output.transcript.text,
                     transcript: output.transcript,
@@ -437,6 +476,76 @@ final class DictationController: ObservableObject {
                           existingEntryID: existingEntryID,
                           autoRetry: autoRetry)
         }
+    }
+
+    /// Replaces the selection with the result of the spoken instruction. An
+    /// empty result removes the selection.
+    private func applySelectionEdit(_ replacement: String,
+                                    instruction: String,
+                                    selection: String,
+                                    transcript: Transcript,
+                                    clip: AudioClip,
+                                    latency: TimeInterval,
+                                    appName: String?,
+                                    cleanupEngine: String?,
+                                    note: String?) {
+        let targetReady = restoreTargetApplication()
+        let selectionStillThere = SelectionReader.hasSelection()
+
+        var pasted = false
+        var finalNote = note
+
+        if targetReady, selectionStillThere, settings.pasteAutomatically {
+            if replacement.isEmpty {
+                pasted = TextInserter.deleteSelection()
+            } else {
+                TextInserter.copy(replacement)
+                pasted = TextInserter.paste()
+            }
+        } else if !replacement.isEmpty {
+            TextInserter.copy(replacement)
+            if !selectionStillThere {
+                finalNote = [finalNote, "Selection changed — result copied instead of replacing"]
+                    .compactMap { $0 }
+                    .joined(separator: "; ")
+            }
+        }
+
+        let displayed = replacement.isEmpty ? "(selection removed)" : replacement
+        let entry = store.insert(text: displayed,
+                                 rawText: instruction,
+                                 engine: transcript.engine,
+                                 language: transcript.language,
+                                 duration: clip.duration,
+                                 latency: latency,
+                                 appName: appName,
+                                 audioPath: clip.url.path,
+                                 status: .ok,
+                                 cleanupEngine: cleanupEngine,
+                                 error: finalNote)
+
+        if pasted {
+            store.markInserted(id: entry.id)
+            status(replacement.isEmpty ? "Selection removed" : "Selection replaced")
+            if settings.showHUD {
+                HUDController.shared.showMessage(replacement.isEmpty ? "Selection removed" : "Selection replaced",
+                                                 isError: false)
+            }
+        } else {
+            status("Copied — selection not changed")
+            if settings.showHUD {
+                HUDController.shared.showMessage("Copied, selection untouched", isError: false)
+            }
+        }
+
+        if settings.playSounds {
+            SoundService.shared.play(pasted ? .success : .error, style: settings.soundStyle)
+        }
+
+        phase = .idle
+        lastFailure = nil
+        refreshHistory()
+        scheduleIdleUnload()
     }
 
     private func deliver(text: String,

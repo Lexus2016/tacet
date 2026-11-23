@@ -119,6 +119,30 @@ enum CLIHarness {
             return true
         }
 
+        if let index = arguments.firstIndex(of: "--edit"), index + 1 < arguments.count {
+            let selection = arguments[index + 1]
+            let instruction = value(after: "--instruction", in: arguments) ?? ""
+            Task {
+                let settings = AppSettings.shared
+                let configuration = CleanupConfiguration(
+                    provider: settings.cleanupProvider,
+                    baseURL: settings.cleanupBaseURL,
+                    model: settings.chatModel(for: settings.cleanupProvider),
+                    timeout: max(6, settings.cleanupTimeout + 4),
+                    secondaryProvider: nil
+                )
+                let started = Date()
+                let outcome = await SelectionEditor().edit(selection: selection,
+                                                           instruction: instruction,
+                                                           configuration: configuration)
+                let elapsed = Date().timeIntervalSince(started)
+                print(String(format: "edit: %@  (%.2f s)", outcome == nil ? "failed" : "ok", elapsed))
+                print(outcome?.text.isEmpty == true ? "<deleted>" : (outcome?.text ?? "<nil>"))
+                exit(0)
+            }
+            return true
+        }
+
         if let index = arguments.firstIndex(of: "--translate"), index + 1 < arguments.count {
             let text = arguments[index + 1]
             let target = value(after: "--to", in: arguments) ?? "en"
