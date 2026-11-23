@@ -43,3 +43,4 @@ Tacet.xcodeproj/
 .tools/
 dist/
 .release/
+.release-*/
