@@ -193,7 +193,9 @@ final class AppSettings: ObservableObject {
         }
         chatModels = models
         cleanupBaseURL = defaults.string(forKey: "cleanupBaseURL") ?? "https://api.groq.com/openai/v1"
-        cleanupTimeout = defaults.object(forKey: "cleanupTimeout") as? Double ?? 1.5
+        let storedTimeout = defaults.object(forKey: "cleanupTimeout") as? Double
+        // 1.5 s was the default before the 120B model; it is too tight for it.
+        cleanupTimeout = (storedTimeout == nil || storedTimeout == 1.5) ? 3.0 : (storedTimeout ?? 3.0)
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"

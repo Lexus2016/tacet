@@ -119,6 +119,16 @@ enum CLIHarness {
             return true
         }
 
+        if let index = arguments.firstIndex(of: "--pipeline"), index + 1 < arguments.count {
+            let path = arguments[index + 1]
+            let target = value(after: "--to", in: arguments)
+            Task {
+                await runPipeline(path: path, target: target)
+                exit(0)
+            }
+            return true
+        }
+
         if let index = arguments.firstIndex(of: "--edit"), index + 1 < arguments.count {
             let selection = arguments[index + 1]
             let instruction = value(after: "--instruction", in: arguments) ?? ""
@@ -334,6 +344,68 @@ enum CLIHarness {
             print(String(format: "first: %.3f s, best: %.3f s, saved by a warm connection: %.0f ms",
                          first, best, (first - best) * 1000))
         }
+    }
+
+    private static func runPipeline(path: String, target: String?) async {
+        guard let clip = try? AudioClip.load(url: URL(fileURLWithPath: path)) else {
+            print("cannot read \(path)")
+            return
+        }
+
+        let settings = AppSettings.shared
+        let pipelineSettings = PipelineSettings(
+            languageOverride: settings.languageOverride,
+            engineOrder: settings.engineOrder,
+            dualLanguageCheck: settings.dualLanguageCheck,
+            cloudTimeout: settings.cloudTimeout
+        )
+        let engines = EngineConfiguration(
+            groqModel: settings.groqModel,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            cloudTimeout: settings.cloudTimeout
+        )
+        let configuration = CleanupConfiguration(
+            provider: settings.cleanupProvider,
+            baseURL: settings.cleanupBaseURL,
+            model: settings.chatModel(for: settings.cleanupProvider),
+            timeout: settings.cleanupTimeout,
+            secondaryProvider: nil
+        )
+
+        print(String(format: "audio: %.1f s", clip.duration))
+
+        let t0 = Date()
+        let result = await TranscriptionPipeline().transcribe(clip, settings: pipelineSettings, engines: engines)
+        let asrTime = Date().timeIntervalSince(t0)
+
+        guard case .success(let output) = result else {
+            if case .failure(let failure) = result { print("ASR failed: \(failure.localizedDescription)") }
+            return
+        }
+
+        var text = output.transcript.text
+        print(String(format: "ASR %@ %.2f s, lang %@", output.transcript.engine, asrTime, output.transcript.language ?? "?"))
+        print("raw: \(text)")
+
+        if settings.isCleanupConfigured {
+            let t1 = Date()
+            let cleaned = await CleanupPipeline().clean(text, configuration: configuration)
+            print(String(format: "cleanup %@ %.2f s, changed %@",
+                         cleaned.engine, Date().timeIntervalSince(t1), cleaned.changed ? "yes" : "no"))
+            text = cleaned.text
+            print("clean: \(text)")
+        }
+
+        if let target {
+            let t2 = Date()
+            let outcome = await Translator().translate(text, to: target, configuration: configuration)
+            print(String(format: "translate %.2f s, ok %@",
+                         Date().timeIntervalSince(t2), outcome.translated ? "yes" : "no"))
+            text = outcome.text
+        }
+
+        print("final: \(text)")
     }
 
     private static func transcribe(path: String, languageOverride: String?, engineOrder: [String]?) async {        let url = URL(fileURLWithPath: path)
