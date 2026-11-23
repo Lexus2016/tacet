@@ -148,7 +148,8 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   fi
 
   if [ "${SKIP_NOTARIZATION:-0}" != "1" ]; then
-    echo "Notarizing the ${ARCH} disk image…"
+    echo "Signing and notarizing the ${ARCH} disk image…"
+    codesign --force --timestamp --sign "$IDENTITY" "$DMG"
     xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
     xcrun stapler staple "$DMG"
   fi
