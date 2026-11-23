@@ -1,0 +1,50 @@
+name: Tacet
+options:
+  bundleIdPrefix: ua.rawira
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: 0.17.5
+
+targets:
+  Tacet:
+    type: application
+    platform: macOS
+    configFiles:
+      Debug: Configuration/Signing.local.xcconfig
+      Release: Configuration/Signing.local.xcconfig
+    sources:
+      - path: Sources/Tacet
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/Tacet.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet
+        PRODUCT_NAME: Tacet
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Sources/Tacet/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/Tacet/Resources/Tacet.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ENABLE_HARDENED_RUNTIME: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        OTHER_LDFLAGS:
+          - "-lsqlite3"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+    dependencies:
+      - package: FluidAudio
+        product: FluidAudio
