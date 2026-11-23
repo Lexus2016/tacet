@@ -104,8 +104,9 @@ enum Plausibility {
         if hallucinations.contains(trimmed.lowercased()) { return false }
 
         // A two-second clip producing four characters is almost always a
-        // hallucination, not a very short word.
-        if duration > 1.8, Double(letters.count) < duration * 1.2 {
+        // hallucination, not a very short word. 0.8 chars/s still lets "yes"
+        // through in a three-second answer.
+        if duration > 1.8, Double(letters.count) < duration * 0.8 {
             return false
         }
 

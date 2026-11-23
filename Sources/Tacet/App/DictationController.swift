@@ -28,6 +28,9 @@ final class DictationController: ObservableObject {
 
     private var isStarting = false
     private var noteTask: Task<Void, Never>?
+    /// The app that was frontmost when the recording started. The text belongs
+    /// there even if the user switches windows while it is being transcribed.
+    private var targetApplication: NSRunningApplication?
 
     private init() {
         capture.levelHandler = { [weak self] level in
@@ -118,6 +121,7 @@ final class DictationController: ObservableObject {
             }
 
             do {
+                targetApplication = NSWorkspace.shared.frontmostApplication
                 try capture.start()
                 phase = .recording
                 lastFailure = nil
@@ -247,6 +251,7 @@ final class DictationController: ObservableObject {
                          appName: String?,
                          cleanupEngine: String?,
                          existingEntryID: String?) {
+        restoreTargetApplication()
         TextInserter.copy(text)
         let pasted = settings.pasteAutomatically && TextInserter.paste()
 
@@ -404,6 +409,17 @@ final class DictationController: ObservableObject {
                 if self.phase == .idle, self.lastFailure == nil { self.statusNote = "Ready" }
             }
         }
+    }
+
+    /// Brings back the app that had focus when the recording started, so the
+    /// text lands where the user was typing even if they switched windows
+    /// during transcription.
+    private func restoreTargetApplication() {
+        guard settings.pasteAutomatically, let target = targetApplication else { return }
+        let current = NSWorkspace.shared.frontmostApplication
+        guard current?.processIdentifier != target.processIdentifier else { return }
+        target.activate()
+        usleep(150_000)
     }
 
     private func ensureMicrophone() async -> Bool {
