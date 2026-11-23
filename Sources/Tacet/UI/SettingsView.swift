@@ -459,6 +459,15 @@ struct EnginesSettingsView: View {
                         }
                         .buttonStyle(SoftButtonStyle())
                         .disabled(index == settings.engineOrder.count - 1)
+
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                settings.engineOrder.remove(at: index)
+                            }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(SoftButtonStyle(destructive: true))
                     }
                     .padding(.vertical, 6)
                 }
@@ -546,7 +555,9 @@ struct EnginesSettingsView: View {
 
     private var availableProviders: [ProviderSpec] {
         ProviderCatalog.transcriptionProviders.filter {
-            $0.id != EngineID.parakeet && !settings.engineOrder.contains($0.id)
+            $0.id != EngineID.parakeet
+                && !settings.engineOrder.contains($0.id)
+                && ProviderCatalog.isConfigured($0)
         }
     }
 
@@ -662,7 +673,7 @@ struct CleanupSettingsView: View {
             SoftCard(title: "Model", systemImage: "brain") {
                 SoftRow("Provider") {
                     Picker("", selection: $settings.cleanupProvider) {
-                        ForEach(ProviderCatalog.chatProviders) { provider in
+                        ForEach(ProviderCatalog.chatProviders.filter { ProviderCatalog.isConfigured($0) }) { provider in
                             Text(provider.name).tag(provider.id)
                         }
                     }

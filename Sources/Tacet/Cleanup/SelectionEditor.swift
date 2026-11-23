@@ -50,11 +50,28 @@ final class SelectionEditor {
             try await Self.send(request, session: self.session)
         }) else { return nil }
 
+        if Self.isEchoOfCommand(answer, instruction: spoken) { return nil }
         return Self.normalize(answer, selection: selected)
     }
 
     /// Parses the model answer. `DELETE` means the selection must be removed;
     /// an empty answer is a failure, not a deletion.
+    private static let commandVerbs = [
+        "переведи", "переклади", "переведи", "translate", "исправь", "виправ", "fix",
+        "удали", "видали", "delete", "remake", "перепиши", "rewrite", "сократи", "скороти",
+        "summar", "перефразуй", "paraphrase",
+    ]
+
+    /// True when the spoken words were a command and the model simply repeated
+    /// them instead of applying the command.
+    static func isEchoOfCommand(_ answer: String, instruction: String) -> Bool {
+        let a = answer.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let i = instruction.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !a.isEmpty, !i.isEmpty else { return false }
+        guard commandVerbs.contains(where: { i.contains($0) }) else { return false }
+        return a == i || a.hasPrefix(i) || i.hasPrefix(a)
+    }
+
     static func normalize(_ raw: String, selection: String) -> SelectionEditOutcome? {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
