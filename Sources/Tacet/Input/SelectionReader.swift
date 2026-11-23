@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -32,6 +33,37 @@ enum SelectionReader {
     /// replacement will actually replace something.
     static func hasSelection() -> Bool {
         selectedText() != nil
+    }
+
+    /// AX first; if the app does not expose the selection (Word, Sublime,
+    /// many native editors), copy it with Command-C and restore the clipboard
+    /// afterwards. This is the same fallback the competitors use.
+    static func selectedTextOrCopy() -> String? {
+        if let text = selectedText() { return text }
+        guard AXIsProcessTrusted() else { return nil }
+
+        let pasteboard = NSPasteboard.general
+        let previous = pasteboard.string(forType: .string)
+
+        guard let source = CGEventSource(stateID: .combinedSessionState) else { return nil }
+        let down = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true) // C
+        let up = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
+        down?.flags = .maskCommand
+        up?.flags = .maskCommand
+        down?.post(tap: .cgAnnotatedSessionEventTap)
+        up?.post(tap: .cgAnnotatedSessionEventTap)
+
+        usleep(140_000)
+        let copied = pasteboard.string(forType: .string)
+
+        if let previous {
+            pasteboard.clearContents()
+            pasteboard.setString(previous, forType: .string)
+        }
+
+        guard let copied, copied != previous else { return nil }
+        let trimmed = copied.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : copied
     }
 
     /// A selection exists but the app refuses to hand over its text (common in

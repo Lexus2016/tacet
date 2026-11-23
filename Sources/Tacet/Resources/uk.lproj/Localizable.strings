@@ -151,3 +151,6 @@
 "No API key saved" = "Ключ API не збережено";
 
 "These are the speech-recognition engines used for voice transcription, tried in this order. Only configured providers are listed; failed ones are skipped." = "Це рушії розпізнавання мовлення для транскрипції голосу, пробуються в цьому порядку. Показані лише налаштовані провайдери; невдалі пропускаються.";
+
+"Floating indicator" = "Плаваючий індикатор";
+"Custom / OpenAI-compatible" = "Свій / OpenAI-сумісний";

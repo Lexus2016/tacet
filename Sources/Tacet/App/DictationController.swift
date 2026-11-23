@@ -296,7 +296,7 @@ final class DictationController: ObservableObject {
 
             do {
                 targetApplication = NSWorkspace.shared.frontmostApplication
-                capturedSelection = settings.selectionEditing ? SelectionReader.selectedText() : nil
+                capturedSelection = settings.selectionEditing ? SelectionReader.selectedTextOrCopy() : nil
                 try capture.start()
 
                 if stopRequested {

@@ -291,7 +291,7 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            SoftCard(title: "Visual", systemImage: "sparkles") {
+            SoftCard(title: "Floating indicator", systemImage: "sparkles") {
                 SoftRow("Theme") {
                     Picker("", selection: $settings.indicatorTheme) {
                         ForEach(IndicatorTheme.allCases) { theme in
@@ -299,7 +299,7 @@ struct GeneralSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 120)
+                    .frame(width: 150)
                 }
 
                 SoftDivider()

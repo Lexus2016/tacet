@@ -600,7 +600,7 @@ final class HUDController {
         case .minimal:
             size = NSSize(width: max(52, fitting.width), height: max(26, fitting.height))
         case .island, .overlay:
-            size = NSSize(width: max(140, fitting.width + 24), height: max(38, fitting.height))
+            size = NSSize(width: max(160, fitting.width + 48), height: max(38, fitting.height))
         }
         panel.setContentSize(size)
     }

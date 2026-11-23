@@ -42,14 +42,17 @@ enum ProviderTester {
             guard (200..<300).contains(http.statusCode) else {
                 return .failure(ModelCatalog.Failure.http(http.statusCode, message(from: data)))
             }
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let choices = object["choices"] as? [[String: Any]],
-                  let message = choices.first?["message"] as? [String: Any],
-                  let content = message["content"] as? String
-            else {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return .failure(ModelCatalog.Failure.empty)
             }
-            return .success(content.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let choices = object["choices"] as? [[String: Any]],
+               let message = choices.first?["message"] as? [String: Any],
+               let content = message["content"] as? String {
+                return .success(content.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            // Reasoning models can return an empty content field; the
+            // connection itself is fine.
+            return .success("")
         } catch {
             return .failure(error)
         }

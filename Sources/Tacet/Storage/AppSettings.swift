@@ -280,7 +280,11 @@ enum EngineID {
         switch id {
         case groq: return "Groq (cloud)"
         case parakeet: return "Parakeet (local)"
-        case openAI: return "OpenAI-compatible"
+        case openAI: return "Custom / OpenAI-compatible"
+        case "openrouter": return "OpenRouter"
+        case "cerebras": return "Cerebras"
+        case "ollama": return "Ollama (local)"
+        case "ollamaCloud": return "Ollama Cloud"
         default: return id
         }
     }
