@@ -13,6 +13,7 @@ struct HotkeyRecorder: View {
 
     @State private var isRecording = false
     @State private var monitor: Any?
+    @State private var modifierMonitor: Any?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -44,6 +45,21 @@ struct HotkeyRecorder: View {
         guard !isRecording else { return }
         isRecording = true
 
+        // A single modifier produces flagsChanged, not a key press.
+        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { event in
+            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            let singles: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift]
+            let pressed = singles.filter { flags.contains($0) }
+            guard pressed.count == 1 else { return event }
+
+            keyCode = 0
+            modifiers = HotkeyFormat.carbon(flags)
+            label = ""
+            stop()
+            onChange()
+            return nil
+        }
+
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             if event.keyCode == 53 { // Escape
                 stop()
@@ -68,6 +84,10 @@ struct HotkeyRecorder: View {
             NSEvent.removeMonitor(monitor)
             self.monitor = nil
         }
+        if let modifierMonitor {
+            NSEvent.removeMonitor(modifierMonitor)
+            self.modifierMonitor = nil
+        }
     }
 }
 
@@ -82,7 +102,18 @@ enum HotkeyFormat {
     }
 
     static func title(modifiers: Int, label: String) -> String {
-        symbols(modifiers) + (label.isEmpty ? "Key" : label)
+        if label.isEmpty, modifiers != 0 { return symbols(modifiers) }
+        return symbols(modifiers) + (label.isEmpty ? "Key" : label)
+    }
+
+    /// Carbon masks back to AppKit flags, for the modifier-only monitor.
+    static func eventFlags(from carbon: Int) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbon & Int(cmdKey) != 0 { flags.insert(.command) }
+        if carbon & Int(optionKey) != 0 { flags.insert(.option) }
+        if carbon & Int(controlKey) != 0 { flags.insert(.control) }
+        if carbon & Int(shiftKey) != 0 { flags.insert(.shift) }
+        return flags
     }
 
     static func symbols(_ modifiers: Int) -> String {

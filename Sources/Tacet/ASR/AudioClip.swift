@@ -107,7 +107,11 @@ struct AudioClip: Sendable {
             }
 
             let slice = Array(samples[start..<end])
-            guard !slice.isEmpty, let url = Self.writeTemporaryWav(slice) else { break }
+            guard !slice.isEmpty, let url = Self.writeTemporaryWav(slice) else {
+                // Never return a silently truncated recording.
+                for chunk in result { try? FileManager.default.removeItem(at: chunk.url) }
+                return [self]
+            }
 
             result.append(AudioClip(url: url,
                                     duration: Double(slice.count) / Self.sampleRate,
@@ -121,7 +125,9 @@ struct AudioClip: Sendable {
     /// The quietest 50 ms window in the last second before `hardEnd`.
     private func quietCut(from start: Int, to hardEnd: Int) -> Int {
         let window = Int(Self.sampleRate * 0.05)
-        let searchFrom = max(start + window, hardEnd - Int(Self.sampleRate))
+        let searchWindow = max(Int(Self.sampleRate * 2),
+                               min(Int(Self.sampleRate * 20), (hardEnd - start) / 4))
+        let searchFrom = max(start + window, hardEnd - searchWindow)
         guard searchFrom < hardEnd - window else { return hardEnd }
 
         var bestStart = hardEnd - window

@@ -145,6 +145,23 @@ final class DictationController: ObservableObject {
     func configureHotkey() {
         hotkey.onPress = { [weak self] in self?.hotkeyPressed() }
         hotkey.onRelease = { [weak self] in self?.hotkeyReleased() }
+        hotkey.onCancel = { [weak self] in self?.cancelModifierPress() }
+
+        // A single modifier cannot be a Carbon hotkey; it is monitored through
+        // flagsChanged and always behaves as push-to-talk.
+        if settings.hotkeyKeyCode == 0, settings.hotkeyModifiers != 0 {
+            let flags = HotkeyFormat.eventFlags(from: settings.hotkeyModifiers)
+            if hotkey.registerModifierOnly(flags) {
+                activeHotkey = HotkeyFormat.title(modifiers: settings.hotkeyModifiers, label: "")
+                hotkeyConflict = false
+                status("Hold \(activeHotkey) to dictate")
+            } else {
+                activeHotkey = ""
+                hotkeyConflict = true
+                status("Modifier-only hotkey needs Accessibility permission")
+            }
+            return
+        }
 
         let preferred = HotkeyFormat.title(modifiers: settings.hotkeyModifiers,
                                            label: settings.hotkeyLabel)
@@ -177,6 +194,12 @@ final class DictationController: ObservableObject {
     private func hotkeyPressed() {
         hotkeyIsDown = true
         guard phase == .idle || phase == .recording else { return }
+
+        if settings.hotkeyKeyCode == 0 {
+            if phase == .idle { startRecording() }
+            return
+        }
+
         if settings.hotkeyMode == "hold" {
             if phase == .idle { startRecording() }
         } else {
@@ -186,8 +209,25 @@ final class DictationController: ObservableObject {
 
     private func hotkeyReleased() {
         hotkeyIsDown = false
-        guard settings.hotkeyMode == "hold", phase == .recording else { return }
+        guard phase == .recording else { return }
+
+        if settings.hotkeyKeyCode == 0 {
+            stopRecording()
+            return
+        }
+
+        guard settings.hotkeyMode == "hold" else { return }
         stopRecording()
+    }
+
+    /// The modifier was only part of a shortcut (Command-C): throw the empty
+    /// recording away without a sound or a message.
+    private func cancelModifierPress() {
+        guard phase == .recording else { return }
+        capture.cancel()
+        phase = .idle
+        status("Ready")
+        HUDController.shared.hide()
     }
 
     func toggle() {
@@ -363,7 +403,10 @@ final class DictationController: ObservableObject {
                     cleanupEngine: cleanupEngine,
                     existingEntryID: existingEntryID,
                     allowPaste: allowPaste,
-                    allowClipboard: allowClipboard)
+                    allowClipboard: allowClipboard,
+                    note: output.partial
+                        ? "Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts"
+                        : nil)
 
         case .failure(let failure):
             recordFailure(failure,
@@ -384,7 +427,8 @@ final class DictationController: ObservableObject {
                          cleanupEngine: String?,
                          existingEntryID: String?,
                          allowPaste: Bool,
-                         allowClipboard: Bool) {
+                         allowClipboard: Bool,
+                         note: String?) {
         // The entry may have been deleted while this transcribe was in flight.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
             phase = .idle
@@ -413,7 +457,8 @@ final class DictationController: ObservableObject {
                          language: transcript.language,
                          latency: latency,
                          status: .ok,
-                         cleanupEngine: cleanupEngine)
+                         cleanupEngine: cleanupEngine,
+                         error: note)
         } else {
             let entry = store.insert(text: text,
                                      rawText: raw,
@@ -424,7 +469,8 @@ final class DictationController: ObservableObject {
                                      appName: appName,
                                      audioPath: clip.url.path,
                                      status: .ok,
-                                     cleanupEngine: cleanupEngine)
+                                     cleanupEngine: cleanupEngine,
+                                     error: note)
             entryID = entry.id
         }
 

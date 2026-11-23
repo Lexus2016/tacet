@@ -65,6 +65,12 @@ final class AppWindows {
         NSApp.setActivationPolicy(hasVisibleWindow ? .regular : .accessory)
     }
 
+    /// Called when the update UI closes: back to a menu bar only app unless a
+    /// real window is still open.
+    func restoreAccessoryIfPossible() {
+        updatePolicy()
+    }
+
     private func present(_ window: NSWindow?) {
         guard let window else { return }
         NSApp.setActivationPolicy(.regular)

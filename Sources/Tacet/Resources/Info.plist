@@ -35,7 +35,7 @@
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/Lexus2016/tacet/releases/latest/download/appcast.xml</string>
+	<string>$(TACET_FEED_URL)</string>
 	<key>SUPublicEDKey</key>
 	<string>nCQQfIRlOIaEBPmuJvUk8sffI8/OdJP3eYJxLrZYuIA=</string>
 	<key>SUEnableAutomaticChecks</key>

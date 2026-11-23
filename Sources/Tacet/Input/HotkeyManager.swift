@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 
@@ -6,14 +7,96 @@ import Foundation
 final class HotkeyManager {
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
+    /// Called when a modifier-only press turned out to be a normal shortcut
+    /// (another key was pressed while the modifier was held).
+    var onCancel: (() -> Void)?
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private(set) var isRegistered = false
 
+    private var modifierMonitor: Any?
+    private var modifierMask: NSEvent.ModifierFlags = []
+    private var modifierDown = false
+    private var modifierStarted = false
+    private var modifierSawKey = false
+    private var pendingPress: DispatchWorkItem?
+
     deinit {
         unregister()
     }
+
+    // MARK: Modifier-only
+
+    /// A lone modifier cannot be a Carbon hotkey: it produces flagsChanged, not
+    /// a key press. The monitor waits a moment before starting, so Command-C
+    /// does not flash a recording.
+    @discardableResult
+    func registerModifierOnly(_ mask: NSEvent.ModifierFlags) -> Bool {
+        unregister()
+        modifierMask = mask
+
+        guard AXIsProcessTrusted() else {
+            NSLog("Tacet: modifier-only hotkey needs Accessibility")
+            return false
+        }
+
+        modifierMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            self?.handleModifierEvent(event)
+        }
+
+        isRegistered = modifierMonitor != nil
+        return isRegistered
+    }
+
+    private func handleModifierEvent(_ event: NSEvent) {
+        let relevant = event.modifierFlags.intersection([.command, .option, .control, .shift])
+
+        switch event.type {
+        case .flagsChanged:
+            let isDown = relevant == modifierMask
+
+            if isDown, !modifierDown {
+                modifierDown = true
+                modifierStarted = false
+                modifierSawKey = false
+
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.modifierDown, !self.modifierSawKey else { return }
+                    self.modifierStarted = true
+                    self.onPress?()
+                }
+                pendingPress = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+
+            } else if !isDown, modifierDown {
+                modifierDown = false
+                pendingPress?.cancel()
+                pendingPress = nil
+
+                if modifierStarted {
+                    modifierStarted = false
+                    onRelease?()
+                }
+            }
+
+        case .keyDown:
+            guard modifierDown else { return }
+            modifierSawKey = true
+            pendingPress?.cancel()
+            pendingPress = nil
+
+            if modifierStarted {
+                modifierStarted = false
+                onCancel?()
+            }
+
+        default:
+            break
+        }
+    }
+
+    // MARK: Carbon
 
     @discardableResult
     func register(keyCode: UInt32, modifiers: UInt32) -> Bool {
@@ -69,6 +152,15 @@ final class HotkeyManager {
     }
 
     func unregister() {
+        pendingPress?.cancel()
+        pendingPress = nil
+        modifierDown = false
+        modifierStarted = false
+
+        if let modifierMonitor {
+            NSEvent.removeMonitor(modifierMonitor)
+            self.modifierMonitor = nil
+        }
         if let hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
             self.hotKeyRef = nil

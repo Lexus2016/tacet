@@ -63,6 +63,10 @@ struct Attempt: Sendable {
 struct PipelineResult: Sendable {
     let transcript: Transcript
     let attempts: [Attempt]
+    /// True when a long recording was split and at least one piece failed.
+    var partial: Bool = false
+    var totalParts: Int = 1
+    var failedParts: Int = 0
 }
 
 struct PipelineFailure: Error, Sendable {

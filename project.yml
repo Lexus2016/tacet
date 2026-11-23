@@ -37,6 +37,7 @@ targets:
         PRODUCT_NAME: Tacet
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+        TACET_FEED_URL: https://github.com/Lexus2016/tacet/releases/latest/download/appcast-arm64.xml
         INFOPLIST_FILE: Sources/Tacet/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Tacet/Resources/Tacet.entitlements
         GENERATE_INFOPLIST_FILE: NO

@@ -104,6 +104,7 @@ final class TranscriptionPipeline {
         var texts: [String] = []
         var first: Transcript?
         var attempts: [Attempt] = []
+        var failures = 0
 
         defer {
             for chunk in chunks where chunk.url != clip.url {
@@ -118,8 +119,8 @@ final class TranscriptionPipeline {
                 texts.append(output.transcript.text)
                 if first == nil { first = output.transcript }
                 attempts.append(contentsOf: output.attempts)
-            case .failure(let failure):
-                return .failure(failure)
+            case .failure:
+                failures += 1
             }
         }
 
@@ -127,13 +128,20 @@ final class TranscriptionPipeline {
             return .failure(PipelineFailure(attempts: attempts))
         }
 
-        let joined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Chinese and Japanese do not separate words with spaces.
+        let separator = (first.language == "zh" || first.language == "ja") ? "" : " "
+        let joined = texts.joined(separator: separator)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let transcript = Transcript(text: joined,
                                     language: first.language,
                                     engine: first.engine,
                                     score: first.score,
                                     latency: first.latency)
-        return .success(PipelineResult(transcript: transcript, attempts: attempts))
+        return .success(PipelineResult(transcript: transcript,
+                                       attempts: attempts,
+                                       partial: failures > 0,
+                                       totalParts: chunks.count,
+                                       failedParts: failures))
     }
 
     // MARK: Engines

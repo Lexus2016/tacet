@@ -1,23 +1,34 @@
 #!/bin/bash
-# Builds a signed release, signs the update for Sparkle, publishes a GitHub
-# release and refreshes the appcast the app reads on launch.
+# Builds one thin binary per architecture, signs each, signs the updates for
+# Sparkle, publishes a GitHub release and refreshes both appcast feeds.
 #
-#   scripts/release.sh 0.2.0 2
+#   scripts/release.sh 0.2.2
 #
 # Optional: NOTARY_PROFILE=<keychain profile> to notarize before packaging.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION=${1:?usage: scripts/release.sh <version> <build>}
-BUILD=${2:?usage: scripts/release.sh <version> <build>}
+VERSION=${1:?usage: scripts/release.sh <version>}
+REQUESTED_BUILD=${2:-}
+
+MAJOR=$(echo "$VERSION" | cut -d. -f1)
+MINOR=$(echo "$VERSION" | cut -d. -f2)
+PATCH=$(echo "$VERSION" | cut -d. -f3)
+PATCH=${PATCH:-0}
+# Sparkle compares CFBundleVersion, so the build must grow with the version.
+BUILD=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+if [ -n "$REQUESTED_BUILD" ] && [ "$REQUESTED_BUILD" != "$BUILD" ]; then
+  echo "Ignoring build $REQUESTED_BUILD; using $BUILD so updates always move forward." >&2
+fi
+
 TAG="v$VERSION"
 REPO="Lexus2016/tacet"
 SPARKLE_BIN=".tools/bin"
 DIST="dist"
+ARCHS_LIST=(arm64 x86_64)
 
 if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   echo "Sparkle tools are missing. Expected $SPARKLE_BIN/generate_appcast" >&2
-  echo "Download Sparkle-2.10.1.tar.xz and unpack it into .tools/" >&2
   exit 1
 fi
 
@@ -30,63 +41,80 @@ fi
 ./scripts/bootstrap.sh >/dev/null
 xcodegen generate --spec project.yml >/dev/null
 
-rm -rf "$DIST" .release
-mkdir -p "$DIST/appcast"
+rm -rf "$DIST" .release-*
+mkdir -p "$DIST"
 
-echo "Building Tacet $VERSION ($BUILD)…"
-xcodebuild -project Tacet.xcodeproj -scheme Tacet -configuration Release \
-  -derivedDataPath .release -destination 'platform=macOS,arch=arm64' \
-  MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-  build > /tmp/tacet-release-build.log 2>&1 || {
-    echo "Build failed:" >&2
-    grep -E "error:" /tmp/tacet-release-build.log | head -20 >&2
+for ARCH in "${ARCHS_LIST[@]}"; do
+  FEED="https://github.com/$REPO/releases/latest/download/appcast-$ARCH.xml"
+  DERIVED=".release-$ARCH"
+  APP="$DERIVED/Build/Products/Release/Tacet.app"
+
+  echo "Building Tacet $VERSION ($BUILD) for $ARCH…"
+  xcodebuild -project Tacet.xcodeproj -scheme Tacet -configuration Release \
+    -derivedDataPath "$DERIVED" -destination 'platform=macOS' \
+    ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO \
+    MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+    TACET_FEED_URL="$FEED" \
+    build > "/tmp/tacet-release-$ARCH.log" 2>&1 || {
+      echo "Build failed for $ARCH:" >&2
+      grep -E "error:" "/tmp/tacet-release-$ARCH.log" | head -20 >&2
+      exit 1
+    }
+
+  [ -d "$APP" ] || { echo "No app at $APP" >&2; exit 1; }
+
+  echo "Signing check for $ARCH…"
+  codesign --verify --deep --strict "$APP" || { echo "Signature is not valid" >&2; exit 1; }
+  if ! codesign -dv --verbose=4 "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
+    echo "The app is not signed with a Developer ID; refusing to publish." >&2
     exit 1
-  }
+  fi
+  lipo -info "$APP/Contents/MacOS/Tacet" | grep -q "$ARCH" || { echo "Wrong architecture for $ARCH" >&2; exit 1; }
 
-APP=".release/Build/Products/Release/Tacet.app"
-if [ ! -d "$APP" ]; then
-  echo "No app at $APP" >&2
-  exit 1
-fi
+  if [ -n "${NOTARY_PROFILE:-}" ]; then
+    echo "Notarizing $ARCH…"
+    ditto -c -k --keepParent "$APP" "$DIST/notarize-$ARCH.zip"
+    xcrun notarytool submit "$DIST/notarize-$ARCH.zip" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$APP"
+    rm -f "$DIST/notarize-$ARCH.zip"
+  fi
 
-echo "Signing check…"
-codesign --verify --deep --strict "$APP" || { echo "Signature is not valid" >&2; exit 1; }
+  ZIP="$DIST/Tacet-$VERSION-$ARCH.zip"
+  ditto -c -k --keepParent "$APP" "$ZIP"
+  hdiutil create -volname "Tacet" -srcfolder "$APP" -ov -format UDZO "$DIST/Tacet-$VERSION-$ARCH.dmg" >/dev/null
 
-if [ -n "${NOTARY_PROFILE:-}" ]; then
-  echo "Notarizing…"
-  ditto -c -k --keepParent "$APP" "$DIST/notarize.zip"
-  xcrun notarytool submit "$DIST/notarize.zip" --keychain-profile "$NOTARY_PROFILE" --wait
-  xcrun stapler staple "$APP"
-  rm -f "$DIST/notarize.zip"
-fi
+  mkdir -p "$DIST/appcast-$ARCH"
+  cp "$ZIP" "$DIST/appcast-$ARCH/"
+  "$SPARKLE_BIN/generate_appcast" "$DIST/appcast-$ARCH" \
+    --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
+    --link "https://github.com/$REPO"
+  cp "$DIST/appcast-$ARCH/appcast.xml" "$DIST/appcast-$ARCH.xml"
 
-echo "Packaging…"
-ZIP="$DIST/Tacet-$VERSION.zip"
-ditto -c -k --keepParent "$APP" "$ZIP"
-cp "$ZIP" "$DIST/appcast/"
-hdiutil create -volname "Tacet" -srcfolder "$APP" -ov -format UDZO "$DIST/Tacet-$VERSION.dmg" >/dev/null
+  if ! grep -q "sparkle:edSignature=" "$DIST/appcast-$ARCH.xml"; then
+    echo "The $ARCH appcast has no EdDSA signature; Sparkle would reject it." >&2
+    exit 1
+  fi
+done
 
-echo "Generating appcast…"
-"$SPARKLE_BIN/generate_appcast" "$DIST/appcast" \
-  --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
-  --link "https://github.com/$REPO"
-cp "$DIST/appcast/appcast.xml" "$DIST/appcast.xml"
-
-echo "Publishing ${TAG}…"
-if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-  gh release upload "$TAG" "$ZIP" "$DIST/Tacet-$VERSION.dmg" "$DIST/appcast.xml" \
-    --repo "$REPO" --clobber
-  gh release edit "$TAG" --repo "$REPO" --title "Tacet $VERSION" \
-    --notes "Tacet $VERSION. Download the DMG, or update from the app."
-else
-  gh release create "$TAG" "$ZIP" "$DIST/Tacet-$VERSION.dmg" "$DIST/appcast.xml" \
-    --repo "$REPO" --title "Tacet $VERSION" \
-    --notes "Tacet $VERSION. Download the DMG, or update from the app."
-fi
-
+echo "Tagging $TAG…"
 git tag -f -a "$TAG" -m "Tacet $VERSION"
 git push -f origin "$TAG"
 
+echo "Publishing $TAG…"
+ASSETS=("$DIST/Tacet-$VERSION-arm64.zip" "$DIST/Tacet-$VERSION-arm64.dmg" \
+        "$DIST/Tacet-$VERSION-x86_64.zip" "$DIST/Tacet-$VERSION-x86_64.dmg" \
+        "$DIST/appcast-arm64.xml" "$DIST/appcast-x86_64.xml")
+
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+  gh release upload "$TAG" "${ASSETS[@]}" --repo "$REPO" --clobber
+  gh release edit "$TAG" --repo "$REPO" --title "Tacet $VERSION" \
+    --notes "Tacet $VERSION. Apple Silicon and Intel builds, each updating from its own feed."
+else
+  gh release create "$TAG" "${ASSETS[@]}" --repo "$REPO" --title "Tacet $VERSION" --verify-tag \
+    --notes "Tacet $VERSION. Apple Silicon and Intel builds, each updating from its own feed."
+fi
+
 echo
-echo "Release: https://github.com/$REPO/releases/tag/$TAG"
-echo "Feed:    https://github.com/$REPO/releases/latest/download/appcast.xml"
+echo "Release:     https://github.com/$REPO/releases/tag/$TAG"
+echo "arm64 feed:  https://github.com/$REPO/releases/latest/download/appcast-arm64.xml"
+echo "x86_64 feed: https://github.com/$REPO/releases/latest/download/appcast-x86_64.xml"

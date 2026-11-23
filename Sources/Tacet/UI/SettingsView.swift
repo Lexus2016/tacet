@@ -104,7 +104,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         VStack(spacing: 18) {
             SoftCard(title: "Dictation", systemImage: "command") {
-                SoftRow("Hotkey", subtitle: "Click, then press the combination you want") {
+                SoftRow("Hotkey", subtitle: "Click, then press the combination you want. A single ⌘, ⌥, ⌃ or ⇧ works too, in push-to-talk mode.") {
                     HotkeyRecorder(keyCode: $settings.hotkeyKeyCode,
                                    modifiers: $settings.hotkeyModifiers,
                                    label: $settings.hotkeyLabel,
