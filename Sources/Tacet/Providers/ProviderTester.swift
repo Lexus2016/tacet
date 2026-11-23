@@ -10,12 +10,9 @@ enum ProviderTester {
         let base = (baseURL ?? spec.baseURL).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: base)?.appendingPathComponent("chat/completions"),
               !model.isEmpty
-        else {
-            return .failure(ModelCatalog.Failure.noBaseURL)
-        }
+        else { return .failure(ModelCatalog.Failure.noBaseURL) }
 
-        let apiKey = ProviderCatalog.key(for: spec)
-        if spec.requiresKey, apiKey == nil {
+        guard let key = ProviderCatalog.key(for: spec) else {
             return .failure(ModelCatalog.Failure.http(401, "No API key saved"))
         }
 
@@ -23,8 +20,10 @@ enum ProviderTester {
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        if spec.id == "openrouter" {
+            request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")
+            request.setValue("Tacet", forHTTPHeaderField: "X-Title")
         }
 
         let payload: [String: Any] = [
