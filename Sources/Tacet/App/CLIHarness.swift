@@ -94,6 +94,31 @@ enum CLIHarness {
             return true
         }
 
+        if let index = arguments.firstIndex(of: "--record"), index + 1 < arguments.count,
+           let seconds = Double(arguments[index + 1]) {
+            Task {
+                let capture = AudioCaptureService()
+                do {
+                    try capture.start()
+                    try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    let result = try capture.stop()
+                    if let result {
+                        let attributes = try? FileManager.default.attributesOfItem(atPath: result.url.path)
+                        let size = (attributes?[.size] as? Int) ?? 0
+                        print(String(format: "recorded %.2f s, rms %.5f, peak %.3f, file %d bytes",
+                                     result.duration, result.rms, result.peak, size))
+                        print(result.url.path)
+                    } else {
+                        print("nothing recorded")
+                    }
+                } catch {
+                    print("error: \(error.localizedDescription)")
+                }
+                exit(0)
+            }
+            return true
+        }
+
         if let index = arguments.firstIndex(of: "--benchmark"), index + 2 < arguments.count {
             let path = arguments[index + 1]
             let count = Int(arguments[index + 2]) ?? 3

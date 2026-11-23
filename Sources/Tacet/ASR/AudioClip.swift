@@ -21,6 +21,14 @@ struct AudioClip: Sendable {
         return rms < 0.0016
     }
 
+    var peak: Float {
+        var maximum: Float = 0
+        for index in stride(from: 0, to: samples.count, by: 16) {
+            maximum = max(maximum, abs(samples[index]))
+        }
+        return maximum
+    }
+
     static func load(url: URL) throws -> AudioClip {
         WavRepair.repairIfNeeded(url: url)
 

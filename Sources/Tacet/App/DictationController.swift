@@ -63,6 +63,7 @@ final class DictationController: ObservableObject {
     /// Load the local fallback while the app is idle, so the first dictation
     /// does not pay for it. Released again after ten quiet minutes.
     private func prewarmLocalEngine() {
+        CloudWarmup.warm()
         guard ParakeetRecognizer.shared.isConfigured() else { return }
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -97,9 +98,17 @@ final class DictationController: ObservableObject {
                       let url = entry.audioURL
                 else { break }
                 guard FileManager.default.fileExists(atPath: url.path),
-                      let clip = try? AudioClip.load(url: url),
-                      !clip.isSilent
+                      let clip = try? AudioClip.load(url: url)
                 else { continue }
+
+                // A silent recording is nothing to recover: drop it and clear
+                // the pending badge instead of retrying it forever.
+                if clip.isSilent || clip.peak < 0.01 {
+                    _ = store.delete(id: entry.id)
+                    AudioStore.delete(path: url.path)
+                    refreshHistory()
+                    continue
+                }
 
                 await process(clip: clip,
                               existingEntryID: entry.id,
