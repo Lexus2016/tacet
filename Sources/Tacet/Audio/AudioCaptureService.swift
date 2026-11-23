@@ -2,14 +2,21 @@ import AVFoundation
 import Foundation
 
 /// Captures the default input device into a 16 kHz mono WAV file.
-/// The file is opened before the engine starts, so a crash mid-dictation leaves
-/// a playable recording behind.
+///
+/// Real-time rules followed here:
+/// - the audio callback only converts, copies and meters; disk writes go to a
+///   serial background queue so a slow disk can never stall the microphone;
+/// - the sample buffer is reserved up front and grows by doubling, so a long
+///   dictation does not reallocate on the audio thread;
+/// - loudness is accumulated incrementally, so there is no post-pass over the
+///   recording when you stop.
 final class AudioCaptureService {
     struct Result {
         let url: URL
         let duration: TimeInterval
         let samples: [Float]
         let peak: Float
+        let rms: Double
     }
 
     enum CaptureError: LocalizedError {
@@ -31,14 +38,20 @@ final class AudioCaptureService {
     static let sampleRate: Double = 16_000
 
     private let engine = AVAudioEngine()
+    private let writeQueue = DispatchQueue(label: "ua.rawira.tacet.wav-writer", qos: .utility)
+
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
     private var collected: [Float] = []
     private var fileURL: URL?
     private var startedAt: Date?
-    /// Guards `collected` and `fileURL`: the audio thread appends, the main
-    /// thread drains on stop.
+
+    private var squareSum: Double = 0
+    private var sampleCount: Int = 0
+
+    /// Guards `collected`, `squareSum` and `sampleCount`: the audio thread
+    /// appends, the main thread drains on stop.
     private let bufferLock = NSLock()
 
     private(set) var isRecording = false
@@ -114,9 +127,14 @@ final class AudioCaptureService {
 
         self.converter = converter
         self.targetFormat = target
+
         bufferLock.lock()
-        self.collected = []
+        collected = []
+        collected.reserveCapacity(Int(Self.sampleRate * 60))
+        squareSum = 0
+        sampleCount = 0
         bufferLock.unlock()
+
         self.fileURL = url
         self.startedAt = Date()
 
@@ -147,6 +165,9 @@ final class AudioCaptureService {
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+
+        // Flush the writer before closing the file.
+        writeQueue.sync {}
         file = nil
         converter = nil
         targetFormat = nil
@@ -156,7 +177,10 @@ final class AudioCaptureService {
 
         bufferLock.lock()
         let samples = collected
+        let rms = sampleCount > 0 ? (squareSum / Double(sampleCount)).squareRoot() : 0
         collected = []
+        squareSum = 0
+        sampleCount = 0
         bufferLock.unlock()
 
         let duration = Double(samples.count) / Self.sampleRate
@@ -170,7 +194,7 @@ final class AudioCaptureService {
             peak = max(peak, abs(samples[index]))
         }
 
-        return Result(url: url, duration: duration, samples: samples, peak: peak)
+        return Result(url: url, duration: duration, samples: samples, peak: peak, rms: rms)
     }
 
     /// Aborts and deletes the in-flight recording.
@@ -179,13 +203,17 @@ final class AudioCaptureService {
         isRecording = false
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        writeQueue.sync {}
         file = nil
         converter = nil
         targetFormat = nil
         if let url = fileURL { try? FileManager.default.removeItem(at: url) }
         fileURL = nil
+
         bufferLock.lock()
         collected = []
+        squareSum = 0
+        sampleCount = 0
         bufferLock.unlock()
     }
 
@@ -210,23 +238,48 @@ final class AudioCaptureService {
             return buffer
         }
 
-        guard status != .error, output.frameLength > 0 else { return }
+        guard status != .error, output.frameLength > 0,
+              let channel = output.floatChannelData?[0]
+        else { return }
 
-        // Keep the samples even if the WAV write fails: the local engine reads
-        // them from memory, and a half-written file only costs the cloud path.
-        if let channel = output.floatChannelData?[0] {
-            let count = Int(output.frameLength)
-            var peak: Float = 0
-            for index in stride(from: 0, to: count, by: 8) {
-                peak = max(peak, abs(channel[index]))
-            }
-            levelHandler?(min(1, peak * 1.6))
+        let count = Int(output.frameLength)
+        let chunk = Array(UnsafeBufferPointer(start: channel, count: count))
 
-            bufferLock.lock()
-            collected.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
-            bufferLock.unlock()
+        var peak: Float = 0
+        var squares: Double = 0
+        for index in 0..<count {
+            let value = chunk[index]
+            let magnitude = abs(value)
+            if magnitude > peak { peak = magnitude }
+            squares += Double(value * value)
         }
+        levelHandler?(min(1, peak * 1.6))
 
-        try? file.write(from: output)
+        bufferLock.lock()
+        collected.append(contentsOf: chunk)
+        squareSum += squares
+        sampleCount += count
+        bufferLock.unlock()
+
+        // The engine reuses its buffer as soon as this callback returns, so the
+        // writer gets its own copy and never touches the audio thread again.
+        guard let copy = Self.copy(output) else { return }
+        writeQueue.async {
+            try? file.write(from: copy)
+        }
+    }
+
+    private static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength),
+              let source = buffer.floatChannelData,
+              let destination = copy.floatChannelData
+        else { return nil }
+
+        copy.frameLength = buffer.frameLength
+        let frames = Int(buffer.frameLength)
+        for channel in 0..<Int(buffer.format.channelCount) {
+            destination[channel].update(from: source[channel], count: frames)
+        }
+        return copy
     }
 }

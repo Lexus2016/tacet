@@ -31,6 +31,8 @@ final class DictationController: ObservableObject {
     private var hotkeyIsDown = false
     private var noteTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private var recoveryTask: Task<Void, Never>?
+    private var idleUnloadTask: Task<Void, Never>?
     /// The combination actually registered, which may differ from the stored
     /// one when another app owns it. Formatted for display.
     private(set) var activeHotkey: String = ""
@@ -55,6 +57,27 @@ final class DictationController: ObservableObject {
         purgeAudio()
         adoptOrphanRecordings()
         recoverPendingRecordings()
+        prewarmLocalEngine()
+    }
+
+    /// Load the local fallback while the app is idle, so the first dictation
+    /// does not pay for it. Released again after ten quiet minutes.
+    private func prewarmLocalEngine() {
+        guard ParakeetRecognizer.shared.isConfigured() else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard phase == .idle else { return }
+            try? await ParakeetRecognizer.shared.warmUp()
+        }
+    }
+
+    private func scheduleIdleUnload() {
+        idleUnloadTask?.cancel()
+        idleUnloadTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 600_000_000_000)
+            guard !Task.isCancelled, let self, self.phase == .idle else { return }
+            await ParakeetRecognizer.shared.unload()
+        }
     }
 
     /// Dictations that failed earlier (a killed process, an outage) are retried
@@ -65,11 +88,14 @@ final class DictationController: ObservableObject {
         }
         guard !pending.isEmpty else { return }
 
-        Task {
+        recoveryTask = Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
 
             for entry in pending {
-                guard phase == .idle, let url = entry.audioURL else { continue }
+                guard !Task.isCancelled,
+                      phase == .idle,
+                      let url = entry.audioURL
+                else { break }
                 guard FileManager.default.fileExists(atPath: url.path),
                       let clip = try? AudioClip.load(url: url),
                       !clip.isSilent
@@ -169,6 +195,13 @@ final class DictationController: ObservableObject {
         guard phase == .idle, !isStarting else { return }
         isStarting = true
 
+        // The microphone always wins over background recovery and model
+        // housekeeping.
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        idleUnloadTask?.cancel()
+        idleUnloadTask = nil
+
         Task {
             defer { isStarting = false }
 
@@ -224,7 +257,15 @@ final class DictationController: ObservableObject {
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
 
-        if clip.isSilent, result.peak < 0.01 {
+        if clip.duration < 0.25 {
+            phase = .idle
+            AudioStore.delete(path: result.url.path)
+            status("No speech detected")
+            HUDController.shared.hide()
+            return
+        }
+
+        if result.rms < 0.0016, result.peak < 0.01 {
             phase = .idle
             AudioStore.delete(path: result.url.path)
             status("No speech detected")
@@ -285,7 +326,8 @@ final class DictationController: ObservableObject {
             var text = output.transcript.text
             var cleanupEngine: String?
 
-            if settings.isCleanupConfigured {
+            if settings.isCleanupConfigured,
+               text.split(whereSeparator: \.isWhitespace).count >= 3 {
                 let secondary = settings.cleanupProvider == KeychainAccount.groq
                     ? (Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY") != nil ? KeychainAccount.openAI : nil)
                     : (Keychain.secret(KeychainAccount.groq, environment: "GROQ_API_KEY") != nil ? KeychainAccount.groq : nil)
@@ -394,6 +436,7 @@ final class DictationController: ObservableObject {
         phase = .idle
         lastFailure = nil
         refreshHistory()
+        scheduleIdleUnload()
     }
 
     private func recordFailure(_ failure: PipelineFailure,
@@ -444,6 +487,7 @@ final class DictationController: ObservableObject {
         if autoRetry, let failedID {
             scheduleRetry(entryID: failedID, clip: clip)
         }
+        scheduleIdleUnload()
     }
 
     /// One quiet retry a few seconds later. A flapping network is far more
@@ -535,7 +579,13 @@ final class DictationController: ObservableObject {
     }
 
     func refreshHistory() {
-        history = store.entries(limit: 500)
+        store.entriesAsync(limit: 500) { [weak self] entries in
+            guard let self else { return }
+            self.history = entries
+            self.pendingCount = entries.filter {
+                $0.status == .unrecovered && ($0.audioPath?.isEmpty == false)
+            }.count
+        }
     }
 
     func purgeAudio() {
@@ -599,9 +649,7 @@ final class DictationController: ObservableObject {
     }
 
     /// Recordings whose text never arrived, still on disk.
-    var pendingCount: Int {
-        history.filter { $0.status == .unrecovered && ($0.audioPath?.isEmpty == false) }.count
-    }
+    @Published private(set) var pendingCount = 0
 
     /// Shown in the menu so the hotkey is discoverable without opening Settings.
     var hotkeyHint: String {

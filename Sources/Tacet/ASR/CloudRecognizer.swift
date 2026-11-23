@@ -17,20 +17,14 @@ final class CloudRecognizer: SpeechRecognizer {
     let id: String
     let displayName: String
     private let configuration: Configuration
-    private let session: URLSession
 
     init(configuration: Configuration) {
         self.id = configuration.id
         self.displayName = configuration.displayName
         self.configuration = configuration
-
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.timeoutIntervalForRequest = configuration.timeout
-        sessionConfiguration.timeoutIntervalForResource = configuration.timeout
-        sessionConfiguration.waitsForConnectivity = false
-        sessionConfiguration.httpAdditionalHeaders = ["User-Agent": "Tacet/0.1"]
-        self.session = URLSession(configuration: sessionConfiguration)
     }
+
+    private var session: URLSession { SharedSession.cloud }
 
     private var apiKey: String? {
         Keychain.secret(configuration.keychainAccount, environment: configuration.environmentKey)

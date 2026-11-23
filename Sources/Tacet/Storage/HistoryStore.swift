@@ -250,6 +250,13 @@ final class HistoryStore {
         }
     }
 
+    func entriesAsync(limit: Int, completion: @escaping ([HistoryEntry]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.entries(limit: limit)
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     func entry(id: String) -> HistoryEntry? {
         queue.sync {
             guard let stmt = prepare("SELECT * FROM entries WHERE id = ?;") else { return nil }

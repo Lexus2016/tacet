@@ -22,17 +22,12 @@ final class VoiceLanguageDetector {
     }
 
     private let configuration: Configuration
-    private let session: URLSession
 
     init(configuration: Configuration) {
         self.configuration = configuration
-
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.timeoutIntervalForRequest = configuration.timeout
-        sessionConfiguration.timeoutIntervalForResource = configuration.timeout
-        sessionConfiguration.waitsForConnectivity = false
-        session = URLSession(configuration: sessionConfiguration)
     }
+
+    private var session: URLSession { SharedSession.cloud }
 
     func isConfigured() -> Bool {
         Keychain.secret(KeychainAccount.openRouter, environment: "OPENROUTER_API_KEY") != nil

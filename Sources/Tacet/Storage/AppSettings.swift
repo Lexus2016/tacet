@@ -139,9 +139,9 @@ final class AppSettings: ObservableObject {
         cloudTimeout = defaults.object(forKey: "cloudTimeout") as? Double ?? 20
         cleanupEnabled = defaults.object(forKey: "cleanupEnabled") as? Bool ?? true
         cleanupProvider = defaults.string(forKey: "cleanupProvider") ?? "groq"
-        cleanupModel = defaults.string(forKey: "cleanupModel") ?? "llama-3.3-70b-versatile"
+        cleanupModel = defaults.string(forKey: "cleanupModel") ?? "llama-3.1-8b-instant"
         cleanupBaseURL = defaults.string(forKey: "cleanupBaseURL") ?? "https://api.groq.com/openai/v1"
-        cleanupTimeout = defaults.object(forKey: "cleanupTimeout") as? Double ?? 2.5
+        cleanupTimeout = defaults.object(forKey: "cleanupTimeout") as? Double ?? 1.5
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true

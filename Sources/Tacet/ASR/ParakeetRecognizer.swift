@@ -31,8 +31,7 @@ actor ParakeetRecognizer: SpeechRecognizer {
 
     /// Loads the model into memory without downloading. Called by the pipeline
     /// on the first dictation and by Settings after a download.
-    func warmUp() async throws {
-        if manager != nil { return }
+    func warmUp() async throws {        if manager != nil { return }
         if let loadTask {
             manager = try await loadTask.value
             return
@@ -53,6 +52,13 @@ actor ParakeetRecognizer: SpeechRecognizer {
             loadTask = nil
             throw RecognitionError.failed("Parakeet could not load: \(error.localizedDescription)")
         }
+    }
+
+    /// Frees the model after a quiet period. The next dictation reloads it from
+    /// disk instead of keeping a gigabyte resident all day.
+    func unload() {
+        manager = nil
+        loadTask = nil
     }
 
     /// Explicit download from Settings. Returns the size on disk once ready.

@@ -94,6 +94,16 @@ enum CLIHarness {
             return true
         }
 
+        if let index = arguments.firstIndex(of: "--benchmark"), index + 2 < arguments.count {
+            let path = arguments[index + 1]
+            let count = Int(arguments[index + 2]) ?? 3
+            Task {
+                await benchmark(path: path, count: count)
+                exit(0)
+            }
+            return true
+        }
+
         if let index = arguments.firstIndex(of: "--transcribe"), index + 1 < arguments.count {
             let path = arguments[index + 1]
             let language = value(after: "--language", in: arguments)
@@ -206,8 +216,52 @@ enum CLIHarness {
 
     // MARK: Transcription
 
-    private static func transcribe(path: String, languageOverride: String?, engineOrder: [String]?) async {
-        let url = URL(fileURLWithPath: path)
+    // MARK: Benchmark
+
+    private static func benchmark(path: String, count: Int) async {
+        guard let clip = try? AudioClip.load(url: URL(fileURLWithPath: path)) else {
+            print("cannot read \(path)")
+            return
+        }
+
+        let settings = AppSettings.shared
+        let pipelineSettings = PipelineSettings(
+            languageOverride: settings.languageOverride,
+            engineOrder: settings.engineOrder,
+            dualLanguageCheck: false,
+            cloudTimeout: settings.cloudTimeout
+        )
+        let engines = EngineConfiguration(
+            groqModel: settings.groqModel,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            cloudTimeout: settings.cloudTimeout
+        )
+
+        print("audio: \(String(format: "%.2f", clip.duration)) s, runs: \(count)")
+        var times: [Double] = []
+
+        for run in 1...count {
+            let started = Date()
+            let result = await TranscriptionPipeline().transcribe(clip, settings: pipelineSettings, engines: engines)
+            let elapsed = Date().timeIntervalSince(started)
+            times.append(elapsed)
+
+            switch result {
+            case .success(let output):
+                print(String(format: "run %d: %.3f s  (%@)", run, elapsed, output.transcript.engine))
+            case .failure(let failure):
+                print(String(format: "run %d: %.3f s  failed: %@", run, elapsed, failure.localizedDescription))
+            }
+        }
+
+        if let first = times.first, let best = times.min(), times.count > 1 {
+            print(String(format: "first: %.3f s, best: %.3f s, saved by a warm connection: %.0f ms",
+                         first, best, (first - best) * 1000))
+        }
+    }
+
+    private static func transcribe(path: String, languageOverride: String?, engineOrder: [String]?) async {        let url = URL(fileURLWithPath: path)
         guard FileManager.default.fileExists(atPath: url.path) else {
             print("No such file: \(path)")
             return

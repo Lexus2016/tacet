@@ -22,15 +22,7 @@ struct CleanupConfiguration: Sendable {
 /// The cleanup pass is a quality feature, not a dependency. Every path that
 /// does not produce a clearly better text returns the raw transcript.
 final class CleanupPipeline {
-    private let session: URLSession
-
-    init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.waitsForConnectivity = false
-        configuration.timeoutIntervalForRequest = 8
-        configuration.timeoutIntervalForResource = 8
-        session = URLSession(configuration: configuration)
-    }
+    private var session: URLSession { SharedSession.cloud }
 
     func clean(_ rawText: String, configuration: CleanupConfiguration?) async -> CleanupResult {
         guard let configuration,
