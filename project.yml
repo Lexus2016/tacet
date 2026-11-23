@@ -15,13 +15,14 @@ packages:
     url: https://github.com/FluidInference/FluidAudio.git
     from: 0.17.5
 
+configFiles:
+  Debug: Configuration/Signing.local.xcconfig
+  Release: Configuration/Signing.local.xcconfig
+
 targets:
   Tacet:
     type: application
     platform: macOS
-    configFiles:
-      Debug: Configuration/Signing.local.xcconfig
-      Release: Configuration/Signing.local.xcconfig
     sources:
       - path: Sources/Tacet
         excludes:
@@ -48,3 +49,29 @@ targets:
     dependencies:
       - package: FluidAudio
         product: FluidAudio
+
+  TacetTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/TacetTests
+    dependencies:
+      - target: Tacet
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Tacet:
+    build:
+      targets:
+        Tacet: all
+        TacetTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - TacetTests

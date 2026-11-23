@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Everything about picking the language of a single dictation.
 ///
@@ -96,5 +97,23 @@ enum LanguagePolicy {
             return String(value[value.startIndex..<dash])
         }
         return names[value] ?? (value.count > 2 ? String(value.prefix(2)) : value)
+    }
+}
+
+/// Text-based language identification for engines that do not report one
+/// (Parakeet). On-device, instant, and only used for the label in History and
+/// for the Cyrillic sanity check — never to override a decode.
+enum TextLanguage {
+    static func detect(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 8 else { return nil }
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(trimmed)
+        guard let dominant = recognizer.dominantLanguage else { return nil }
+
+        let confidence = recognizer.languageHypotheses(withMaximum: 1)[dominant] ?? 0
+        guard confidence >= 0.45 else { return nil }
+        return LanguagePolicy.normalize(dominant.rawValue)
     }
 }

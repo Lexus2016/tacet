@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [lite]
+  pull_request:
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for credentials
+        run: ./scripts/secret-scan.sh
+
+  build:
+    name: Build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Configure signing
+        run: ./scripts/bootstrap.sh
+
+      - name: Generate project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project Tacet.xcodeproj \
+            -scheme Tacet \
+            -configuration Debug \
+            -derivedDataPath .build \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Test
+        run: |
+          xcodebuild \
+            -project Tacet.xcodeproj \
+            -scheme Tacet \
+            -configuration Debug \
+            -derivedDataPath .build \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Diagnostic entry points, useful for regression tests and for checking an
@@ -9,6 +10,23 @@ import Foundation
 enum CLIHarness {
     static func runIfRequested() -> Bool {
         let arguments = CommandLine.arguments
+
+        if let index = arguments.firstIndex(of: "--render-ui"), index + 1 < arguments.count {
+            let path = arguments[index + 1]
+            Task { @MainActor in
+                renderSettings(to: path)
+                exit(0)
+            }
+            return true
+        }
+
+        if arguments.contains("--preview-ui") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSApp.activate()
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
+            return false
+        }
 
         if let index = arguments.firstIndex(of: "--prepare-parakeet") {
             _ = index
@@ -47,8 +65,7 @@ enum CLIHarness {
         return true
     }
 
-    private static func transcribe(path: String, languageOverride: String?, engineOrder: [String]?) async {
-        let url = URL(fileURLWithPath: path)
+    private static func transcribe(path: String, languageOverride: String?, engineOrder: [String]?) async {        let url = URL(fileURLWithPath: path)
         guard FileManager.default.fileExists(atPath: url.path) else {
             print("No such file: \(path)")
             return
@@ -98,6 +115,41 @@ enum CLIHarness {
             }
         } catch {
             print("error: \(error.localizedDescription)")
+        }
+    }
+
+    /// Renders the settings window off-screen and writes a PNG. Used to check
+    /// layout changes without clicking through the app.
+    static func renderSettings(to path: String) {
+        let root = SettingsView().environmentObject(DictationController.shared)
+        let hosting = NSHostingView(rootView: root)
+        hosting.frame = NSRect(x: 0, y: 0, width: 600, height: 520)
+        hosting.layoutSubtreeIfNeeded()
+
+        let window = NSWindow(
+            contentRect: hosting.frame,
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            print("could not allocate a bitmap")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+            print("could not encode a PNG")
+            return
+        }
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            print("wrote \(path)")
+        } catch {
+            print("write failed: \(error.localizedDescription)")
         }
     }
 }

@@ -85,7 +85,7 @@ actor ParakeetRecognizer: SpeechRecognizer {
 
         return Transcript(
             text: text,
-            language: language ?? LanguagePolicy.cyrillicVerdict(text),
+            language: language ?? LanguagePolicy.cyrillicVerdict(text) ?? TextLanguage.detect(text),
             engine: id,
             score: min(1, max(0, Double(result.confidence))),
             latency: latency
