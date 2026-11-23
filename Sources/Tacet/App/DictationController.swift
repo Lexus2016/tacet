@@ -231,7 +231,8 @@ final class DictationController: ObservableObject {
                     baseURL: settings.cleanupBaseURL,
                     model: settings.cleanupModel,
                     timeout: settings.cleanupTimeout,
-                    secondaryProvider: secondary
+                    secondaryProvider: secondary,
+                    secondaryModel: nil
                 )
                 let cleaned = await cleanupPipeline.clean(text, configuration: configuration)
                 if cleaned.changed {

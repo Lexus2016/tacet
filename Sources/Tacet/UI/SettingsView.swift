@@ -551,7 +551,8 @@ private struct CleanupTestRow: View {
             baseURL: settings.cleanupBaseURL,
             model: settings.cleanupModel,
             timeout: settings.cleanupTimeout,
-            secondaryProvider: secondary
+            secondaryProvider: secondary,
+            secondaryModel: nil
         )
 
         Task {

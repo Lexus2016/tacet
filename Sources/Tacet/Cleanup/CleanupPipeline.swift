@@ -16,6 +16,7 @@ struct CleanupConfiguration: Sendable {
     let model: String
     let timeout: TimeInterval
     let secondaryProvider: String?
+    let secondaryModel: String?
 }
 
 /// The cleanup pass is a quality feature, not a dependency. Every path that
@@ -91,9 +92,15 @@ final class CleanupPipeline {
     }
 
     private func model(for provider: String, configuration: CleanupConfiguration) -> String {
+        if provider == configuration.provider { return configuration.model }
+        if provider == configuration.secondaryProvider, let secondary = configuration.secondaryModel {
+            return secondary
+        }
+        // A model name is provider-specific: sending Groq's model to OpenAI
+        // returns 404. Fall back to that provider's own default.
         switch provider {
-        case KeychainAccount.groq: return configuration.model
-        case KeychainAccount.openAI: return configuration.model
+        case KeychainAccount.groq: return "llama-3.3-70b-versatile"
+        case KeychainAccount.openAI: return "gpt-4o-mini"
         default: return configuration.model
         }
     }
@@ -207,12 +214,21 @@ enum CleanupGuard {
 
         let inputLength = max(1, input.count)
         let ratio = Double(trimmed.count) / Double(inputLength)
-        let minimum = input.count < 20 ? 0.4 : 0.55
-        guard ratio >= minimum, ratio <= 1.75 else { return false }
+        let minimum = input.count < 40 ? 0.55 : 0.70
+        let maximum = input.count < 40 ? 1.75 : 1.45
+        guard ratio >= minimum, ratio <= maximum else { return false }
 
         // A Cyrillic transcript must not come back in Latin script: that is a
         // translation, not a cleanup.
         if LanguagePolicy.isCyrillic(input), !LanguagePolicy.isCyrillic(trimmed) {
+            return false
+        }
+
+        // Catch translation into another Latin-script language.
+        if input.count >= 25,
+           let inputLanguage = TextLanguage.detect(input),
+           let outputLanguage = TextLanguage.detect(trimmed),
+           inputLanguage != outputLanguage {
             return false
         }
 

@@ -37,6 +37,9 @@ final class AudioCaptureService {
     private var collected: [Float] = []
     private var fileURL: URL?
     private var startedAt: Date?
+    /// Guards `collected` and `fileURL`: the audio thread appends, the main
+    /// thread drains on stop.
+    private let bufferLock = NSLock()
 
     private(set) var isRecording = false
 
@@ -111,7 +114,9 @@ final class AudioCaptureService {
 
         self.converter = converter
         self.targetFormat = target
+        bufferLock.lock()
         self.collected = []
+        bufferLock.unlock()
         self.fileURL = url
         self.startedAt = Date()
 
@@ -149,18 +154,23 @@ final class AudioCaptureService {
         guard let url = fileURL else { return nil }
         fileURL = nil
 
-        let duration = Double(collected.count) / Self.sampleRate
-        guard duration >= 0.25, !collected.isEmpty else {
+        bufferLock.lock()
+        let samples = collected
+        collected = []
+        bufferLock.unlock()
+
+        let duration = Double(samples.count) / Self.sampleRate
+        guard duration >= 0.25, !samples.isEmpty else {
             try? FileManager.default.removeItem(at: url)
             throw CaptureError.tooShort
         }
 
         var peak: Float = 0
-        for index in stride(from: 0, to: collected.count, by: 16) {
-            peak = max(peak, abs(collected[index]))
+        for index in stride(from: 0, to: samples.count, by: 16) {
+            peak = max(peak, abs(samples[index]))
         }
 
-        return Result(url: url, duration: duration, samples: collected, peak: peak)
+        return Result(url: url, duration: duration, samples: samples, peak: peak)
     }
 
     /// Aborts and deletes the in-flight recording.
@@ -174,7 +184,9 @@ final class AudioCaptureService {
         targetFormat = nil
         if let url = fileURL { try? FileManager.default.removeItem(at: url) }
         fileURL = nil
+        bufferLock.lock()
         collected = []
+        bufferLock.unlock()
     }
 
     // MARK: Audio thread
@@ -204,13 +216,15 @@ final class AudioCaptureService {
         // them from memory, and a half-written file only costs the cloud path.
         if let channel = output.floatChannelData?[0] {
             let count = Int(output.frameLength)
-            collected.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
-
             var peak: Float = 0
             for index in stride(from: 0, to: count, by: 8) {
                 peak = max(peak, abs(channel[index]))
             }
             levelHandler?(min(1, peak * 1.6))
+
+            bufferLock.lock()
+            collected.append(contentsOf: UnsafeBufferPointer(start: channel, count: count))
+            bufferLock.unlock()
         }
 
         try? file.write(from: output)

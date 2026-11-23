@@ -42,11 +42,13 @@ enum LanguagePolicy {
         let detected = normalize(transcript.language)
         let verdict = cyrillicVerdict(transcript.text)
 
-        if let verdict, verdict != detected {
-            return verdict
+        // Decisive script evidence: the detected language is confirmed, so a
+        // second decode would only add cost and a chance to corrupt good text.
+        if let verdict {
+            return verdict == detected ? nil : verdict
         }
-        // The engine agrees with what this app usually dictates: no second
-        // request needed.
+
+        // The engine agrees with what this app usually dictates.
         if let expected, detected == expected {
             return nil
         }
