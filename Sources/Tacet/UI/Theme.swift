@@ -159,7 +159,7 @@ struct SoftCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if let title {
                 HStack(spacing: 7) {
                     if let systemImage {
@@ -179,8 +179,8 @@ struct SoftCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 content
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
             .background {
                 let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
                 shape
@@ -233,7 +233,7 @@ struct SoftRow<Control: View>: View {
 
             control
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
     }
 }
 

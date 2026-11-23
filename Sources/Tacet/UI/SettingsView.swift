@@ -29,7 +29,7 @@ struct SettingsView: View {
             header
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 18) {
+                VStack(spacing: 14) {
                     switch tab {
                     case .general: GeneralSettingsView()
                     case .engines: EnginesSettingsView()
@@ -37,9 +37,9 @@ struct SettingsView: View {
                     case .about: AboutView()
                     }
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 4)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 20)
+                .padding(.top, 2)
+                .padding(.bottom, 22)
             }
             .mask(
                 LinearGradient(
