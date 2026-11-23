@@ -124,6 +124,19 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(indicatorPosition, forKey: "indicatorPosition") }
     }
 
+    /// "system" or a language code. Applied through AppleLanguages, so it takes
+    /// effect after a relaunch; missing keys fall back to English.
+    @Published var uiLanguage: String {
+        didSet {
+            defaults.set(uiLanguage, forKey: "uiLanguage")
+            if uiLanguage == "system" {
+                UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+            } else {
+                UserDefaults.standard.set([uiLanguage], forKey: "AppleLanguages")
+            }
+        }
+    }
+
     /// "auto" keeps the spoken language; a code translates the transcript
     /// before it is inserted.
     @Published var outputLanguage: String {
@@ -206,6 +219,7 @@ final class AppSettings: ObservableObject {
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
+        uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true

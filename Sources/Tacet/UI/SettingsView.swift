@@ -264,6 +264,29 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Interface language", subtitle: "Restart Tacet to apply") {
+                    HStack(spacing: 8) {
+                        Picker("", selection: $settings.uiLanguage) {
+                            Text("System").tag("system")
+                            Text("English").tag("en")
+                            Text("Українська").tag("uk")
+                            Text("Français").tag("fr")
+                            Text("Español").tag("es")
+                            Text("Deutsch").tag("de")
+                            Text("Português").tag("pt")
+                            Text("中文").tag("zh-Hans")
+                            Text("हिन्दी").tag("hi")
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+
+                        Button("Restart") { relaunch() }
+                            .buttonStyle(SoftButtonStyle())
+                    }
+                }
+
+                SoftDivider()
+
                 SoftRow("Keep audio", subtitle: "Recordings older than this are deleted, except failed ones") {
                     Stepper("\(settings.keepAudioDays) d",
                             value: $settings.keepAudioDays, in: 1...90)
@@ -275,7 +298,7 @@ struct GeneralSettingsView: View {
                 SoftRow("Indicator", subtitle: indicatorDetail) {
                     Picker("", selection: $settings.indicatorStyle) {
                         ForEach(IndicatorStyle.allCases) { style in
-                            Text(style.title).tag(style.rawValue)
+                            Text(LocalizedStringKey(style.title)).tag(style.rawValue)
                         }
                     }
                     .labelsHidden()
@@ -362,6 +385,14 @@ struct GeneralSettingsView: View {
                 launchAtLogin = LoginItem.isEnabled
             }
         )
+    }
+
+    private func relaunch() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-n", Bundle.main.bundlePath]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 
     private var loginHint: String {

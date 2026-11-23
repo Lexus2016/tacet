@@ -167,7 +167,8 @@ struct SoftCard<Content: View>: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Theme.accent)
                     }
-                    Text(title.uppercased())
+                    Text(LocalizedStringKey(title))
+                        .textCase(.uppercase)
                         .font(.system(size: 10.5, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(.secondary)
@@ -218,10 +219,10 @@ struct SoftRow<Control: View>: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13))
                 if let subtitle {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -263,7 +264,7 @@ struct SoftSegmented<Item: Hashable>: View {
                         selection = item
                     }
                 } label: {
-                    Text(title(item))
+                    Text(LocalizedStringKey(title(item)))
                         .font(.system(size: 12, weight: selection == item ? .semibold : .medium))
                         .foregroundStyle(selection == item ? Color.primary : Color.secondary)
                         .padding(.horizontal, 16)
