@@ -138,3 +138,8 @@
 "Used when this provider is in the engine chain" = "Коли провайдер у ланцюжку рушіїв";
 "Configure a provider once. Engines and Cleanup only offer the providers configured here." = "Налаштуй провайдера один раз. Рушії та Обробка пропонують лише налаштованих тут.";
 "Not configured — will be skipped" = "Не налаштований — буде пропущений";
+
+"Theme" = "Тема";
+"Classic" = "Класична";
+"Glass" = "Скло";
+"Light" = "Світла";

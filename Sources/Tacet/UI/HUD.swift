@@ -28,6 +28,22 @@ enum IndicatorStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum IndicatorTheme: String, CaseIterable, Identifiable {
+    case classic
+    case glass
+    case light
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .classic: return "Classic"
+        case .glass: return "Glass"
+        case .light: return "Light"
+        }
+    }
+}
+
 final class HUDModel: ObservableObject {
     @Published var title: String = ""
     @Published var subtitle: String?
@@ -38,6 +54,7 @@ final class HUDModel: ObservableObject {
     @Published var isError: Bool = false
     @Published var tint: Color = Theme.danger
     @Published var style: IndicatorStyle = .island
+    @Published var theme: IndicatorTheme = .classic
 }
 
 // MARK: - Waveform
@@ -176,21 +193,35 @@ struct NotchShape: Shape {
 private struct GlassSurface<S: Shape>: View {
     let shape: S
     let tint: Color
+    let theme: IndicatorTheme
 
     var body: some View {
-        shape
-            .fill(LinearGradient(colors: [Color(white: 0.18).opacity(0.96),
-                                          Color(white: 0.08).opacity(0.97)],
-                                 startPoint: .top, endPoint: .bottom))
-            .overlay(
-                shape.stroke(
-                    LinearGradient(colors: [Color.white.opacity(0.28), Color.white.opacity(0.04)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 0.9
-                )
-            )
-            .shadow(color: tint.opacity(0.32), radius: 16, x: 0, y: 6)
-            .shadow(color: .black.opacity(0.42), radius: 10, x: 0, y: 4)
+        switch theme {
+        case .classic:
+            shape
+                .fill(LinearGradient(colors: [Color(white: 0.18).opacity(0.96),
+                                              Color(white: 0.08).opacity(0.97)],
+                                     startPoint: .top, endPoint: .bottom))
+                .overlay(shape.stroke(LinearGradient(colors: [Color.white.opacity(0.28), Color.white.opacity(0.04)],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 0.9))
+                .shadow(color: tint.opacity(0.32), radius: 16, x: 0, y: 6)
+                .shadow(color: .black.opacity(0.42), radius: 10, x: 0, y: 4)
+
+        case .glass:
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay(shape.stroke(Color.white.opacity(0.25), lineWidth: 0.9))
+                .shadow(color: tint.opacity(0.28), radius: 16, x: 0, y: 6)
+                .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 4)
+
+        case .light:
+            shape
+                .fill(LinearGradient(colors: [Color.white.opacity(0.97), Color.white.opacity(0.86)],
+                                     startPoint: .top, endPoint: .bottom))
+                .overlay(shape.stroke(Color.black.opacity(0.10), lineWidth: 0.9))
+                .shadow(color: tint.opacity(0.22), radius: 16, x: 0, y: 6)
+                .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+        }
     }
 }
 
@@ -198,6 +229,12 @@ struct IndicatorView: View {
     @ObservedObject var model: HUDModel
 
     var body: some View {
+        content
+            .preferredColorScheme(model.theme == .light ? .light : .dark)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch model.style {
         case .island: IslandIndicator(model: model)
         case .notch: NotchIndicator(model: model)
@@ -217,12 +254,12 @@ private struct IslandIndicator: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.title)
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 if let subtitle = model.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -239,7 +276,7 @@ private struct IslandIndicator: View {
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
         .background {
-            GlassSurface(shape: Capsule(style: .continuous), tint: model.tint)
+            GlassSurface(shape: Capsule(style: .continuous), tint: model.tint, theme: model.theme)
         }
         .fixedSize()
         .preferredColorScheme(.dark)
@@ -250,11 +287,11 @@ private struct IslandIndicator: View {
             Circle()
                 .fill(LinearGradient(colors: [model.tint.opacity(0.95), model.tint.opacity(0.62)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 0.8))
+                .overlay(Circle().stroke(Color.primary.opacity(0.25), lineWidth: 0.8))
                 .shadow(color: model.tint.opacity(0.55), radius: 6, x: 0, y: 2)
             Image(systemName: model.symbol)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         }
         .frame(width: 27, height: 27)
     }
@@ -272,7 +309,7 @@ private struct NotchIndicator: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(model.title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                 if let subtitle = model.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 9.5, weight: .medium))
@@ -293,7 +330,7 @@ private struct NotchIndicator: View {
         .padding(.top, 2)
         .frame(width: 260, height: 42, alignment: .bottom)
         .background {
-            GlassSurface(shape: NotchShape(bottomCornerRadius: 14), tint: model.tint)
+            GlassSurface(shape: NotchShape(bottomCornerRadius: 14), tint: model.tint, theme: model.theme)
         }
         .clipShape(NotchShape(bottomCornerRadius: 14))
         .preferredColorScheme(.dark)
@@ -330,7 +367,7 @@ private struct OverlayIndicator: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
         .background {
-            GlassSurface(shape: RoundedRectangle(cornerRadius: 18, style: .continuous), tint: model.tint)
+            GlassSurface(shape: RoundedRectangle(cornerRadius: 18, style: .continuous), tint: model.tint, theme: model.theme)
         }
         .fixedSize()
         .preferredColorScheme(.dark)
@@ -357,7 +394,7 @@ private struct MinimalIndicator: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background {
-            GlassSurface(shape: Capsule(style: .continuous), tint: model.tint)
+            GlassSurface(shape: Capsule(style: .continuous), tint: model.tint, theme: model.theme)
         }
         .preferredColorScheme(.dark)
     }
@@ -518,6 +555,7 @@ final class HUDController {
 
         closePanel()
         model.style = desired
+        model.theme = IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
 
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),

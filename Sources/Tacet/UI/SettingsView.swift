@@ -314,6 +314,18 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Theme") {
+                    Picker("", selection: $settings.indicatorTheme) {
+                        ForEach(IndicatorTheme.allCases) { theme in
+                            Text(LocalizedStringKey(theme.title)).tag(theme.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 120)
+                }
+
+                SoftDivider()
+
                 SoftRow("Position", subtitle: "Where the indicator appears") {
                     Picker("", selection: $settings.indicatorPosition) {
                         Text("Bottom").tag("bottom")

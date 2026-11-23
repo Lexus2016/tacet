@@ -137,6 +137,11 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(indicatorPosition, forKey: "indicatorPosition") }
     }
 
+    /// "classic", "glass" or "light".
+    @Published var indicatorTheme: String {
+        didSet { defaults.set(indicatorTheme, forKey: "indicatorTheme") }
+    }
+
     /// "system" or a language code. Applied through AppleLanguages, so it takes
     /// effect after a relaunch; missing keys fall back to English.
     @Published var uiLanguage: String {
@@ -232,6 +237,7 @@ final class AppSettings: ObservableObject {
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
+        indicatorTheme = defaults.string(forKey: "indicatorTheme") ?? "classic"
         uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"
         asrModels = defaults.dictionary(forKey: "asrModels") as? [String: String] ?? [:]
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
