@@ -72,9 +72,19 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(chatModels, forKey: "chatModels") }
     }
 
+    /// Model names that providers have retired. Treating them as unset keeps
+    /// cleanup and translation working after an upstream catalogue change.
+    private static let retiredModels: Set<String> = [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+    ]
+
     func chatModel(for provider: String) -> String {
         let stored = chatModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return stored.isEmpty ? ProviderCatalog.defaultChatModel(for: provider) : stored
+        if stored.isEmpty || Self.retiredModels.contains(stored) {
+            return ProviderCatalog.defaultChatModel(for: provider)
+        }
+        return stored
     }
 
     func setChatModel(_ model: String, for provider: String) {

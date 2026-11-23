@@ -119,6 +119,32 @@ enum CLIHarness {
             return true
         }
 
+        if let index = arguments.firstIndex(of: "--translate"), index + 1 < arguments.count {
+            let text = arguments[index + 1]
+            let target = value(after: "--to", in: arguments) ?? "en"
+            Task {
+                let settings = AppSettings.shared
+                let configuration = CleanupConfiguration(
+                    provider: settings.cleanupProvider,
+                    baseURL: settings.cleanupBaseURL,
+                    model: settings.chatModel(for: settings.cleanupProvider),
+                    timeout: max(4, settings.cleanupTimeout + 2),
+                    secondaryProvider: nil
+                )
+                if let spec = ProviderCatalog.spec(configuration.provider) {
+                    print("provider: \(spec.id), model: \(configuration.model), base: \(spec.baseURL)")
+                    print("key present: \(ProviderCatalog.key(for: spec) != nil), detected: \(TextLanguage.detect(text) ?? "?")")
+                }
+                let started = Date()
+                let outcome = await Translator().translate(text, to: target, configuration: configuration)
+                let elapsed = Date().timeIntervalSince(started)
+                print(String(format: "translated: %@  (%.2f s)", outcome.translated ? "yes" : "no", elapsed))
+                print(outcome.text)
+                exit(0)
+            }
+            return true
+        }
+
         if let index = arguments.firstIndex(of: "--benchmark"), index + 2 < arguments.count {
             let path = arguments[index + 1]
             let count = Int(arguments[index + 2]) ?? 3
