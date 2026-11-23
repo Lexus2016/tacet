@@ -225,7 +225,7 @@ final class DictationController: ObservableObject {
                 phase = .recording
                 lastFailure = nil
                 status("Recording…")
-                if settings.playSounds { NSSound(named: "Tink")?.play() }
+                if settings.playSounds { SoundService.shared.play(.start, style: settings.soundStyle) }
                 if settings.showHUD { HUDController.shared.showRecording() }
 
                 // The key may have been released while the microphone
@@ -261,7 +261,6 @@ final class DictationController: ObservableObject {
 
         phase = .processing
         status("Transcribing…")
-        if settings.playSounds { NSSound(named: "Pop")?.play() }
         if settings.showHUD { HUDController.shared.showProcessing() }
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
@@ -344,10 +343,9 @@ final class DictationController: ObservableObject {
                 let configuration = CleanupConfiguration(
                     provider: settings.cleanupProvider,
                     baseURL: settings.cleanupBaseURL,
-                    model: settings.cleanupModel,
+                    model: settings.chatModel(for: settings.cleanupProvider),
                     timeout: settings.cleanupTimeout,
-                    secondaryProvider: secondary,
-                    secondaryModel: nil
+                    secondaryProvider: secondary
                 )
                 let cleaned = await cleanupPipeline.clean(text, configuration: configuration)
                 if cleaned.changed {
@@ -446,6 +444,7 @@ final class DictationController: ObservableObject {
         lastFailure = nil
         refreshHistory()
         scheduleIdleUnload()
+        if settings.playSounds { SoundService.shared.play(.success, style: settings.soundStyle) }
     }
 
     private func recordFailure(_ failure: PipelineFailure,
@@ -490,7 +489,7 @@ final class DictationController: ObservableObject {
         lastFailure = message
         status("Failed: \(message)")
         if settings.showHUD { HUDController.shared.showMessage("Not transcribed, recording kept", isError: true) }
-        if settings.playSounds { NSSound(named: "Basso")?.play() }
+        if settings.playSounds { SoundService.shared.play(.error, style: settings.soundStyle) }
         refreshHistory()
 
         if autoRetry, let failedID {

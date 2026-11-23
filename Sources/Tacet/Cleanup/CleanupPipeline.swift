@@ -16,7 +16,6 @@ struct CleanupConfiguration: Sendable {
     let model: String
     let timeout: TimeInterval
     let secondaryProvider: String?
-    let secondaryModel: String?
 }
 
 /// The cleanup pass is a quality feature, not a dependency. Every path that
@@ -35,85 +34,68 @@ final class CleanupPipeline {
         }
 
         for provider in providers {
-            guard let key = key(for: provider) else { continue }
-            do {
-                let candidate = try await withTimeout(configuration.timeout) {
-                    try await self.request(provider: provider,
-                                           key: key,
-                                           text: rawText,
-                                           configuration: configuration)
-                }
+            guard let spec = ProviderCatalog.spec(provider) else { continue }
+            let key = ProviderCatalog.key(for: spec)
+            if spec.requiresKey, key == nil { continue }
+
+            if let candidate = try? await attempt(provider: provider,
+                                                  spec: spec,
+                                                  key: key,
+                                                  text: rawText,
+                                                  configuration: configuration) {
                 let normalized = CleanupGuard.normalize(candidate)
                 if CleanupGuard.isAcceptable(input: rawText, output: normalized) {
-                    return CleanupResult(
-                        text: normalized,
-                        engine: provider,
-                        changed: normalized != rawText
-                    )
+                    return CleanupResult(text: normalized, engine: provider, changed: normalized != rawText)
                 }
-            } catch {
-                continue
             }
         }
 
         return .raw(rawText)
     }
 
-    // MARK: Providers
-
-    private func key(for provider: String) -> String? {
-        switch provider {
-        case KeychainAccount.groq:
-            return Keychain.secret(KeychainAccount.groq, environment: "GROQ_API_KEY")
-        case KeychainAccount.openAI:
-            return Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY")
-        default:
-            return nil
-        }
-    }
-
-    private func baseURL(for provider: String, fallback: String) -> URL? {
-        switch provider {
-        case KeychainAccount.groq:
-            return URL(string: "https://api.groq.com/openai/v1")
-        case KeychainAccount.openAI:
-            return URL(string: fallback)
-        default:
-            return nil
-        }
-    }
-
-    private func model(for provider: String, configuration: CleanupConfiguration) -> String {
-        if provider == configuration.provider { return configuration.model }
-        if provider == configuration.secondaryProvider, let secondary = configuration.secondaryModel {
-            return secondary
-        }
-        // A model name is provider-specific: sending Groq's model to OpenAI
-        // returns 404. Fall back to that provider's own default.
-        switch provider {
-        case KeychainAccount.groq: return "llama-3.3-70b-versatile"
-        case KeychainAccount.openAI: return "gpt-4o-mini"
-        default: return configuration.model
+    private func attempt(provider: String,
+                         spec: ProviderSpec,
+                         key: String?,
+                         text: String,
+                         configuration: CleanupConfiguration) async throws -> String {
+        try await withTimeout(configuration.timeout) {
+            try await self.request(provider: provider,
+                                   spec: spec,
+                                   key: key,
+                                   text: text,
+                                   configuration: configuration)
         }
     }
 
     // MARK: Request
 
     private func request(provider: String,
-                         key: String,
+                         spec: ProviderSpec,
+                         key: String?,
                          text: String,
                          configuration: CleanupConfiguration) async throws -> String {
-        guard let base = baseURL(for: provider, fallback: configuration.baseURL) else {
+        let base = provider == "openai"
+            ? configuration.baseURL
+            : spec.baseURL
+
+        guard let url = URL(string: base)?.appendingPathComponent("chat/completions") else {
             throw RecognitionError.failed("Invalid cleanup endpoint")
         }
 
-        var request = URLRequest(url: base.appendingPathComponent("chat/completions"))
+        let model = provider == configuration.provider
+            ? configuration.model
+            : ProviderCatalog.defaultChatModel(for: provider)
+
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = max(configuration.timeout, 5)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let key {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
 
         let payload: [String: Any] = [
-            "model": model(for: provider, configuration: configuration),
+            "model": model,
             "temperature": 0,
             "max_tokens": 2048,
             "messages": [
@@ -167,7 +149,6 @@ enum CleanupGuard {
     static func normalize(_ output: String) -> String {
         var text = output.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Strip a code fence if the model wrapped the answer in one.
         if text.hasPrefix("```"), text.hasSuffix("```") {
             var lines = text.components(separatedBy: .newlines)
             if !lines.isEmpty { lines.removeFirst() }
@@ -175,7 +156,6 @@ enum CleanupGuard {
             text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Strip a one-line preamble such as "Ось виправлений текст:".
         let lines = text.components(separatedBy: .newlines)
         if lines.count > 1,
            let first = lines.first,
@@ -185,7 +165,6 @@ enum CleanupGuard {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Strip wrapping quotes only when they wrap the whole text.
         let wrappers: [(Character, Character)] = [("\"", "\""), ("«", "»"), ("“", "”"), ("`", "`")]
         for (opening, closing) in wrappers {
             if text.count > 2, text.first == opening, text.last == closing {
@@ -210,13 +189,10 @@ enum CleanupGuard {
         let maximum = input.count < 40 ? 1.75 : 1.45
         guard ratio >= minimum, ratio <= maximum else { return false }
 
-        // A Cyrillic transcript must not come back in Latin script: that is a
-        // translation, not a cleanup.
         if LanguagePolicy.isCyrillic(input), !LanguagePolicy.isCyrillic(trimmed) {
             return false
         }
 
-        // Catch translation into another Latin-script language.
         if input.count >= 25,
            let inputLanguage = TextLanguage.detect(input),
            let outputLanguage = TextLanguage.detect(trimmed),

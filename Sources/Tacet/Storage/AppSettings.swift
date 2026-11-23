@@ -66,8 +66,19 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(cleanupProvider, forKey: "cleanupProvider") }
     }
 
-    @Published var cleanupModel: String {
-        didSet { defaults.set(cleanupModel, forKey: "cleanupModel") }
+    /// Chat model per provider. One provider may be used for cleanup and
+    /// another for dictation, so the model is stored per provider, not globally.
+    @Published var chatModels: [String: String] {
+        didSet { defaults.set(chatModels, forKey: "chatModels") }
+    }
+
+    func chatModel(for provider: String) -> String {
+        let stored = chatModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? ProviderCatalog.defaultChatModel(for: provider) : stored
+    }
+
+    func setChatModel(_ model: String, for provider: String) {
+        chatModels[provider] = model.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     @Published var cleanupBaseURL: String {
@@ -86,6 +97,16 @@ final class AppSettings: ObservableObject {
 
     @Published var playSounds: Bool {
         didSet { defaults.set(playSounds, forKey: "playSounds") }
+    }
+
+    /// "bundled" (the TypeWhisper cues) or "system".
+    @Published var soundStyle: String {
+        didSet { defaults.set(soundStyle, forKey: "soundStyle") }
+    }
+
+    /// "island", "notch", "overlay" or "minimal".
+    @Published var indicatorStyle: String {
+        didSet { defaults.set(indicatorStyle, forKey: "indicatorStyle") }
     }
 
     @Published var showHUD: Bool {
@@ -122,7 +143,7 @@ final class AppSettings: ObservableObject {
     }
 
     var isCleanupConfigured: Bool {
-        cleanupEnabled && !cleanupModel.trimmingCharacters(in: .whitespaces).isEmpty
+        cleanupEnabled && !chatModel(for: cleanupProvider).isEmpty
     }
 
     // MARK: Init
@@ -139,11 +160,22 @@ final class AppSettings: ObservableObject {
         cloudTimeout = defaults.object(forKey: "cloudTimeout") as? Double ?? 20
         cleanupEnabled = defaults.object(forKey: "cleanupEnabled") as? Bool ?? true
         cleanupProvider = defaults.string(forKey: "cleanupProvider") ?? "groq"
-        cleanupModel = defaults.string(forKey: "cleanupModel") ?? "llama-3.1-8b-instant"
+
+        var models = defaults.dictionary(forKey: "chatModels") as? [String: String] ?? [:]
+        if let legacy = defaults.string(forKey: "cleanupModel"), !legacy.isEmpty, models["groq"] == nil {
+            // Keep a value the user actually chose; ignore the old default so
+            // the faster default applies.
+            if legacy != "llama-3.3-70b-versatile" {
+                models["groq"] = legacy
+            }
+        }
+        chatModels = models
         cleanupBaseURL = defaults.string(forKey: "cleanupBaseURL") ?? "https://api.groq.com/openai/v1"
         cleanupTimeout = defaults.object(forKey: "cleanupTimeout") as? Double ?? 1.5
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
+        soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
+        indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"

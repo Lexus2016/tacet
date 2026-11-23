@@ -211,11 +211,21 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
-                SoftRow("Sounds") {
-                    Toggle("", isOn: $settings.playSounds)
+                SoftRow("Sounds", subtitle: "Short cues for start, success and errors") {
+                    HStack(spacing: 10) {
+                        Picker("", selection: $settings.soundStyle) {
+                            Text("Tacet").tag("bundled")
+                            Text("macOS").tag("system")
+                        }
                         .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                        .frame(width: 100)
+                        .disabled(!settings.playSounds)
+
+                        Toggle("", isOn: $settings.playSounds)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
                 }
 
                 SoftDivider()
@@ -233,6 +243,27 @@ struct GeneralSettingsView: View {
                     Stepper("\(settings.keepAudioDays) d",
                             value: $settings.keepAudioDays, in: 1...90)
                         .frame(width: 100)
+                }
+            }
+
+            SoftCard(title: "Visual", systemImage: "sparkles") {
+                SoftRow("Indicator", subtitle: indicatorDetail) {
+                    Picker("", selection: $settings.indicatorStyle) {
+                        ForEach(IndicatorStyle.allCases) { style in
+                            Text(style.title).tag(style.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                SoftDivider()
+
+                SoftRow("Preview", subtitle: "Shows the selected style for three seconds") {
+                    Button("Show") {
+                        HUDController.shared.preview(style: IndicatorStyle(rawValue: settings.indicatorStyle) ?? .island)
+                    }
+                    .buttonStyle(SoftButtonStyle())
                 }
             }
 
@@ -300,6 +331,10 @@ struct GeneralSettingsView: View {
             return "Start Tacet when you log in"
         }
         return "Move Tacet to /Applications to enable this"
+    }
+
+    private var indicatorDetail: String {
+        (IndicatorStyle(rawValue: settings.indicatorStyle) ?? .island).detail
     }
 }
 
@@ -502,6 +537,14 @@ private struct ParakeetRow: View {
 
 struct CleanupSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
+    @State private var showingModels = false
+
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { settings.chatModel(for: settings.cleanupProvider) },
+            set: { settings.setChatModel($0, for: settings.cleanupProvider) }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -526,41 +569,66 @@ struct CleanupSettingsView: View {
             SoftCard(title: "Model", systemImage: "brain") {
                 SoftRow("Provider") {
                     Picker("", selection: $settings.cleanupProvider) {
-                        Text("Groq").tag(KeychainAccount.groq)
-                        Text("OpenAI-compatible").tag(KeychainAccount.openAI)
+                        ForEach(ProviderCatalog.chatProviders) { provider in
+                            Text(provider.name).tag(provider.id)
+                        }
                     }
                     .labelsHidden()
-                    .frame(width: 170)
+                    .frame(width: 190)
                 }
 
-                SoftDivider()
-
-                SoftRow("Model") {
-                    TextField("", text: $settings.cleanupModel)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 230)
-                }
-
-                if settings.cleanupProvider == KeychainAccount.openAI {
-                    SoftDivider()
-                    SoftRow("Base URL") {
-                        TextField("", text: $settings.cleanupBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 230)
+                if let spec = ProviderCatalog.spec(settings.cleanupProvider) {
+                    if spec.requiresKey {
+                        SoftDivider()
+                        APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey)
                     }
+
+                    if spec.id == "openai" {
+                        SoftDivider()
+                        SoftRow("Base URL") {
+                            TextField("", text: $settings.cleanupBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 230)
+                        }
+                    }
+
+                    SoftDivider()
+
+                    SoftRow("Model") {
+                        HStack(spacing: 8) {
+                            TextField("", text: modelBinding)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 200)
+                            Button("Browse") { showingModels = true }
+                                .buttonStyle(SoftButtonStyle())
+                        }
+                    }
+
+                    SoftDivider()
+
+                    ProviderTestRow(spec: spec,
+                                    baseURL: spec.id == "openai" ? settings.cleanupBaseURL : nil,
+                                    model: settings.chatModel(for: spec.id))
+
+                    SoftDivider()
+
+                    SoftRow("Timeout", subtitle: "On timeout the raw transcript is inserted") {
+                        Stepper(String(format: "%.1f s", settings.cleanupTimeout),
+                                value: $settings.cleanupTimeout, in: 1...10, step: 0.5)
+                            .frame(width: 100)
+                    }
+
+                    SoftDivider()
+
+                    CleanupTestRow()
                 }
-
-                SoftDivider()
-
-                SoftRow("Timeout", subtitle: "On timeout the raw transcript is inserted") {
-                    Stepper(String(format: "%.1f s", settings.cleanupTimeout),
-                            value: $settings.cleanupTimeout, in: 1...10, step: 0.5)
-                        .frame(width: 100)
-                }
-
-                SoftDivider()
-
-                CleanupTestRow()
+            }
+        }
+        .sheet(isPresented: $showingModels) {
+            if let spec = ProviderCatalog.spec(settings.cleanupProvider) {
+                ModelChooser(spec: spec,
+                             baseURL: spec.id == "openai" ? settings.cleanupBaseURL : nil,
+                             selection: modelBinding)
             }
         }
     }
@@ -605,10 +673,9 @@ private struct CleanupTestRow: View {
         let configuration = CleanupConfiguration(
             provider: settings.cleanupProvider,
             baseURL: settings.cleanupBaseURL,
-            model: settings.cleanupModel,
+            model: settings.chatModel(for: settings.cleanupProvider),
             timeout: settings.cleanupTimeout,
-            secondaryProvider: secondary,
-            secondaryModel: nil
+            secondaryProvider: secondary
         )
 
         Task {
