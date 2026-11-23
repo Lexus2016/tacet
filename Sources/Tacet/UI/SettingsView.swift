@@ -282,6 +282,20 @@ struct GeneralSettingsView: View {
                     .frame(width: 150)
                 }
 
+                if IndicatorStyle(rawValue: settings.indicatorStyle) == .island
+                    || IndicatorStyle(rawValue: settings.indicatorStyle) == .overlay {
+                    SoftDivider()
+
+                    SoftRow("Position", subtitle: "Where the indicator appears") {
+                        Picker("", selection: $settings.indicatorPosition) {
+                            Text("Bottom").tag("bottom")
+                            Text("Top").tag("top")
+                        }
+                        .labelsHidden()
+                        .frame(width: 120)
+                    }
+                }
+
                 SoftDivider()
 
                 SoftRow("Preview", subtitle: "Shows the selected style for three seconds") {

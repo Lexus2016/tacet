@@ -37,6 +37,7 @@ final class DictationController: ObservableObject {
     private var idleUnloadTask: Task<Void, Never>?
     /// The text that was selected when the recording started.
     private var capturedSelection: String?
+    private var didOpenMicrophoneSettings = false
     /// The combination actually registered, which may differ from the stored
     /// one when another app owns it. Formatted for display.
     private(set) var activeHotkey: String = ""
@@ -62,6 +63,10 @@ final class DictationController: ObservableObject {
         adoptOrphanRecordings()
         recoverPendingRecordings()
         prewarmLocalEngine()
+
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        }
     }
 
     /// Load the local fallback while the app is idle, so the first dictation
@@ -262,7 +267,7 @@ final class DictationController: ObservableObject {
             defer { isStarting = false }
 
             guard await ensureMicrophone() else {
-                status("Microphone access denied")
+                handleBlockedMicrophone()
                 return
             }
 
@@ -312,6 +317,15 @@ final class DictationController: ObservableObject {
         if settings.showHUD { HUDController.shared.showProcessing() }
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
+
+        // Digital silence means the system is blocking the microphone: the
+        // engine runs and delivers zeros, so "no speech" would be a lie.
+        if result.peak == 0, result.rms == 0 {
+            phase = .idle
+            AudioStore.delete(path: result.url.path)
+            handleBlockedMicrophone()
+            return
+        }
 
         if clip.duration < 0.25 {
             phase = .idle
@@ -814,6 +828,25 @@ final class DictationController: ObservableObject {
             }
         }
         return false
+    }
+
+    /// The microphone is silent at the system level: say so and open the pane
+    /// that fixes it, instead of reporting "no speech".
+    private func handleBlockedMicrophone() {
+        phase = .idle
+        lastFailure = "Microphone is blocked"
+        status("Microphone is blocked — allow Tacet in System Settings")
+        if settings.showHUD {
+            HUDController.shared.showMessage("Microphone blocked", isError: true)
+        }
+        if settings.playSounds {
+            SoundService.shared.play(.error, style: settings.soundStyle)
+        }
+        guard !didOpenMicrophoneSettings else { return }
+        didOpenMicrophoneSettings = true
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func ensureMicrophone() async -> Bool {

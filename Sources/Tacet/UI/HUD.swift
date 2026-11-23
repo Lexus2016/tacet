@@ -499,17 +499,33 @@ final class HUDController {
         let visible = screen.visibleFrame
         let frame = screen.frame
         let size = panel.frame.size
+        let atTop = AppSettings.shared.indicatorPosition == "top"
+
+        func topOrigin(inset: CGFloat = 10) -> NSPoint {
+            NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - inset)
+        }
+
+        func bottomOrigin(inset: CGFloat = 10) -> NSPoint {
+            NSPoint(x: visible.midX - size.width / 2, y: visible.minY + inset)
+        }
 
         switch model.style {
         case .island:
-            panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.minY + 10))
+            panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
 
         case .notch:
-            panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2, y: frame.maxY - size.height))
+            // On a notched MacBook the panel must start below the notch, or the
+            // shape is hidden behind it. safeAreaInsets.top is the notch height.
+            let notch = screen.safeAreaInsets.top
+            if notch > 0 {
+                panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
+                                             y: frame.maxY - size.height - notch))
+            } else {
+                panel.setFrameOrigin(topOrigin(inset: 6))
+            }
 
         case .overlay:
-            panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2,
-                                         y: visible.maxY - size.height - 10))
+            panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
 
         case .minimal:
             panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,

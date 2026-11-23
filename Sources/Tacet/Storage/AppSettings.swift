@@ -119,6 +119,11 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(indicatorStyle, forKey: "indicatorStyle") }
     }
 
+    /// "bottom" or "top", for the island and overlay styles.
+    @Published var indicatorPosition: String {
+        didSet { defaults.set(indicatorPosition, forKey: "indicatorPosition") }
+    }
+
     /// "auto" keeps the spoken language; a code translates the transcript
     /// before it is inserted.
     @Published var outputLanguage: String {
@@ -200,6 +205,7 @@ final class AppSettings: ObservableObject {
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
+        indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
