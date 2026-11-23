@@ -122,3 +122,11 @@
 "Recovered — in History" = "Відновлено — в Історії";
 "Preview" = "Перегляд";
 "Preparing microphone…" = "Підготовка мікрофона…";
+
+"Works." = "Працює.";
+"Works: %@" = "Працює: %@";
+"When the script is ambiguous, try the likely alternative: Ukrainian/Russian, Belarusian/Russian, Polish/Ukrainian and similar pairs" = "Коли письмо неоднозначне, спробувати ймовірну альтернативу: українська/російська, білоруська/російська, польська/українська та подібні пари";
+"The language is detected for every dictation separately, so you can switch chats and languages without touching settings. Tacet also remembers the language you last used in each app, which skips the extra check when you come back." = "Мова визначається для кожного диктанту окремо, тому можна перемикати чати й мови, не чіпаючи налаштувань. Tacet також пам'ятає мову останнього диктанту в кожному застосунку — це пропускає зайву перевірку, коли ти повертаєшся.";
+"With text selected, the dictation rewrites, translates or removes it instead of inserting after it" = "Коли текст виділений, диктант переписує, перекладає або видаляє його замість вставки після";
+"Where the indicator appears" = "Де показувати індикатор";
+"The cleanup model never translates, never summarises, and its answer is discarded when it looks wrong or takes too long. The raw transcript stays available in History." = "Модель обробки не перекладає і не скорочує, а її відповідь відкидається, якщо вона виглядає підозріло або не встигла. Сирий текст завжди лишається в Історії.";

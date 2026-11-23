@@ -149,7 +149,11 @@ struct ProviderTestRow: View {
             switch result {
             case .success(let text):
                 ok = true
-                message = text.isEmpty ? "Works." : "Works: \(text.prefix(60))"
+                if text.isEmpty {
+                    message = NSLocalizedString("Works.", comment: "")
+                } else {
+                    message = String(format: NSLocalizedString("Works: %@", comment: ""), String(text.prefix(60)))
+                }
             case .failure(let error):
                 ok = false
                 message = error.localizedDescription
