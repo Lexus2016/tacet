@@ -49,7 +49,7 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   DERIVED=".release-$ARCH"
   APP="$DERIVED/Build/Products/Release/Tacet.app"
 
-  echo "Building Tacet $VERSION ($BUILD) for $ARCH…"
+  echo "Building Tacet $VERSION ($BUILD) for ${ARCH}…"
   xcodebuild -project Tacet.xcodeproj -scheme Tacet -configuration Release \
     -derivedDataPath "$DERIVED" -destination 'platform=macOS' \
     ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO \
@@ -63,7 +63,7 @@ for ARCH in "${ARCHS_LIST[@]}"; do
 
   [ -d "$APP" ] || { echo "No app at $APP" >&2; exit 1; }
 
-  echo "Signing check for $ARCH…"
+  echo "Signing check for ${ARCH}…"
   codesign --verify --deep --strict "$APP" || { echo "Signature is not valid" >&2; exit 1; }
   if ! codesign -dv --verbose=4 "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
     echo "The app is not signed with a Developer ID; refusing to publish." >&2
@@ -72,7 +72,7 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   lipo -info "$APP/Contents/MacOS/Tacet" | grep -q "$ARCH" || { echo "Wrong architecture for $ARCH" >&2; exit 1; }
 
   if [ -n "${NOTARY_PROFILE:-}" ]; then
-    echo "Notarizing $ARCH…"
+    echo "Notarizing ${ARCH}…"
     ditto -c -k --keepParent "$APP" "$DIST/notarize-$ARCH.zip"
     xcrun notarytool submit "$DIST/notarize-$ARCH.zip" --keychain-profile "$NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"
@@ -96,11 +96,11 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   fi
 done
 
-echo "Tagging $TAG…"
+echo "Tagging ${TAG}…"
 git tag -f -a "$TAG" -m "Tacet $VERSION"
 git push -f origin "$TAG"
 
-echo "Publishing $TAG…"
+echo "Publishing ${TAG}…"
 ASSETS=("$DIST/Tacet-$VERSION-arm64.zip" "$DIST/Tacet-$VERSION-arm64.dmg" \
         "$DIST/Tacet-$VERSION-x86_64.zip" "$DIST/Tacet-$VERSION-x86_64.dmg" \
         "$DIST/appcast-arm64.xml" "$DIST/appcast-x86_64.xml")
