@@ -23,6 +23,7 @@ final class AppWindows {
             ) {
                 SettingsView().environmentObject(DictationController.shared)
             }
+            observe(settingsWindow)
         }
         present(settingsWindow)
     }
@@ -36,13 +37,37 @@ final class AppWindows {
             ) {
                 HistoryView().environmentObject(DictationController.shared)
             }
+            observe(historyWindow)
         }
         DictationController.shared.refreshHistory()
         present(historyWindow)
     }
 
+    /// The Dock icon is a window affordance, not a permanent badge: the app is
+    /// invisible until Settings or History is open.
+    private func observe(_ window: NSWindow?) {
+        guard let window else { return }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { _ in
+            DispatchQueue.main.async {
+                AppWindows.shared.updatePolicy()
+            }
+        }
+    }
+
+    private func updatePolicy() {
+        let hasVisibleWindow = [settingsWindow, historyWindow]
+            .compactMap { $0 }
+            .contains { $0.isVisible }
+        NSApp.setActivationPolicy(hasVisibleWindow ? .regular : .accessory)
+    }
+
     private func present(_ window: NSWindow?) {
         guard let window else { return }
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)

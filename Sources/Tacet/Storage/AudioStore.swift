@@ -81,6 +81,7 @@ enum AudioStore {
     }
 
     static func duration(of url: URL) -> Double {
+        WavRepair.repairIfNeeded(url: url)
         guard let file = try? AVAudioFile(forReading: url) else { return 0 }
         let rate = file.processingFormat.sampleRate
         guard rate > 0 else { return 0 }

@@ -22,6 +22,8 @@ struct HistoryEntry: Identifiable, Equatable, Sendable {
     var status: Status
     var inserted: Bool
     var cleanupEngine: String?
+    /// Why the attempt failed, when it did. Shown in History.
+    var error: String?
 
     var audioURL: URL? {
         guard let audioPath, !audioPath.isEmpty else { return nil }
@@ -70,7 +72,21 @@ final class HistoryStore {
             );
             """)
             exec("CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);")
+            if !columnExists("error") {
+                exec("ALTER TABLE entries ADD COLUMN error TEXT;")
+            }
         }
+    }
+
+    private func columnExists(_ name: String) -> Bool {
+        guard let stmt = prepare("PRAGMA table_info(entries);") else { return false }
+        defer { sqlite3_finalize(stmt) }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let cString = sqlite3_column_text(stmt, 1), String(cString: cString) == name {
+                return true
+            }
+        }
+        return false
     }
 
     deinit {
@@ -89,7 +105,8 @@ final class HistoryStore {
                 appName: String?,
                 audioPath: String?,
                 status: HistoryEntry.Status,
-                cleanupEngine: String?) -> HistoryEntry {
+                cleanupEngine: String?,
+                error: String? = nil) -> HistoryEntry {
         let entry = HistoryEntry(
             id: UUID().uuidString,
             createdAt: Date(),
@@ -103,14 +120,15 @@ final class HistoryStore {
             audioPath: audioPath,
             status: status,
             inserted: false,
-            cleanupEngine: cleanupEngine
+            cleanupEngine: cleanupEngine,
+            error: error
         )
 
         queue.sync {
             let sql = """
             INSERT INTO entries
-            (id, created_at, text, raw_text, engine, language, duration, latency, app_name, audio_path, status, inserted, cleanup_engine)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            (id, created_at, text, raw_text, engine, language, duration, latency, app_name, audio_path, status, inserted, cleanup_engine, error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
             guard let stmt = prepare(sql) else { return }
             defer { sqlite3_finalize(stmt) }
@@ -128,14 +146,24 @@ final class HistoryStore {
             bind(stmt, 11, entry.status.rawValue)
             sqlite3_bind_int(stmt, 12, entry.inserted ? 1 : 0)
             bind(stmt, 13, entry.cleanupEngine)
+            bind(stmt, 14, entry.error)
             sqlite3_step(stmt)
         }
 
         return entry
     }
 
-    func markInserted(id: String) {
+    func setDuration(id: String, duration: Double) {
         queue.sync {
+            guard let stmt = prepare("UPDATE entries SET duration = ? WHERE id = ?;") else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_double(stmt, 1, duration)
+            bind(stmt, 2, id)
+            sqlite3_step(stmt)
+        }
+    }
+
+    func markInserted(id: String) {        queue.sync {
             guard let stmt = prepare("UPDATE entries SET inserted = 1 WHERE id = ?;") else { return }
             defer { sqlite3_finalize(stmt) }
             bind(stmt, 1, id)
@@ -150,11 +178,12 @@ final class HistoryStore {
                 language: String?,
                 latency: Double,
                 status: HistoryEntry.Status,
-                cleanupEngine: String?) {
+                cleanupEngine: String?,
+                error: String? = nil) {
         queue.sync {
             let sql = """
             UPDATE entries SET text = ?, raw_text = ?, engine = ?, language = ?,
-            latency = ?, status = ?, cleanup_engine = ? WHERE id = ?;
+            latency = ?, status = ?, cleanup_engine = ?, error = ? WHERE id = ?;
             """
             guard let stmt = prepare(sql) else { return }
             defer { sqlite3_finalize(stmt) }
@@ -165,7 +194,8 @@ final class HistoryStore {
             sqlite3_bind_double(stmt, 5, latency)
             bind(stmt, 6, status.rawValue)
             bind(stmt, 7, cleanupEngine)
-            bind(stmt, 8, id)
+            bind(stmt, 8, error)
+            bind(stmt, 9, id)
             sqlite3_step(stmt)
         }
     }
@@ -308,7 +338,8 @@ final class HistoryStore {
             audioPath: column(stmt, 9),
             status: HistoryEntry.Status(rawValue: column(stmt, 10) ?? "ok") ?? .ok,
             inserted: sqlite3_column_int(stmt, 11) != 0,
-            cleanupEngine: column(stmt, 12)
+            cleanupEngine: column(stmt, 12),
+            error: column(stmt, 13)
         )
     }
 }

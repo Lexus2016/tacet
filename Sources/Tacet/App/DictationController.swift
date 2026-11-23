@@ -30,9 +30,10 @@ final class DictationController: ObservableObject {
     private var isStarting = false
     private var hotkeyIsDown = false
     private var noteTask: Task<Void, Never>?
-    /// The combination actually registered, which may differ from the one in
-    /// settings when another app owns it.
-    private(set) var activePreset: HotkeyPreset?
+    private var retryTask: Task<Void, Never>?
+    /// The combination actually registered, which may differ from the stored
+    /// one when another app owns it. Formatted for display.
+    private(set) var activeHotkey: String = ""
     /// The app that was frontmost when the recording started. The text belongs
     /// there even if the user switches windows while it is being transcribed.
     private var targetApplication: NSRunningApplication?
@@ -53,6 +54,35 @@ final class DictationController: ObservableObject {
         refreshHistory()
         purgeAudio()
         adoptOrphanRecordings()
+        recoverPendingRecordings()
+    }
+
+    /// Dictations that failed earlier (a killed process, an outage) are retried
+    /// on launch instead of waiting for the user to notice them in History.
+    private func recoverPendingRecordings() {
+        let pending = store.entries(limit: 100).filter {
+            $0.status == .unrecovered && ($0.audioPath?.isEmpty == false)
+        }
+        guard !pending.isEmpty else { return }
+
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+            for entry in pending {
+                guard phase == .idle, let url = entry.audioURL else { continue }
+                guard FileManager.default.fileExists(atPath: url.path),
+                      let clip = try? AudioClip.load(url: url),
+                      !clip.isSilent
+                else { continue }
+
+                await process(clip: clip,
+                              existingEntryID: entry.id,
+                              allowPaste: false,
+                              allowClipboard: false,
+                              autoRetry: false)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
     }
 
     /// A recording written to disk with no history row means the app died
@@ -81,32 +111,32 @@ final class DictationController: ObservableObject {
         hotkey.onPress = { [weak self] in self?.hotkeyPressed() }
         hotkey.onRelease = { [weak self] in self?.hotkeyReleased() }
 
-        let preferred = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
-                                              modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
+        let preferred = HotkeyFormat.title(modifiers: settings.hotkeyModifiers,
+                                           label: settings.hotkeyLabel)
 
-        if hotkey.register(keyCode: preferred.keyCode, modifiers: preferred.modifiers) {
-            activePreset = preferred
+        if hotkey.register(keyCode: UInt32(settings.hotkeyKeyCode),
+                           modifiers: UInt32(settings.hotkeyModifiers)) {
+            activeHotkey = preferred
             hotkeyConflict = false
-            NSLog("Tacet: hotkey %@ registered", preferred.title)
+            NSLog("Tacet: hotkey %@ registered", preferred)
             return
         }
-        NSLog("Tacet: hotkey %@ is taken (eventHotKeyExistsErr)", preferred.title)
+        NSLog("Tacet: hotkey %@ is taken (eventHotKeyExistsErr)", preferred)
 
-        // The chosen combination is owned by another app (Carbon returns
-        // eventHotKeyExistsErr). Find a free one instead of leaving the app
-        // without a way to start dictation.
-        for candidate in HotkeyPreset.allCases where candidate != preferred {
-            if hotkey.register(keyCode: candidate.keyCode, modifiers: candidate.modifiers) {
-                activePreset = candidate
+        // The chosen combination is owned by another app. Find a free one
+        // instead of leaving the app without a way to start dictation.
+        for preset in HotkeyPreset.allCases {
+            if hotkey.register(keyCode: preset.keyCode, modifiers: preset.modifiers) {
+                activeHotkey = preset.title
                 hotkeyConflict = false
-                status("\(preferred.title) is taken, using \(candidate.title)")
+                status("\(preferred) is taken, using \(preset.title)")
                 return
             }
         }
 
-        activePreset = nil
+        activeHotkey = ""
         hotkeyConflict = true
-        status("No free hotkey, choose another in Settings")
+        status("No free hotkey, record another in Settings")
     }
 
     private func hotkeyPressed() {
@@ -202,7 +232,11 @@ final class DictationController: ObservableObject {
             return
         }
 
-        Task { await process(clip: clip, existingEntryID: nil, allowPaste: true) }
+        Task { await process(clip: clip,
+                             existingEntryID: nil,
+                             allowPaste: true,
+                             allowClipboard: true,
+                             autoRetry: true) }
     }
 
     func cancelRecording() {
@@ -215,7 +249,11 @@ final class DictationController: ObservableObject {
 
     // MARK: Processing
 
-    private func process(clip: AudioClip, existingEntryID: String?, allowPaste: Bool) async {
+    private func process(clip: AudioClip,
+                         existingEntryID: String?,
+                         allowPaste: Bool,
+                         allowClipboard: Bool,
+                         autoRetry: Bool) async {
         let started = Date()
         let appName = TextInserter.frontmostAppName
 
@@ -275,14 +313,16 @@ final class DictationController: ObservableObject {
                     appName: appName,
                     cleanupEngine: cleanupEngine,
                     existingEntryID: existingEntryID,
-                    allowPaste: allowPaste)
+                    allowPaste: allowPaste,
+                    allowClipboard: allowClipboard)
 
         case .failure(let failure):
             recordFailure(failure,
                           clip: clip,
                           latency: Date().timeIntervalSince(started),
                           appName: appName,
-                          existingEntryID: existingEntryID)
+                          existingEntryID: existingEntryID,
+                          autoRetry: autoRetry)
         }
     }
 
@@ -294,15 +334,18 @@ final class DictationController: ObservableObject {
                          appName: String?,
                          cleanupEngine: String?,
                          existingEntryID: String?,
-                         allowPaste: Bool) {
+                         allowPaste: Bool,
+                         allowClipboard: Bool) {
         // The entry may have been deleted while this transcribe was in flight.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
             phase = .idle
             return
         }
 
-        let canPaste = allowPaste && restoreTargetApplication()
-        TextInserter.copy(text)
+        let canPaste = allowPaste && allowClipboard && restoreTargetApplication()
+        if allowClipboard {
+            TextInserter.copy(text)
+        }
         let pasted = canPaste && settings.pasteAutomatically && TextInserter.paste()
 
         if let bundleID = targetApplication?.bundleIdentifier,
@@ -313,6 +356,7 @@ final class DictationController: ObservableObject {
         let entryID: String
         if let existingEntryID {
             entryID = existingEntryID
+            store.setDuration(id: existingEntryID, duration: clip.duration)
             store.update(id: existingEntryID,
                          text: text,
                          rawText: raw,
@@ -338,10 +382,13 @@ final class DictationController: ObservableObject {
         if pasted {
             store.markInserted(id: entryID)
             status("Inserted")
-            if settings.showHUD { HUDController.shared.showMessage(pasted ? "Inserted" : "Copied", isError: false) }
-        } else {
+            if settings.showHUD { HUDController.shared.showMessage("Inserted", isError: false) }
+        } else if allowClipboard {
             status("Copied to clipboard, press ⌘V")
             if settings.showHUD { HUDController.shared.showMessage("Copied, press ⌘V", isError: false) }
+        } else {
+            status("Recovered — open History to copy")
+            if settings.showHUD { HUDController.shared.showMessage("Recovered — in History", isError: false) }
         }
 
         phase = .idle
@@ -353,8 +400,10 @@ final class DictationController: ObservableObject {
                                clip: AudioClip,
                                latency: TimeInterval,
                                appName: String?,
-                               existingEntryID: String?) {
+                               existingEntryID: String?,
+                               autoRetry: Bool) {
         let message = failure.localizedDescription
+        var failedID: String?
 
         if let existingEntryID {
             // Do not resurrect an entry the user deleted mid-retry.
@@ -366,19 +415,23 @@ final class DictationController: ObservableObject {
                              language: nil,
                              latency: latency,
                              status: .unrecovered,
-                             cleanupEngine: nil)
+                             cleanupEngine: nil,
+                             error: message)
+                failedID = existingEntryID
             }
         } else {
-            _ = store.insert(text: "",
-                             rawText: nil,
-                             engine: nil,
-                             language: nil,
-                             duration: clip.duration,
-                             latency: latency,
-                             appName: appName,
-                             audioPath: clip.url.path,
-                             status: .unrecovered,
-                             cleanupEngine: nil)
+            let entry = store.insert(text: "",
+                                     rawText: nil,
+                                     engine: nil,
+                                     language: nil,
+                                     duration: clip.duration,
+                                     latency: latency,
+                                     appName: appName,
+                                     audioPath: clip.url.path,
+                                     status: .unrecovered,
+                                     cleanupEngine: nil,
+                                     error: message)
+            failedID = entry.id
         }
 
         phase = .idle
@@ -387,6 +440,26 @@ final class DictationController: ObservableObject {
         if settings.showHUD { HUDController.shared.showMessage("Not transcribed, recording kept", isError: true) }
         if settings.playSounds { NSSound(named: "Basso")?.play() }
         refreshHistory()
+
+        if autoRetry, let failedID {
+            scheduleRetry(entryID: failedID, clip: clip)
+        }
+    }
+
+    /// One quiet retry a few seconds later. A flapping network is far more
+    /// common than a real outage, and losing the thought is worse than one
+    /// extra request.
+    private func scheduleRetry(entryID: String, clip: AudioClip) {
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled, let self, self.phase == .idle else { return }
+            await self.process(clip: clip,
+                               existingEntryID: entryID,
+                               allowPaste: false,
+                               allowClipboard: false,
+                               autoRetry: false)
+        }
     }
 
     // MARK: History actions
@@ -421,9 +494,24 @@ final class DictationController: ObservableObject {
         Task {
             do {
                 let clip = try AudioClip.load(url: url)
-                await process(clip: clip, existingEntryID: entry.id, allowPaste: false)
+                await process(clip: clip,
+                              existingEntryID: entry.id,
+                              allowPaste: false,
+                              allowClipboard: true,
+                              autoRetry: false)
             } catch {
                 phase = .idle
+                store.update(id: entry.id,
+                             text: entry.text,
+                             rawText: entry.rawText,
+                             engine: entry.engine,
+                             language: entry.language,
+                             latency: entry.latency,
+                             status: entry.status,
+                             cleanupEngine: entry.cleanupEngine,
+                             error: error.localizedDescription)
+                refreshHistory()
+                lastFailure = error.localizedDescription
                 status(error.localizedDescription)
                 HUDController.shared.hide()
             }
@@ -510,13 +598,18 @@ final class DictationController: ObservableObject {
         }
     }
 
+    /// Recordings whose text never arrived, still on disk.
+    var pendingCount: Int {
+        history.filter { $0.status == .unrecovered && ($0.audioPath?.isEmpty == false) }.count
+    }
+
     /// Shown in the menu so the hotkey is discoverable without opening Settings.
     var hotkeyHint: String {
-        guard let preset = activePreset else {
-            return "No free hotkey — open Settings and pick another"
+        guard !activeHotkey.isEmpty else {
+            return "No free hotkey — open Settings and record another"
         }
         return settings.hotkeyMode == "hold"
-            ? "Hold \(preset.title) to dictate"
-            : "Press \(preset.title) to start and stop"
+            ? "Hold \(activeHotkey) to dictate"
+            : "Press \(activeHotkey) to start and stop"
     }
 }

@@ -154,6 +154,13 @@ struct HistoryView: View {
 
                 metadata(entry)
 
+                if let error = entry.error, !error.isEmpty {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 HStack(spacing: 10) {
                     Button("Copy") { controller.copy(entry) }
                         .buttonStyle(SoftProminentButtonStyle())

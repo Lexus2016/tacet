@@ -46,8 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static func applyActivationPolicy() {
-        let showInDock = AppSettings.shared.showInDock
-        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 
@@ -58,6 +57,9 @@ struct MenuBarView: View {
         Group {
             Text(controller.statusNote)
             Text(controller.hotkeyHint)
+            if controller.pendingCount > 0 {
+                Text("\(controller.pendingCount) recording\(controller.pendingCount == 1 ? "" : "s") waiting — open History")
+            }
             if controller.hotkeyConflict {
                 Text("Hotkey conflict, choose another in Settings")
             }

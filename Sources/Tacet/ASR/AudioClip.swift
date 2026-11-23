@@ -22,6 +22,8 @@ struct AudioClip: Sendable {
     }
 
     static func load(url: URL) throws -> AudioClip {
+        WavRepair.repairIfNeeded(url: url)
+
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
         let frames = AVAudioFrameCount(file.length)

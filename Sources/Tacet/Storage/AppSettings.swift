@@ -92,12 +92,6 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(showHUD, forKey: "showHUD") }
     }
 
-    /// A menu bar only app is invisible until you know where to look. A Dock
-    /// icon is the obvious "it is running" signal and the way back to Settings.
-    @Published var showInDock: Bool {
-        didSet { defaults.set(showInDock, forKey: "showInDock") }
-    }
-
     @Published var keepAudioDays: Int {
         didSet { defaults.set(keepAudioDays, forKey: "keepAudioDays") }
     }
@@ -114,6 +108,11 @@ final class AppSettings: ObservableObject {
 
     @Published var hotkeyModifiers: Int {
         didSet { defaults.set(hotkeyModifiers, forKey: "hotkeyModifiers") }
+    }
+
+    /// Human-readable name of the recorded key, e.g. "Space" or "K".
+    @Published var hotkeyLabel: String {
+        didSet { defaults.set(hotkeyLabel, forKey: "hotkeyLabel") }
     }
 
     // MARK: Derived
@@ -146,11 +145,11 @@ final class AppSettings: ObservableObject {
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
-        showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
         keepAudioDays = defaults.object(forKey: "keepAudioDays") as? Int ?? 7
         hotkeyMode = defaults.string(forKey: "hotkeyMode") ?? "hold"
         hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") as? Int ?? 49
         hotkeyModifiers = defaults.object(forKey: "hotkeyModifiers") as? Int ?? 0x1800 // control + option
+        hotkeyLabel = defaults.string(forKey: "hotkeyLabel") ?? "Space"
     }
 }
 

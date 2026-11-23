@@ -36,15 +36,29 @@ enum LanguagePolicy {
         return ["uk", "ru", "be", "bg"].contains(language)
     }
 
+    /// Scripts where a decisive letter overrides the engine's detection.
+    static let cyrillicLanguages: Set<String> = ["uk", "ru", "be", "bg", "sr", "mk", "kk", "ky", "tg", "mn"]
+
+    static func scriptMatches(_ language: String, _ text: String) -> Bool {
+        cyrillicLanguages.contains(language) == isCyrillic(text)
+    }
+
+    /// The most likely confusion partner for an engine that is unsure.
+    /// Not a claim that they sound alike — just where the extra check is worth
+    /// one request.
+    private static let siblings: [String: String] = [
+        "uk": "ru", "ru": "uk", "be": "ru", "bg": "ru", "mk": "bg",
+        "pl": "uk", "cs": "sk", "sk": "cs", "hr": "sr", "sl": "hr",
+    ]
+
     /// The second language to try, or nil when a second decode would add
     /// nothing. `expected` is the language last used in this app.
     static func alternate(for transcript: Transcript, expected: String? = nil) -> String? {
         let detected = normalize(transcript.language)
-        let verdict = cyrillicVerdict(transcript.text)
 
         // Decisive script evidence: the detected language is confirmed, so a
         // second decode would only add cost and a chance to corrupt good text.
-        if let verdict {
+        if let verdict = cyrillicVerdict(transcript.text) {
             return verdict == detected ? nil : verdict
         }
 
@@ -52,16 +66,17 @@ enum LanguagePolicy {
         if let expected, detected == expected {
             return nil
         }
-        guard isCyrillic(transcript.text) else { return nil }
 
-        switch detected {
-        case "uk": return "ru"
-        case "ru": return "uk"
-        case .some(let other) where isConfusable(other):
-            return expected ?? "uk"
-        default:
+        // Ambiguous text: the remembered language is the next strongest
+        // evidence, as long as it writes the script we actually see.
+        if let expected, scriptMatches(expected, transcript.text) {
+            return expected
+        }
+
+        guard let detected, let sibling = siblings[detected], sibling != expected else {
             return nil
         }
+        return sibling
     }
 
     /// Score used to choose between two decodes of the same audio. The engine

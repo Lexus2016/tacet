@@ -104,14 +104,11 @@ struct GeneralSettingsView: View {
     var body: some View {
         VStack(spacing: 18) {
             SoftCard(title: "Dictation", systemImage: "command") {
-                SoftRow("Hotkey") {
-                    Picker("", selection: hotkeyBinding) {
-                        ForEach(HotkeyPreset.allCases) { preset in
-                            Text(preset.title).tag(preset)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 130)
+                SoftRow("Hotkey", subtitle: "Click, then press the combination you want") {
+                    HotkeyRecorder(keyCode: $settings.hotkeyKeyCode,
+                                   modifiers: $settings.hotkeyModifiers,
+                                   label: $settings.hotkeyLabel,
+                                   onChange: { controller.configureHotkey() })
                 }
 
                 SoftDivider()
@@ -132,21 +129,20 @@ struct GeneralSettingsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.warning)
-                        Text("This hotkey is already taken by another app.")
+                        Text("This combination is taken by another app.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
                     .padding(.vertical, 7)
-                } else if let active = controller.activePreset,
-                          let chosen = HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
-                                                             modifiers: settings.hotkeyModifiers),
-                          active != chosen {
+                } else if !controller.activeHotkey.isEmpty,
+                          controller.activeHotkey != HotkeyFormat.title(modifiers: settings.hotkeyModifiers,
+                                                                         label: settings.hotkeyLabel) {
                     SoftDivider()
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle.fill")
                             .foregroundStyle(Theme.accent)
-                        Text("\(chosen.title) is taken by another app. Tacet is listening on \(active.title) instead.")
+                        Text("\(HotkeyFormat.title(modifiers: settings.hotkeyModifiers, label: settings.hotkeyLabel)) is taken. Tacet is listening on \(controller.activeHotkey).")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -169,8 +165,8 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
-                SoftRow("Re-check Ukrainian vs Russian",
-                        subtitle: "One extra request, only when the script check is ambiguous") {
+                SoftRow("Second language check",
+                        subtitle: "When the script is ambiguous, try the likely alternative: Ukrainian/Russian, Belarusian/Russian, Polish/Ukrainian and similar pairs") {
                     Toggle("", isOn: $settings.dualLanguageCheck)
                         .labelsHidden()
                         .toggleStyle(.switch)
@@ -220,18 +216,6 @@ struct GeneralSettingsView: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                }
-
-                SoftDivider()
-
-                SoftRow("Show in Dock", subtitle: "Click the icon to open settings") {
-                    Toggle("", isOn: $settings.showInDock)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .onChange(of: settings.showInDock) { _, _ in
-                            AppDelegate.applyActivationPolicy()
-                        }
                 }
 
                 SoftDivider()
@@ -288,19 +272,6 @@ struct GeneralSettingsView: View {
             micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
             accessibilityGranted = TextInserter.isAccessibilityTrusted()
         }
-    }
-
-    private var hotkeyBinding: Binding<HotkeyPreset> {        Binding(
-            get: {
-                HotkeyPreset.matching(keyCode: settings.hotkeyKeyCode,
-                                      modifiers: settings.hotkeyModifiers) ?? .controlOptionSpace
-            },
-            set: { preset in
-                settings.hotkeyKeyCode = Int(preset.keyCode)
-                settings.hotkeyModifiers = Int(preset.modifiers)
-                controller.configureHotkey()
-            }
-        )
     }
 
     private func openAccessibilityPane() {
