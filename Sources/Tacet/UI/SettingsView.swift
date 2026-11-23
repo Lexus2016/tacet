@@ -55,7 +55,7 @@ struct SettingsView: View {
                 )
             )
         }
-        .frame(width: 620, height: 660)
+        .frame(width: 700, height: 700)
         .glassWindow()
         .tint(Theme.accent)
     }
@@ -302,18 +302,6 @@ struct GeneralSettingsView: View {
             }
 
             SoftCard(title: "Visual", systemImage: "sparkles") {
-                SoftRow("Indicator", subtitle: indicatorDetail) {
-                    Picker("", selection: $settings.indicatorStyle) {
-                        ForEach(IndicatorStyle.allCases) { style in
-                            Text(LocalizedStringKey(style.title)).tag(style.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
-                }
-
-                SoftDivider()
-
                 SoftRow("Theme") {
                     Picker("", selection: $settings.indicatorTheme) {
                         ForEach(IndicatorTheme.allCases) { theme in

@@ -225,18 +225,15 @@ final class DictationController: ObservableObject {
     private func hotkeyReleased() {
         hotkeyIsDown = false
 
+        // In toggle mode releasing the key is not a stop signal, including for
+        // a modifier-only hotkey.
+        guard settings.hotkeyMode == "hold" else { return }
+
         if phase == .preparing {
             stopRequested = true
             return
         }
         guard phase == .recording else { return }
-
-        if isModifierOnlyHotkey {
-            stopRecording()
-            return
-        }
-
-        guard settings.hotkeyMode == "hold" else { return }
         stopRecording()
     }
 

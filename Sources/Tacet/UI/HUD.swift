@@ -485,6 +485,11 @@ final class HUDController {
                       spinner: Bool = false) {
         hideTask?.cancel()
 
+        let desiredTheme = IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
+        if model.theme != desiredTheme {
+            model.theme = desiredTheme
+            closePanel()
+        }
         model.title = NSLocalizedString(title, comment: "")
         model.symbol = symbol
         model.tint = tint
@@ -554,7 +559,7 @@ final class HUDController {
         if let panel, model.style == desired { return panel }
 
         closePanel()
-        model.style = desired
+        model.style = .island
         model.theme = IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
 
         let panel = NSPanel(
@@ -595,7 +600,7 @@ final class HUDController {
         case .minimal:
             size = NSSize(width: max(52, fitting.width), height: max(26, fitting.height))
         case .island, .overlay:
-            size = NSSize(width: max(140, fitting.width), height: max(38, fitting.height))
+            size = NSSize(width: max(140, fitting.width + 24), height: max(38, fitting.height))
         }
         panel.setContentSize(size)
     }

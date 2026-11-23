@@ -216,7 +216,7 @@ struct ChainSettingsView: View {
     var body: some View {
         VStack(spacing: 14) {
             SoftCard(title: "Chain", systemImage: "point.3.connected.trianglepath.dotted") {
-                Text("The first engine that returns text wins. Only configured providers are listed; failed ones are skipped.")
+                Text("These are the speech-recognition engines used for voice transcription, tried in this order. Only configured providers are listed; failed ones are skipped.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

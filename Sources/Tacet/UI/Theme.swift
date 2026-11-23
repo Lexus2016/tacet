@@ -169,7 +169,7 @@ struct SoftCard<Content: View>: View {
                     }
                     Text(LocalizedStringKey(title))
                         .textCase(.uppercase)
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(.secondary)
                 }
@@ -220,10 +220,10 @@ struct SoftRow<Control: View>: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                 if let subtitle {
                     Text(LocalizedStringKey(subtitle))
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
