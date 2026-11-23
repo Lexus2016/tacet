@@ -65,11 +65,19 @@ for ARCH in "${ARCHS_LIST[@]}"; do
 
   echo "Signing check for ${ARCH}…"
   codesign --verify --deep --strict "$APP" || { echo "Signature is not valid" >&2; exit 1; }
-  if ! codesign -dv --verbose=4 "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
-    echo "The app is not signed with a Developer ID; refusing to publish." >&2
-    exit 1
-  fi
-  lipo -info "$APP/Contents/MacOS/Tacet" | grep -q "$ARCH" || { echo "Wrong architecture for $ARCH" >&2; exit 1; }
+  SIGNATURE_INFO=$(codesign -dv --verbose=4 "$APP" 2>&1 || true)
+  case "$SIGNATURE_INFO" in
+    *"Authority=Developer ID Application"*) ;;
+    *)
+      echo "The app is not signed with a Developer ID; refusing to publish." >&2
+      exit 1
+      ;;
+  esac
+  ARCH_INFO=$(lipo -info "$APP/Contents/MacOS/Tacet")
+  case "$ARCH_INFO" in
+    *"$ARCH"*) ;;
+    *) echo "Wrong architecture for ${ARCH}: $ARCH_INFO" >&2; exit 1 ;;
+  esac
 
   if [ -n "${NOTARY_PROFILE:-}" ]; then
     echo "Notarizing ${ARCH}…"
