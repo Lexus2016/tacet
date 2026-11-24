@@ -14,6 +14,8 @@ Halte die rechte Befehlstaste gedrückt, sprich und lass sie los. Tacet fügt de
 
 Markiere einen Satz und bitte Tacet, ihn zu kürzen, freundlicher zu formulieren oder ins Spanische zu übersetzen. Richte dafür einmal einen Textdienst ein.
 
+[Was es löst](https://lexus2016.github.io/tacet/?lang=de#features)
+
 ## Von der Stimme zum Satz
 
 Sieh dir den Aufnahmeindikator, die automatische Spracherkennung und ein Übersetzungsbeispiel an.

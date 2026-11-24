@@ -17,6 +17,8 @@ Hold the right Command key, speak, then let go. Tacet puts your words into the c
 
 Select a sentence and tell Tacet what to do with it: “Make this shorter,” “Make it friendlier,” or “Translate this into Spanish.” Voice edits and translation use a text service you set up. For dictation, you can recognize speech on your Mac with Parakeet or connect an online speech service.
 
+[See the voice features in GIFs](https://lexus2016.github.io/tacet/#features)
+
 ## From voice to a sentence
 
 See the recording indicator, automatic language detection and an example of optional translation.

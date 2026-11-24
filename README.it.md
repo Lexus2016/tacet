@@ -14,6 +14,8 @@ Tieni premuto il tasto Comando destro, parla e rilascialo. Tacet inserisce le tu
 
 Seleziona una frase e dì «Accorciala», «Usa un tono più amichevole» o «Traduci in spagnolo». Per modificare il testo con la voce, configura prima un servizio di testo.
 
+[Cosa risolve](https://lexus2016.github.io/tacet/?lang=it#features)
+
 ## Dalla voce a una frase
 
 Guarda l’indicatore di registrazione, il rilevamento automatico della lingua e un esempio di traduzione.

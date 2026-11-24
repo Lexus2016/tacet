@@ -14,6 +14,8 @@ Maintenez la touche Commande droite, parlez, puis relâchez-la. Tacet insère vo
 
 Sélectionnez une phrase et dites « Fais plus court », « Rends le ton plus chaleureux » ou « Traduis en espagnol ». Configurez un service de texte pour utiliser ces commandes.
 
+[Ce que ça change](https://lexus2016.github.io/tacet/?lang=fr#features)
+
 ## De la voix à la phrase
 
 Découvrez l’indicateur d’enregistrement, la détection automatique de la langue et un exemple de traduction.

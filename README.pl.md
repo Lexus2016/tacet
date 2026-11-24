@@ -14,6 +14,8 @@ Przytrzymaj prawy klawisz Command, powiedz, co chcesz napisać, i puść klawisz
 
 Zaznacz zdanie i powiedz „Skróć to”, „Napisz to przyjaźniej” lub „Przetłumacz na hiszpański”. Aby wprowadzać zmiany głosem, skonfiguruj usługę przetwarzania tekstu.
 
+[W czym pomaga](https://lexus2016.github.io/tacet/?lang=pl#features)
+
 ## Od głosu do gotowego zdania
 
 Zobacz wskaźnik nagrywania, automatyczne wykrywanie języka i przykład tłumaczenia.

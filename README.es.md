@@ -14,6 +14,8 @@ Mantén pulsada la tecla Comando derecha, habla y suéltala. Tacet escribe tus p
 
 Selecciona una frase y di «Hazla más corta», «Dale un tono más cercano» o «Tradúcela al español». Para editar con la voz, configura antes un servicio de texto.
 
+[Qué resuelve](https://lexus2016.github.io/tacet/?lang=es#features)
+
 ## De la voz a una frase
 
 Mira el indicador de grabación, la detección automática del idioma y un ejemplo de traducción opcional.
