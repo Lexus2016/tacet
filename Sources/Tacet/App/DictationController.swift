@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 
 @MainActor
@@ -16,6 +17,7 @@ final class DictationController: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var history: [HistoryEntry] = []
     @Published private(set) var hotkeyConflict = false
+    @Published private(set) var pasteHotkeyAvailable = false
     @Published private(set) var statusNote: String = "Ready"
     @Published private(set) var lastFailure: String?
 
@@ -27,6 +29,8 @@ final class DictationController: ObservableObject {
     private let translator = Translator()
     private let selectionEditor = SelectionEditor()
     private let hotkey = HotkeyManager()
+    private let pasteHotkey = HotkeyManager(identifier: 2)
+    private var pastingLast = false
     private let languageMemory = LanguageMemory()
 
     private var isStarting = false
@@ -153,6 +157,12 @@ final class DictationController: ObservableObject {
     // MARK: Hotkey
 
     func configureHotkey() {
+        pasteHotkey.unregister()
+        defer {
+            pasteHotkey.onPress = { [weak self] in self?.pasteLast() }
+            pasteHotkeyAvailable = pasteHotkey.register(keyCode: UInt32(kVK_ANSI_V),
+                                                       modifiers: UInt32(controlKey | optionKey | cmdKey))
+        }
         hotkey.onPress = { [weak self] in self?.hotkeyPressed() }
         hotkey.onRelease = { [weak self] in self?.hotkeyReleased() }
         hotkey.onCancel = { [weak self] in self?.cancelModifierPress() }
@@ -424,17 +434,14 @@ final class DictationController: ObservableObject {
                 notes.append("Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts")
             }
 
-            let configuration = CleanupConfiguration(
-                provider: settings.cleanupProvider,
-                baseURL: settings.openAIChatBaseURL,
-                model: settings.chatModel(for: settings.cleanupProvider),
-                timeout: settings.cleanupTimeout
-            )
+            let configuration = settings.cleanupConfiguration
 
             let editingSelection = allowPaste && settings.selectionEditing && selection != .none
             if !editingSelection, settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
-                let cleaned = await cleanupPipeline.clean(text, configuration: configuration)
+                let cleaned = await cleanupPipeline.clean(text, configuration: configuration,
+                                                          fallback: settings.cleanupFallback)
+                guard !Task.isCancelled else { return }
                 if cleaned.changed {
                     text = cleaned.text
                     cleanupEngine = cleaned.engine
@@ -748,6 +755,33 @@ final class DictationController: ObservableObject {
 
     // MARK: History actions
 
+    static let pasteShortcut = "⌃⌥⌘V"
+
+    func pasteLast() {
+        guard phase == .idle, !pastingLast, !updateRestart.isRestarting else { return }
+        guard let last = store.last() else {
+            status(String(localized: "No dictation to paste yet"))
+            return
+        }
+        guard TextInserter.isAccessibilityTrusted() else {
+            status(String(localized: "Enable Accessibility in Settings to paste the last dictation"))
+            return
+        }
+        guard let focus = SelectionReader.Focus(),
+              focus.application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              focus.element != nil else {
+            status(String(localized: "Focus a text field to paste the last dictation"))
+            return
+        }
+        pastingLast = true
+        Task {
+            defer { pastingLast = false }
+            if !(await TextInserter.paste(last.text, in: focus)) {
+                status(String(localized: "Could not paste the last dictation"))
+            }
+        }
+    }
+
     func copyLast() {
         guard let last = store.last(), !last.text.isEmpty else {
             status("Nothing to copy yet")
@@ -834,7 +868,7 @@ final class DictationController: ObservableObject {
     // MARK: Helpers
 
     func reserveUpdateRestart() -> Bool {
-        updateRestart.reserve(isIdle: phase == .idle && !isStarting)
+        updateRestart.reserve(isIdle: phase == .idle && !isStarting && !pastingLast)
     }
 
     func releaseUpdateRestart() {

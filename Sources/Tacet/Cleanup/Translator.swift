@@ -9,41 +9,56 @@ struct TranslationOutcome: Sendable {
 /// in. Runs after cleanup, uses the same chat provider, and never replaces good
 /// text with a suspicious answer: any failure returns the original.
 final class Translator {
-    private var session: URLSession { SharedSession.cloud }
+    private let session: URLSession
+
+    init(session: URLSession = SharedSession.cloud) {
+        self.session = session
+    }
 
     func translate(_ text: String,
                    to target: String,
-                   configuration: CleanupConfiguration) async -> TranslationOutcome {
+                   configuration: CleanupConfiguration?,
+                   fallback: CleanupConfiguration? = nil,
+                   sourceLanguage: String? = nil,
+                   correctRecognition: Bool = false) async -> TranslationOutcome {
         let original = TranslationOutcome(text: text, translated: false)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, target != "auto" else { return original }
 
         // Already in the target language: no request needed.
-        if let detected = TextLanguage.detect(trimmed), detected == target {
+        if (sourceLanguage ?? TextLanguage.detect(trimmed)) == target {
             return original
         }
 
-        guard let spec = ProviderCatalog.spec(configuration.provider) else { return original }
+        let backup = fallback.flatMap { $0.matches(configuration) ? nil : $0 }
+        for model in [configuration, backup].compactMap({ $0 }) {
+            guard !Task.isCancelled else { break }
+            if let answer = await attempt(trimmed, to: target, configuration: model, correctRecognition: correctRecognition) {
+                return TranslationOutcome(text: answer, translated: true)
+            }
+        }
+        return original
+    }
+
+    private func attempt(_ trimmed: String, to target: String, configuration: CleanupConfiguration,
+                         correctRecognition: Bool) async -> String? {
+        guard let endpoint = configuration.target else { return nil }
+        let spec = endpoint.spec
         let key = ProviderCatalog.key(for: spec)
-        if spec.requiresKey, key == nil { return original }
+        if spec.requiresKey, key == nil { return nil }
 
-        let base = configuration.provider == "openai" ? configuration.baseURL : spec.baseURL
-        guard let url = spec.endpoint("chat/completions", baseURL: base) else {
-            return original
-        }
-
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: endpoint.endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = max(4, configuration.timeout + 2)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
-            "model": configuration.model,
+            "model": endpoint.model,
             "temperature": 0,
             "max_tokens": 4096,
             "messages": [
-                ["role": "system", "content": Self.systemPrompt(target: target)],
+                ["role": "system", "content": Self.systemPrompt(target: target, correctRecognition: correctRecognition)],
                 ["role": "user", "content": trimmed],
             ],
         ]
@@ -51,28 +66,28 @@ final class Translator {
 
         let preparedRequest = request
         guard let answer = try? await withTimeout(max(4, configuration.timeout + 2), operation: {
-            try await Self.send(preparedRequest, configuration: configuration, session: self.session)
-        }) else { return original }
+            try await Self.send(preparedRequest, provider: spec.id, model: endpoint.model, session: self.session)
+        }), !Task.isCancelled else { return nil }
 
         let normalized = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return original }
+        guard !normalized.isEmpty else { return nil }
 
         let ratio = Double(normalized.count) / Double(max(1, trimmed.count))
-        guard ratio >= 0.35, ratio <= 2.2 else { return original }
+        guard ratio >= 0.35, ratio <= 2.2 else { return nil }
 
         // If the detector is confident the answer is in another language, the
         // model ignored the instruction: keep the original.
         if let detected = TextLanguage.detect(normalized), detected != target {
-            return original
+            return nil
         }
 
-        return TranslationOutcome(text: normalized, translated: true)
+        return normalized
     }
 
-    private static func send(_ request: URLRequest, configuration: CleanupConfiguration,
+    private static func send(_ request: URLRequest, provider: String, model: String,
                              session: URLSession) async throws -> String {
         let (data, response) = try await ProviderHealth.data(
-            for: request, provider: configuration.provider, model: configuration.model,
+            for: request, provider: provider, model: model,
             capability: .chat, session: session
         )
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -88,13 +103,13 @@ final class Translator {
         return content
     }
 
-    private static func systemPrompt(target: String) -> String {
+    private static func systemPrompt(target: String, correctRecognition: Bool) -> String {
         """
         Translate the user's text into \(languageName(target)).
         Return ONLY the translation: no quotes, no explanations, no preamble.
         Keep the meaning, names, numbers, URLs, code and formatting exactly.
         If the text is already in \(languageName(target)), return it unchanged.
-        """
+        """ + (correctRecognition ? "\nFix obvious transcription mistakes without adding or removing meaning." : "")
     }
 
     static func languageName(_ code: String) -> String {

@@ -135,39 +135,61 @@ enum Plausibility {
 private final class RaceBox<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Error>?
-    private var finished = false
+    private var result: Result<T, Error>?
+    private var tasks: [Task<Void, Never>] = []
 
-    init(_ continuation: CheckedContinuation<T, Error>) {
+    func start(_ continuation: CheckedContinuation<T, Error>, tasks makeTasks: () -> [Task<Void, Never>]) {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return
+        }
         self.continuation = continuation
+        tasks = makeTasks()
+        lock.unlock()
     }
 
-    func resume(_ result: Result<T, Error>) {
+    func finish(_ result: Result<T, Error>) {
         lock.lock()
-        defer { lock.unlock() }
-        guard !finished, let continuation else { return }
-        finished = true
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+        self.result = result
+        let continuation = continuation
+        let tasks = tasks
         self.continuation = nil
-        continuation.resume(with: result)
+        self.tasks = []
+        lock.unlock()
+        tasks.forEach { $0.cancel() }
+        continuation?.resume(with: result)
     }
 }
 
 func withTimeout<T: Sendable>(_ seconds: TimeInterval,
                               operation: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withCheckedThrowingContinuation { continuation in
-        let box = RaceBox(continuation)
-
-        let work = Task.detached {
-            do {
-                box.resume(.success(try await operation()))
-            } catch {
-                box.resume(.failure(error))
+    let box = RaceBox<T>()
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+            box.start(continuation) {
+                let work = Task.detached {
+                    do {
+                        try Task.checkCancellation()
+                        box.finish(.success(try await operation()))
+                    } catch {
+                        box.finish(.failure(error))
+                    }
+                }
+                let timer = Task.detached {
+                    do { try await Task.sleep(for: .seconds(max(0.05, seconds))) }
+                    catch { return }
+                    box.finish(.failure(RecognitionError.timedOut("the engine")))
+                }
+                return [work, timer]
             }
         }
-
-        Task.detached {
-            try? await Task.sleep(nanoseconds: UInt64(max(0.05, seconds) * 1_000_000_000))
-            work.cancel()
-            box.resume(.failure(RecognitionError.timedOut("the engine")))
-        }
+    } onCancel: {
+        box.finish(.failure(CancellationError()))
     }
 }

@@ -1,0 +1,17 @@
+"Switch keyboard" = "Перемкнути клавіатуру";
+"Shift" = "Велика літера";
+"Delete" = "Видалити";
+"Space" = "Пробіл";
+"Keyboard language" = "Мова клавіатури";
+"Return" = "Новий рядок";
+"Starting…" = "Починаємо…";
+"Stop dictation" = "Зупинити диктування";
+"Transcribing…" = "Розпізнаємо…";
+"Dictate" = "Диктувати";
+"Allow Full Access in Settings for dictation." = "Дозвольте повний доступ у Налаштуваннях.";
+"Opens Tacet to enable dictation." = "Відкриває Tacet, щоб увімкнути диктування.";
+"The previous dictation is finishing." = "Завершується попередній диктант.";
+"Open Tacet or use the Action Button to start dictation." = "Відкрийте Tacet або скористайтеся кнопкою дії для запуску.";
+"The text field changed. Dictate again here." = "Поле змінилося. Продиктуйте ще раз.";
+"The session ended. Start a new session to dictate." = "Сесія завершилась. Увімкніть нову в Tacet.";
+"Dictation failed. Try again." = "Не вдалося розпізнати мовлення. Спробуйте ще раз.";

@@ -5,6 +5,8 @@ import Foundation
 /// Carbon hotkeys work without Accessibility permission and deliver both press
 /// and release, which is what push-to-talk needs.
 final class HotkeyManager {
+    private static let signature: OSType = 0x5441_4354
+    private let identifier: UInt32
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
     /// Called when a modifier-only press turned out to be a normal shortcut
@@ -24,6 +26,10 @@ final class HotkeyManager {
     private var modifierSawKey = false
     private var modifierPressedKeyCode: UInt16?
     private var pendingPress: DispatchWorkItem?
+
+    init(identifier: UInt32 = 1) {
+        self.identifier = identifier
+    }
 
     deinit {
         unregister()
@@ -127,8 +133,13 @@ final class HotkeyManager {
         let status = InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, context in
-                guard let event, let context else { return noErr }
+                guard let event, let context else { return OSStatus(eventNotHandledErr) }
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(context).takeUnretainedValue()
+                var received = EventHotKeyID()
+                guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                        nil, MemoryLayout<EventHotKeyID>.size, nil, &received) == noErr,
+                      received.signature == HotkeyManager.signature, received.id == manager.identifier
+                else { return OSStatus(eventNotHandledErr) }
                 let kind = GetEventKind(event)
                 DispatchQueue.main.async {
                     if kind == UInt32(kEventHotKeyPressed) {
@@ -150,7 +161,7 @@ final class HotkeyManager {
             return false
         }
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x5441_4354), id: 1) // 'TACT'
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: identifier)
         let registerStatus = RegisterEventHotKey(
             keyCode,
             modifiers,

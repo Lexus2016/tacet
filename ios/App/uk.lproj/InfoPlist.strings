@@ -1,0 +1,2 @@
+"NSMicrophoneUsageDescription" = "Tacet використовує мікрофон під час сесій, які ви вмикаєте для диктування з клавіатури.";
+"NSSpeechRecognitionUsageDescription" = "Tacet використовує розпізнавання мовлення Apple на цьому iPhone, якщо вибрано цей провайдер.";

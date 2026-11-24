@@ -44,6 +44,7 @@ struct ProviderTarget: Hashable, Identifiable, Sendable {
     struct ID: Hashable, Sendable {
         let provider: String
         let capability: ProviderCapability
+        var isCleanupFallback = false
     }
 
     let id: ID
@@ -285,10 +286,20 @@ final class ProviderHealth: ObservableObject {
             if processesText {
                 append(.chat, base: chatBase, path: "chat/completions", model: settings.chatModel(for: spec.id))
             }
+            let fallback = settings.cleanupFallback
+            let usesFallback = fallback?.provider == spec.id && fallback?.matches(settings.cleanupConfiguration) == false
+            if usesFallback, let fallback {
+                result.append(ProviderTarget(
+                    id: .init(provider: spec.id, capability: .chat, isCleanupFallback: true), name: spec.name,
+                    baseURL: ProviderSpec.validBaseURL(chatBase), operationURL: spec.endpoint("chat/completions", baseURL: chatBase),
+                    model: fallback.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                    requiresKey: spec.requiresKey, active: true
+                ))
+            }
             if detectsLanguage {
                 append(.voiceLanguage, base: spec.baseURL, model: settings.openRouterModel)
             }
-            if !transcribes, !processesText, !detectsLanguage,
+            if !transcribes, !processesText, !usesFallback, !detectsLanguage,
                ProviderCatalog.key(for: spec) != nil || ProviderCatalog.isCustom(spec.id) {
                 append(.connection, base: chatBase)
             }
@@ -326,8 +337,12 @@ final class ProviderHealth: ObservableObject {
 
     private func record(_ id: ProviderTarget.ID, request: URLRequest, model: String, started: Date,
                         failure: String?) {
-        guard let target = targets.first(where: { $0.id == id }),
-              target.operationURL == request.url, target.model == model,
+        guard let target = targets.first(where: {
+            $0.id.provider == id.provider && $0.id.capability == id.capability &&
+                $0.operationURL == request.url && $0.model == model
+        }) else { return }
+        let id = target.id
+        guard
               started >= credentialsChanged[id.provider, default: .distantPast],
               started >= lastRequest[id, default: .distantPast] else { return }
         lastRequest[id] = started

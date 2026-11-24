@@ -269,7 +269,8 @@ final class HistoryStore {
 
     func last() -> HistoryEntry? {
         queue.sync {
-            guard let stmt = prepare("SELECT * FROM entries ORDER BY created_at DESC LIMIT 1;") else { return nil }
+            guard let stmt = prepare("SELECT * FROM entries WHERE trim(text) <> '' ORDER BY created_at DESC, rowid DESC LIMIT 1;")
+            else { return nil }
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
             return readRow(stmt)

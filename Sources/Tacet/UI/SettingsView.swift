@@ -145,6 +145,14 @@ struct GeneralSettingsView: View {
                     }
                     .padding(.vertical, 7)
                 }
+
+                SoftDivider()
+                SoftRow("Paste last dictation",
+                        subtitle: controller.pasteHotkeyAvailable ? "Insert the latest transcript into the focused app."
+                            : "This shortcut is in use. You can still paste from the menu bar.") {
+                    Text(DictationController.pasteShortcut)
+                        .foregroundStyle(controller.pasteHotkeyAvailable ? Color.secondary : Theme.warning)
+                }
             }
 
             SoftCard(title: "Language", systemImage: "globe") {
@@ -407,11 +415,10 @@ struct GeneralSettingsView: View {
 
 struct CleanupSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    private var providers: [ProviderSpec] {
-        ProviderCatalog.chatProviders.filter { ProviderCatalog.isConfigured($0) }
-    }
+    @ObservedObject private var customProviders = CustomProviderStore.shared
 
     var body: some View {
+        let primary = settings.cleanupProvider
         VStack(spacing: 18) {
             SoftCard(title: "Cleanup", systemImage: "wand.and.stars") {
                 SoftRow("Clean up after recognition",
@@ -422,34 +429,38 @@ struct CleanupSettingsView: View {
                         .controlSize(.small)
                 }
 
-                SoftDivider()
-
-                Text("The cleanup model never translates, never summarises, and its answer is discarded when it looks wrong or takes too long. The raw transcript stays available in History.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 7)
-            }
-
-            SoftCard(title: "Model", systemImage: "brain") {
-                SoftRow("Provider", subtitle: "Set the model and credentials in Providers.") {
-                    SettingsPicker(title: "Choose a provider", selection: $settings.cleanupProvider,
-                                   options: providers.map { .init($0.id, name: $0.name) })
-                        .frame(width: Theme.settingsControlWidth)
-                }
-
-                if providers.contains(where: { $0.id == settings.cleanupProvider }) {
+                Group {
                     SoftDivider()
-                    SoftRow("Chat model") {
-                        let model = settings.chatModel(for: settings.cleanupProvider)
-                        Text(model.isEmpty ? String(localized: "Choose a model first.") : model)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                    modelRow("Primary model", provider: $settings.cleanupProvider, model: Binding(
+                        get: { settings.chatModels[primary] ?? "" },
+                        set: { settings.setChatModel($0, for: primary) }
+                    ), placeholder: ProviderCatalog.defaultChatModel(for: primary))
+
+                    SoftDivider()
+                    SoftRow("Use fallback model", subtitle: "Try a second model if the primary attempt fails.") {
+                        Toggle("Use fallback model", isOn: $settings.cleanupFallbackEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+                    if settings.cleanupFallbackEnabled {
+                        modelRow("Fallback model", provider: Binding(
+                            get: { settings.cleanupFallbackProvider },
+                            set: {
+                                guard $0 != settings.cleanupFallbackProvider else { return }
+                                settings.cleanupFallbackProvider = $0
+                                settings.cleanupFallbackModel = ""
+                            }
+                        ), model: $settings.cleanupFallbackModel, placeholder: settings.defaultCleanupFallbackModel)
+                        if settings.cleanupFallback?.matches(settings.cleanupConfiguration) == true {
+                            Text("Choose a different model or provider for the fallback.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.warning)
+                        }
                     }
 
                     SoftDivider()
-                    SoftRow("Timeout", subtitle: "On timeout the raw transcript is inserted") {
+                    SoftRow("Time per model", subtitle: "If cleanup fails, Tacet uses the original transcript.") {
                         Stepper(value: $settings.cleanupTimeout, in: 1...10, step: 0.5) {
                             Text(settings.cleanupTimeout.formatted(.number.precision(.fractionLength(1))) + " " +
                                  String(localized: "s"))
@@ -461,6 +472,48 @@ struct CleanupSettingsView: View {
 
                     SoftDivider()
                     CleanupTestRow()
+                }
+                .disabled(!settings.cleanupEnabled)
+            }
+        }
+    }
+
+    private func modelRow(_ title: String, provider: Binding<String>, model: Binding<String>,
+                          placeholder: String) -> some View {
+        SoftRow(title, subtitle: "Save provider keys in Providers.") {
+            VStack(alignment: .trailing, spacing: 6) {
+                SettingsPicker(title: "Choose a provider", selection: provider,
+                               options: ProviderCatalog.chatProviders.map { .init($0.id, name: $0.name) })
+                CleanupModelField(model: model, placeholder: placeholder, spec: ProviderCatalog.spec(provider.wrappedValue),
+                                  baseURL: provider.wrappedValue == EngineID.openAI ? settings.openAIChatBaseURL : nil)
+                    .id(provider.wrappedValue)
+            }
+            .frame(width: Theme.settingsControlWidth)
+        }
+    }
+}
+
+private struct CleanupModelField: View {
+    @Binding var model: String
+    let placeholder: String
+    let spec: ProviderSpec?
+    let baseURL: String?
+    @State private var choosing = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Model ID", text: $model, prompt: Text(placeholder.isEmpty ? String(localized: "Model ID") : placeholder))
+                .font(.caption.monospaced())
+            if let spec {
+                Button {
+                    choosing = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                }
+                .buttonStyle(SoftButtonStyle())
+                .accessibilityLabel("Browse models")
+                .sheet(isPresented: $choosing) {
+                    ModelChooser(spec: spec, baseURL: baseURL, selection: $model)
                 }
             }
         }
@@ -502,15 +555,12 @@ private struct CleanupTestRow: View {
         busy = true
         message = nil
 
-        let configuration = CleanupConfiguration(
-            provider: settings.cleanupProvider,
-            baseURL: settings.openAIChatBaseURL,
-            model: settings.chatModel(for: settings.cleanupProvider),
-            timeout: settings.cleanupTimeout
-        )
+        let configuration = settings.cleanupConfiguration
+        let fallback = settings.cleanupFallback
 
         Task {
-            let result = await CleanupPipeline().clean("привіт як справи це тест пунктуації", configuration: configuration)
+            let result = await CleanupPipeline().clean("привіт як справи це тест пунктуації",
+                                                       configuration: configuration, fallback: fallback)
             if result.engine == "none" {
                 message = "Failed. The raw transcript would be used instead. Check the model name and the key."
             } else {

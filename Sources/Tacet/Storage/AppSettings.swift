@@ -66,6 +66,18 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(cleanupProvider, forKey: "cleanupProvider") }
     }
 
+    @Published var cleanupFallbackEnabled: Bool {
+        didSet { defaults.set(cleanupFallbackEnabled, forKey: "cleanupFallbackEnabled") }
+    }
+
+    @Published var cleanupFallbackProvider: String {
+        didSet { defaults.set(cleanupFallbackProvider, forKey: "cleanupFallbackProvider") }
+    }
+
+    @Published var cleanupFallbackModel: String {
+        didSet { defaults.set(cleanupFallbackModel, forKey: "cleanupFallbackModel") }
+    }
+
     /// Chat model per provider. One provider may be used for cleanup and
     /// another for dictation, so the model is stored per provider, not globally.
     @Published var chatModels: [String: String] {
@@ -225,9 +237,26 @@ final class AppSettings: ObservableObject {
         cleanupBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? openAIBaseURL : cleanupBaseURL
     }
 
+    var cleanupConfiguration: CleanupConfiguration {
+        CleanupConfiguration(provider: cleanupProvider, baseURL: openAIChatBaseURL,
+                             model: chatModel(for: cleanupProvider), timeout: cleanupTimeout)
+    }
+
+    var cleanupFallback: CleanupConfiguration? {
+        guard cleanupEnabled, cleanupFallbackEnabled else { return nil }
+        return CleanupConfiguration(provider: cleanupFallbackProvider, baseURL: openAIChatBaseURL,
+                                    model: cleanupFallbackModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? defaultCleanupFallbackModel : cleanupFallbackModel,
+                                    timeout: cleanupTimeout)
+    }
+
+    var defaultCleanupFallbackModel: String {
+        cleanupFallbackProvider == EngineID.groq ? "openai/gpt-oss-20b"
+            : ProviderCatalog.defaultChatModel(for: cleanupFallbackProvider)
+    }
+
     var isCleanupConfigured: Bool {
-        guard cleanupEnabled, let spec = ProviderCatalog.spec(cleanupProvider) else { return false }
-        return ProviderCatalog.isConfigured(spec) && !chatModel(for: cleanupProvider).isEmpty
+        cleanupEnabled && (cleanupConfiguration.isConfigured || cleanupFallback?.isConfigured == true)
     }
 
     // MARK: Init
@@ -244,6 +273,9 @@ final class AppSettings: ObservableObject {
         cloudTimeout = defaults.object(forKey: "cloudTimeout") as? Double ?? 20
         cleanupEnabled = defaults.object(forKey: "cleanupEnabled") as? Bool ?? true
         cleanupProvider = defaults.string(forKey: "cleanupProvider") ?? "groq"
+        cleanupFallbackEnabled = defaults.bool(forKey: "cleanupFallbackEnabled")
+        cleanupFallbackProvider = defaults.string(forKey: "cleanupFallbackProvider") ?? "groq"
+        cleanupFallbackModel = defaults.string(forKey: "cleanupFallbackModel") ?? ""
 
         var models = defaults.dictionary(forKey: "chatModels") as? [String: String] ?? [:]
         if let legacy = defaults.string(forKey: "cleanupModel"), !legacy.isEmpty, models["groq"] == nil {

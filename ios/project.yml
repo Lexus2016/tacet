@@ -1,0 +1,77 @@
+name: Tacet-iOS
+options:
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "12"
+packages:
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    exactVersion: "0.18.4"
+targets:
+  Tacet:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: [Info.plist]
+      - path: Shared
+      - path: ../Sources/Tacet/ASR
+      - path: ../Sources/Tacet/Cleanup
+      - path: ../Sources/Tacet/Providers
+      - path: ../Sources/Tacet/Storage
+      - path: ../Sources/Tacet/Audio/WavRepair.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Shared/Dictation.entitlements
+        OTHER_LDFLAGS: ["-lsqlite3"]
+    dependencies:
+      - package: FluidAudio
+        product: FluidAudio
+      - target: TacetKeyboard
+        embed: true
+  TacetKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard
+        excludes: [Info.plist]
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet.ios.keyboard
+        INFOPLIST_FILE: Keyboard/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Shared/Dictation.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+  TacetMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Tacet
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Tacet-iOS:
+    build:
+      targets:
+        Tacet: all
+        TacetMobileTests: [test]
+    test:
+      config: Debug
+      targets:
+        - TacetMobileTests

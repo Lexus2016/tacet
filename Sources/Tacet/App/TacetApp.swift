@@ -102,6 +102,13 @@ struct MenuBarView: View {
                 controller.copyLast()
             }
 
+            Button(controller.pasteHotkeyAvailable
+                   ? String(localized: "Paste last dictation") + "   " + DictationController.pasteShortcut
+                   : String(localized: "Paste last dictation")) {
+                controller.pasteLast()
+            }
+            .disabled(controller.phase != .idle)
+
             Button("History…") {
                 AppWindows.shared.showHistory()
             }

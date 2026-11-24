@@ -59,6 +59,7 @@ private final class TemporaryPasteText: NSObject, NSPasteboardItemDataProvider {
 
 @MainActor
 enum TemporaryClipboard {
+    private static var inUse = false
     enum SelectionCopy: Equatable {
         case unchanged
         case text(String)
@@ -66,7 +67,9 @@ enum TemporaryClipboard {
     }
 
     static func paste(_ text: String, on pasteboard: NSPasteboard, send: () -> Bool) async -> Bool {
-        guard !Task.isCancelled, let snapshot = ClipboardSnapshot(pasteboard) else { return false }
+        guard !inUse, !Task.isCancelled, let snapshot = ClipboardSnapshot(pasteboard) else { return false }
+        inUse = true
+        defer { inUse = false }
 
         let provider = TemporaryPasteText(text)
         let item = NSPasteboardItem()
@@ -103,8 +106,11 @@ enum TemporaryClipboard {
     }
 
     static func readSelection(on pasteboard: NSPasteboard, send: () -> Bool) async -> SelectionCopy {
-        guard !Task.isCancelled, let snapshot = ClipboardSnapshot(pasteboard),
-              pasteboard.changeCount == snapshot.changeCount, send() else { return .unavailable }
+        guard !inUse, !Task.isCancelled, let snapshot = ClipboardSnapshot(pasteboard),
+              pasteboard.changeCount == snapshot.changeCount else { return .unavailable }
+        inUse = true
+        defer { inUse = false }
+        guard send() else { return .unavailable }
 
         let clock = ContinuousClock()
         let deadline = clock.now + .milliseconds(550)

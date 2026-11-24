@@ -15,53 +15,80 @@ struct CleanupConfiguration: Sendable {
     let baseURL: String
     let model: String
     let timeout: TimeInterval
+
+    var target: (spec: ProviderSpec, endpoint: URL, model: String)? {
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, let spec = ProviderCatalog.spec(provider), spec.supportsChat,
+              let endpoint = spec.endpoint("chat/completions",
+                                           baseURL: spec.id == EngineID.openAI ? baseURL : nil)
+        else { return nil }
+        return (spec, endpoint, model)
+    }
+
+    var isConfigured: Bool {
+        guard let target else { return false }
+        return ProviderCatalog.isConfigured(target.spec)
+    }
+
+    func matches(_ other: CleanupConfiguration?) -> Bool {
+        guard let target, let other = other?.target else { return false }
+        return target.spec.id == other.spec.id && target.endpoint == other.endpoint && target.model == other.model
+    }
 }
 
 /// The cleanup pass is a quality feature, not a dependency. Every path that
 /// does not produce a clearly better text returns the raw transcript.
 final class CleanupPipeline {
-    private var session: URLSession { SharedSession.cloud }
+    private let session: URLSession
 
-    func clean(_ rawText: String, configuration: CleanupConfiguration?) async -> CleanupResult {
-        guard let configuration,
-              !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return .raw(rawText) }
+    init(session: URLSession = SharedSession.cloud) {
+        self.session = session
+    }
 
-        guard let spec = ProviderCatalog.spec(configuration.provider) else { return .raw(rawText) }
-        let key = ProviderCatalog.key(for: spec)
-        if spec.requiresKey, key == nil { return .raw(rawText) }
-
-        let candidate = try? await withTimeout(configuration.timeout) {
-            try await self.request(spec: spec, key: key, text: rawText, configuration: configuration)
+    func clean(_ rawText: String, configuration: CleanupConfiguration?,
+               fallback: CleanupConfiguration? = nil) async -> CleanupResult {
+        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .raw(rawText) }
+        let backup = fallback.flatMap { $0.matches(configuration) ? nil : $0 }
+        for attempt in [configuration, backup].compactMap({ $0 }) {
+            guard !Task.isCancelled else { break }
+            if let result = await attemptClean(rawText, configuration: attempt) { return result }
         }
-        guard let candidate else { return .raw(rawText) }
+        return .raw(rawText)
+    }
+
+    private func attemptClean(_ rawText: String, configuration: CleanupConfiguration) async -> CleanupResult? {
+        guard let target = configuration.target else { return nil }
+        let key = ProviderCatalog.key(for: target.spec)
+        if target.spec.requiresKey, key == nil { return nil }
+        let candidate = try? await withTimeout(configuration.timeout) {
+            try await self.request(spec: target.spec, url: target.endpoint, key: key, text: rawText,
+                                   model: target.model, timeout: configuration.timeout)
+        }
+        guard !Task.isCancelled, let candidate else { return nil }
+        if candidate.trimmingCharacters(in: .whitespacesAndNewlines) == rawText.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return CleanupResult(text: rawText, engine: target.spec.id, changed: false)
+        }
         let normalized = CleanupGuard.normalize(candidate)
-        guard CleanupGuard.isAcceptable(input: rawText, output: normalized) else { return .raw(rawText) }
-        return CleanupResult(text: normalized, engine: spec.id, changed: normalized != rawText)
+        guard CleanupGuard.isAcceptable(input: rawText, output: normalized) else { return nil }
+        return CleanupResult(text: normalized, engine: target.spec.id, changed: normalized != rawText)
     }
 
     // MARK: Request
 
     private func request(spec: ProviderSpec,
+                         url: URL,
                          key: String?,
                          text: String,
-                         configuration: CleanupConfiguration) async throws -> String {
-        let base = spec.id == EngineID.openAI
-            ? configuration.baseURL
-            : spec.baseURL
-
-        guard let url = spec.endpoint("chat/completions", baseURL: base) else {
-            throw RecognitionError.failed("Invalid cleanup endpoint")
-        }
-
+                         model: String,
+                         timeout: TimeInterval) async throws -> String {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = max(configuration.timeout, 5)
+        request.timeoutInterval = max(timeout, 5)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
-            "model": configuration.model,
+            "model": model,
             "temperature": 0,
             "max_tokens": 2048,
             "messages": [
@@ -72,7 +99,7 @@ final class CleanupPipeline {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await ProviderHealth.data(for: request, provider: spec.id,
-                model: configuration.model, capability: .chat, session: session)
+                model: model, capability: .chat, session: session)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw RecognitionError.failed("Cleanup request failed")
         }

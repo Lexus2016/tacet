@@ -100,7 +100,8 @@ struct ProvidersSettingsView: View {
             ForEach(targets) { target in
                 let condition = health.condition(for: target.id)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
+                    Text(target.id.isCleanupFallback ? String(localized: "Text correction fallback")
+                         : target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 6)

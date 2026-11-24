@@ -483,7 +483,8 @@ enum CLIHarness {
 
         if settings.isCleanupConfigured {
             let t1 = Date()
-            let cleaned = await CleanupPipeline().clean(text, configuration: configuration)
+            let cleaned = await CleanupPipeline().clean(text, configuration: configuration,
+                                                        fallback: settings.cleanupFallback)
             print(String(format: "cleanup %@ %.2f s, changed %@",
                          cleaned.engine, Date().timeIntervalSince(t1), cleaned.changed ? "yes" : "no"))
             text = cleaned.text

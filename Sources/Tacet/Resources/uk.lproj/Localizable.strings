@@ -134,6 +134,24 @@
 
 "Providers" = "Провайдери";
 "Used for cleanup, translation and editing" = "Для обробки, перекладу й редагування";
+"Primary model" = "Основна модель";
+"Fallback model" = "Резервна модель";
+"Use fallback model" = "Використовувати резервну модель";
+"Try a second model if the primary attempt fails." = "Спробувати другу модель, якщо основна не впоралася.";
+"Choose a different model or provider for the fallback." = "Виберіть іншу модель або іншого провайдера для резерву.";
+"Save provider keys in Providers." = "Ключі можна зберегти в розділі «Провайдери».";
+"Time per model" = "Час на одну модель";
+"If cleanup fails, Tacet uses the original transcript." = "Якщо виправлення не вдасться, Tacet використає вихідний текст.";
+"Model ID" = "Назва моделі";
+"Browse models" = "Переглянути моделі";
+"Text correction fallback" = "Резервне виправлення тексту";
+"Paste last dictation" = "Вставити останній диктант";
+"Insert the latest transcript into the focused app." = "Вставити останній розпізнаний текст в активний застосунок.";
+"This shortcut is in use. You can still paste from the menu bar." = "Комбінацію вже зайнято. Вставлення доступне через меню.";
+"No dictation to paste yet" = "Ще немає диктанту для вставлення";
+"Enable Accessibility in Settings to paste the last dictation" = "Дозвольте універсальний доступ у налаштуваннях, щоб вставити диктант";
+"Focus a text field to paste the last dictation" = "Поставте курсор у полі, куди потрібно вставити диктант";
+"Could not paste the last dictation" = "Не вдалося вставити останній диктант";
 "Used when this provider is in the engine chain" = "Коли провайдер у ланцюжку рушіїв";
 "Configure a provider once. Engines and Cleanup only offer the providers configured here." = "Налаштуй провайдера один раз. Рушії та Обробка пропонують лише налаштованих тут.";
 "Not configured — will be skipped" = "Не налаштований — буде пропущений";

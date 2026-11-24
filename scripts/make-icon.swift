@@ -61,10 +61,46 @@ func drawSmallIcon(in bounds: CGRect, graphics: CGContext) {
     graphics.strokePath()
 }
 
-for size in [16, 32, 128, 256, 512] {
-    for scale in 1...2 {
-        let suffix = scale == 1 ? "" : "@2x"
-        let name = "icon_\(size)x\(size)\(suffix).png"
-        try render(size: size * scale).write(to: iconset.appendingPathComponent(name), options: .atomic)
+func renderIOSIcon() -> Data {
+    let size = 1024
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    let graphics = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8,
+                             bytesPerRow: 0, space: colorSpace,
+                             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    let context = NSGraphicsContext(cgContext: graphics, flipped: false)
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    NSGraphicsContext.current = context
+
+    // Fill the square because iOS applies the outer mask at display time.
+    // Заповнюємо квадрат, бо зовнішню маску під час показу накладає iOS.
+    let bounds = CGRect(x: 0, y: 0, width: size, height: size)
+    let colors = [
+        CGColor(red: 0.32, green: 0.40, blue: 0.52, alpha: 1),
+        CGColor(red: 0.09, green: 0.14, blue: 0.22, alpha: 1),
+    ]
+    let background = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: [0, 1])!
+    graphics.drawLinearGradient(background, start: CGPoint(x: bounds.midX, y: bounds.maxY),
+                                end: CGPoint(x: bounds.midX, y: bounds.minY), options: [])
+    let artwork = bounds.insetBy(dx: -bounds.width * 0.025, dy: -bounds.height * 0.025)
+    let edge = artwork.insetBy(dx: artwork.width * 0.02, dy: artwork.height * 0.028)
+    let radius = edge.width * 0.249
+    graphics.addPath(CGPath(roundedRect: edge, cornerWidth: radius, cornerHeight: radius, transform: nil))
+    graphics.clip()
+    source.draw(in: artwork, from: .zero, operation: .sourceOver,
+                fraction: 1, respectFlipped: false, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+    return NSBitmapImageRep(cgImage: graphics.makeImage()!).representation(using: .png, properties: [:])!
+}
+
+if CommandLine.arguments.contains("--ios") {
+    let output = URL(fileURLWithPath: "ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
+    try renderIOSIcon().write(to: output, options: .atomic)
+} else {
+    for size in [16, 32, 128, 256, 512] {
+        for scale in 1...2 {
+            let suffix = scale == 1 ? "" : "@2x"
+            let name = "icon_\(size)x\(size)\(suffix).png"
+            try render(size: size * scale).write(to: iconset.appendingPathComponent(name), options: .atomic)
+        }
     }
 }
