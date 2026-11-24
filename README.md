@@ -7,11 +7,25 @@
 <p align="center"><strong>Dictation for macOS from the menu bar</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Lexus2016/tacet/releases/latest"><strong>Download Tacet</strong></a>
-  · <a href="README.uk.md">Українська</a>
+  <a href="https://lexus2016.github.io/tacet/?lang=en"><strong>Tacet website</strong></a>
+  · <a href="https://github.com/Lexus2016/tacet/releases/latest">Download Tacet</a>
 </p>
 
+English · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
+
 Use a keyboard shortcut to dictate into a document, editor, or message. Recognize speech on your Mac with Parakeet or connect a cloud provider. Tacet saves transcripts in History and restores your clipboard after automatic insertion.
+
+Speak one of the supported languages and let Tacet detect it for each dictation. Choose an output language and connect a text provider to insert a translation directly into the active app.
+
+## From voice to a sentence
+
+See the recording indicator, automatic language detection and an example of optional translation.
+
+[![Illustrative walkthrough using Tacet’s actual recording and transcription indicators.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=en#demo)
+
+| Settings | History |
+| --- | --- |
+| ![General settings for shortcuts, permissions and output.](docs/media/settings.webp) | ![History with sample transcripts and the original recording controls.](docs/media/history.webp) |
 
 ## Install on macOS 14 or later
 

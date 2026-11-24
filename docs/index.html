@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Tacet is a compact macOS dictation app. Speak into the editor you’re already using, recognize the language, and translate into the language you choose.">
+<meta name="theme-color" content="#0a121d">
+<meta property="og:title" content="Tacet — Voice in. Text out.">
+<meta property="og:description" content="Dictation and optional translation from your Mac’s menu bar.">
+<meta property="og:image" content="https://lexus2016.github.io/tacet/media/app-icon.png">
+<link rel="canonical" href="https://lexus2016.github.io/tacet/">
+<link rel="icon" href="media/app-icon.png" type="image/png">
+<title>Tacet — Dictation for macOS</title>
+<style>
+@font-face{font-family:Manrope;src:url("fonts/manrope.woff2") format("woff2");font-weight:200 800;font-display:swap}
+@font-face{font-family:Source;src:url("fonts/source-sans.woff2") format("woff2");font-weight:200 900;font-display:swap}
+:root{color-scheme:dark;--bg:#0a121d;--surface:#101c2b;--raised:#152437;--ink:#eef4fc;--muted:#aabbd0;--accent:#b1d5ff;--on-accent:#0c233c;--line:#31445c;--grid:#27384f;--rail:#9abde8}
+:root[data-theme="light"]{color-scheme:light;--bg:#eaf1f9;--surface:#f7faff;--raised:#dce9f7;--ink:#0d2138;--muted:#435b75;--accent:#18569b;--on-accent:#fff;--line:#a0b6ce;--grid:#c9d9ea;--rail:#3e668f}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Source,"PT Sans",sans-serif;font-size:17px;line-height:1.54}
+a{color:inherit;text-underline-offset:.24em}
+:focus-visible{outline:2px solid var(--rail);outline-offset:4px}
+img,video{display:block;max-width:100%;height:auto}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+h1,h2,h3,p,figure{margin:0}
+h1,h2,h3,.brand{font-family:Manrope,"Arial",sans-serif;line-height:1.1}
+h1{font-size:clamp(2.9rem,6.6vw,6.35rem);letter-spacing:-.075em;font-weight:800;max-width:9.5ch}
+h2{font-size:clamp(2.1rem,4.5vw,4rem);letter-spacing:-.06em;font-weight:800}
+h3{font-size:1.22rem;letter-spacing:-.025em}
+.wrap{width:min(100% - 56px,1192px);margin-inline:auto}
+.skip{position:absolute;top:10px;left:12px;z-index:10;transform:translateY(-180%);padding:12px;background:var(--surface)}
+.skip:focus{transform:none}
+.header{border-bottom:1px solid var(--line);background:var(--bg)}
+.header .wrap,.footer .wrap{display:flex;align-items:center;gap:24px;justify-content:space-between}
+.header .wrap{min-height:74px}
+.brand{display:inline-flex;align-items:center;gap:9px;min-height:44px;text-decoration:none;font-size:1.27rem;font-weight:800;letter-spacing:-.05em}
+.brand img{width:36px;height:36px}
+.nav,.tools{display:flex;align-items:center;gap:18px}
+.nav a,.footer a{display:inline-flex;align-items:center;min-height:44px;color:var(--muted);text-decoration:none}
+.nav a:hover,.footer a:hover{color:var(--ink);text-decoration:underline}
+.control{min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:0 12px}
+.theme{min-width:44px;padding:0;font-size:1.14rem}
+.hero{position:relative;overflow:hidden;background:linear-gradient(to bottom,transparent 90%,var(--bg)),repeating-linear-gradient(90deg,transparent 0,transparent calc(12.5% - 1px),var(--grid) calc(12.5% - 1px),var(--grid) 12.5%);border-bottom:1px solid var(--line)}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(38px,5vw,86px);min-height:625px;padding-block:64px 82px}
+.hero-copy{position:relative}
+.kicker,.mono{font-family:"SFMono-Regular",Consolas,monospace;font-size:.78rem;font-weight:600;letter-spacing:.035em}
+.kicker{display:flex;align-items:center;gap:10px;color:var(--muted);margin-bottom:15px}
+.kicker::before{content:"";width:24px;height:1px;background:var(--rail)}
+.lead{margin-top:20px;max-width:38ch;color:var(--muted);font-size:clamp(1.15rem,2.25vw,1.42rem)}
+.actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:28px}
+.primary,.secondary{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:48px;padding:10px 17px;border-radius:8px;border:1px solid transparent;font-weight:700;text-decoration:none;text-align:center}
+.primary{color:var(--on-accent);background:var(--accent)}
+.primary:hover{box-shadow:0 0 0 2px var(--rail)}
+.primary:active,.secondary:active{transform:translateY(1px)}
+.secondary{background:var(--surface);border-color:var(--line)}
+.secondary:hover{border-color:var(--rail)}
+.compat{margin-top:13px;color:var(--muted);font-size:.93rem}
+.stage{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:17px;padding:16px;box-shadow:0 15px 0 -8px var(--raised),0 15px 0 -7px var(--line)}
+.stage-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 3px 12px;color:var(--muted);flex-wrap:wrap}
+.stage-header kbd{border:1px solid var(--line);border-radius:5px;padding:2px 7px;color:var(--ink);font:inherit}
+.stage-view{min-height:299px;border:1px solid var(--line);border-radius:11px;padding:clamp(14px,3vw,25px);display:flex;flex-direction:column;justify-content:space-between;gap:22px;background:var(--raised)}
+.stage-view img{width:190px;max-width:100%;height:auto;align-self:flex-start}
+.stage-result{padding-block:11px;border-block:1px solid var(--line)}
+.stage-result span{display:block;color:var(--muted);margin-bottom:5px}
+.stage-result p{font-family:Manrope,Arial,sans-serif;font-size:clamp(1.2rem,2.8vw,1.75rem);font-weight:750;letter-spacing:-.04em;line-height:1.3}
+.options{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}
+.option{min-height:44px;padding:5px 12px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.option[aria-pressed="true"]{border-color:var(--rail);font-weight:750}
+.option[aria-pressed="true"]::before{content:"✓ ";margin-inline-end:3px}
+.section{padding-block:clamp(61px,9vw,113px);border-bottom:1px solid var(--line)}
+.section-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.55fr);gap:26px;align-items:end;margin-bottom:35px}
+.section-head p,.desc{color:var(--muted);max-width:43ch}
+.feature{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:baseline;gap:24px;border-top:1px solid var(--line);padding:24px 0}
+.feature:last-child{border-bottom:1px solid var(--line)}
+.feature p{color:var(--muted);max-width:58ch}
+.video{padding:9px;background:var(--surface);border:1px solid var(--line);border-radius:16px;width:100%;overflow:hidden}
+.video video{border-radius:8px;width:100%;aspect-ratio:16/9;background:#0b1321}
+figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
+.gallery{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:26px}
+.gallery img{width:100%;aspect-ratio:840/660;object-fit:contain;background:#101927;border:1px solid var(--line);border-radius:12px}
+.gallery a{display:block;border-radius:12px}
+.install-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.62fr);gap:30px;align-items:center}
+.install-wrap .desc{margin-top:13px}
+.requirements{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:13px 18px}
+.requirements div{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:9px 0}
+.requirements div+div{border-top:1px solid var(--line)}
+.requirements span{color:var(--muted)}
+.footer{padding-block:17px}
+.footer .wrap{flex-wrap:wrap}
+.footer nav{display:flex;gap:16px;flex-wrap:wrap}
+@media(max-width:780px){
+  .wrap{width:min(100% - 36px,1192px)}
+  .nav{display:none}
+  .hero .wrap,.section-head,.install-wrap{grid-template-columns:minmax(0,1fr);gap:24px}
+  .hero .wrap{padding-block:51px;min-height:0}
+  h1{max-width:13ch}
+  .feature{grid-template-columns:minmax(0,1fr);gap:6px;padding-block:18px}
+}
+@media(max-width:460px){
+  .gallery{grid-template-columns:minmax(0,1fr)}
+  .nav,.tools{gap:8px}
+  .header .wrap{gap:9px}
+  .stage{padding:10px}
+  .stage-view{min-height:246px}
+  select.control{max-width:128px}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .primary:active,.secondary:active{transform:none}
+}
+</style>
+<script src="languages.js" defer></script>
+</head>
+<body id="top">
+<a class="skip" href="#main" data-i="skip">Skip to content</a>
+<header class="header">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="media/app-icon.png" alt="" width="36" height="36">Tacet</a>
+    <nav class="nav" aria-label="Product">
+      <a href="#demo" data-i="demoLink">Demo</a>
+      <a href="#features" data-i="featuresLink">Features</a>
+      <a href="#install" data-i="installLink">Install</a>
+    </nav>
+    <div class="tools">
+      <select id="language" class="control" aria-label="Language">
+        <option value="en" lang="en">English</option>
+        <option value="uk" lang="uk">Українська</option>
+        <option value="de" lang="de">Deutsch</option>
+        <option value="es" lang="es">Español</option>
+        <option value="fr" lang="fr">Français</option>
+        <option value="it" lang="it">Italiano</option>
+        <option value="pl" lang="pl">Polski</option>
+        <option value="pt" lang="pt">Português</option>
+        <option value="ru" lang="ru">Русский</option>
+      </select>
+      <button id="theme" class="control theme" type="button" aria-label="Switch theme" aria-pressed="false">◐</button>
+    </div>
+  </div>
+</header>
+<main id="main">
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <p class="kicker" data-i="kicker">Menu bar dictation for macOS</p>
+        <h1 data-i="headline">Voice in. Text out.</h1>
+        <p class="lead" data-i="lead">Hold a shortcut and speak into the app you’re already using. Tacet detects your language and can translate into the one you choose.</p>
+        <div class="actions">
+          <a class="primary" href="https://github.com/Lexus2016/tacet/releases/latest"><span data-i="download">Download for Mac</span><span aria-hidden="true">↗</span></a>
+          <a class="secondary" href="#demo" data-i="watch">Watch the demo</a>
+        </div>
+        <p class="compat" data-i="compat">macOS 14+ · Apple Silicon and Intel · Apple-notarized</p>
+      </div>
+      <div class="stage" aria-describedby="sampleLabel">
+        <div class="stage-header">
+          <span id="sampleLabel" class="mono" data-i="sample">Illustrative dictation</span>
+          <kbd data-i="shortcut">Right ⌘</kbd>
+        </div>
+        <div class="stage-view">
+          <img src="media/recording.webp" width="380" height="114" alt="" id="sampleHud">
+          <div class="stage-result" aria-live="polite" aria-atomic="true">
+            <span class="mono" id="sampleState">Detected · Українська</span>
+            <p id="sampleText" lang="uk">Надішлю підсумок завтра.</p>
+          </div>
+          <div class="options" role="group" aria-label="Sample output">
+            <button id="sampleOriginal" type="button" class="option" aria-pressed="true" data-i="original">Original</button>
+            <button id="sampleEnglish" type="button" class="option" aria-pressed="false" data-i="translated">English translation</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="demo" class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 data-i="demoTitle">From voice to a sentence</h2>
+        <p data-i="demoLead">See the recording indicator, automatic language detection and an example of optional translation.</p>
+      </div>
+      <figure>
+        <div class="video">
+          <video controls playsinline preload="none" poster="media/demo-poster.webp" aria-label="Tacet dictation demo">
+            <source src="media/tacet-demo.mp4" type="video/mp4">
+            <a href="media/tacet-demo.mp4" data-i="videoLink">Open the demo video</a>
+          </video>
+        </div>
+        <figcaption data-i="demoCaption">Illustrative walkthrough using Tacet’s actual recording and transcription indicators.</figcaption>
+      </figure>
+      <div class="gallery">
+        <figure>
+          <a id="settingsLink" href="media/settings.webp"><img id="settingsShot" src="media/settings.webp" width="1680" height="1320" alt="Tacet General Settings" loading="lazy"></a>
+          <figcaption data-i="settingsCaption">General settings for shortcuts, permissions and output.</figcaption>
+        </figure>
+        <figure>
+          <a id="historyLink" href="media/history.webp"><img id="historyShot" src="media/history.webp" width="1840" height="1240" alt="Tacet transcription history" loading="lazy"></a>
+          <figcaption data-i="historyCaption">History with sample transcripts and the original recording controls.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+  <section id="features" class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 data-i="featureTitle">A small app for everyday writing</h2>
+        <p data-i="featureLead">The menu bar keeps Tacet one shortcut away while you stay in your editor, document or chat.</p>
+      </div>
+      <div class="feature"><h3 data-i="languageTitle">Switch languages mid-day</h3><p data-i="languageBody">Let Tacet detect the language for each dictation or lock it to a language you choose.</p></div>
+      <div class="feature"><h3 data-i="translateTitle">Speak one language. Type another.</h3><p data-i="translateBody">Choose an output language and connect a text provider. Tacet can insert the translation into the same app.</p></div>
+      <div class="feature"><h3 data-i="localTitle">Choose where speech is recognized</h3><p data-i="localBody">Download Parakeet for recognition on your Mac or configure a cloud provider. Optional cloud features send data to the provider you choose.</p></div>
+      <div class="feature"><h3 data-i="clipboardTitle">Keep your clipboard</h3><p data-i="clipboardBody">Tacet restores your clipboard after automatic insertion and keeps transcripts in History.</p></div>
+    </div>
+  </section>
+  <section id="install" class="section">
+    <div class="wrap install-wrap">
+      <div>
+        <h2 data-i="installTitle">Put Tacet in your menu bar</h2>
+        <p class="desc" data-i="installBody">Open the disk image for your Mac, drag Tacet into Applications and give it microphone access. Enable Accessibility for automatic insertion.</p>
+        <div class="actions"><a class="primary" href="https://github.com/Lexus2016/tacet/releases/latest"><span data-i="download">Download for Mac</span><span aria-hidden="true">↗</span></a></div>
+      </div>
+      <div class="requirements">
+        <div><span data-i="system">System</span><strong>macOS 14+</strong></div>
+        <div><span>Apple Silicon</span><code>arm64.dmg</code></div>
+        <div><span>Intel</span><code>x86_64.dmg</code></div>
+        <div><span data-i="installerSize">Current installer</span><strong data-i="size">About 16 MB</strong></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="footer">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="media/app-icon.png" alt="" width="36" height="36">Tacet</a>
+    <nav aria-label="Project links">
+      <a href="https://github.com/Lexus2016/tacet" data-i="source">Source code</a>
+      <a href="https://github.com/Lexus2016/tacet/releases" data-i="releases">Releases</a>
+      <a href="https://github.com/Lexus2016/tacet/blob/lite/LICENSE">GPL-3.0</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

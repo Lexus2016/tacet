@@ -7,11 +7,25 @@
 <p align="center"><strong>Диктування для macOS із рядка меню</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Lexus2016/tacet/releases/latest"><strong>Завантажити Tacet</strong></a>
-  · <a href="README.md">English</a>
+  <a href="https://lexus2016.github.io/tacet/?lang=uk"><strong>Сайт Tacet</strong></a>
+  · <a href="https://github.com/Lexus2016/tacet/releases/latest">Завантажити Tacet</a>
 </p>
 
+[English](README.md) · Українська · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
+
 Натисніть гарячу клавішу й диктуйте в редактор, документ або повідомлення. Розпізнавайте мовлення на Mac за допомогою Parakeet або під’єднайте хмарний сервіс. Tacet зберігає результати в історії та повертає вміст буфера обміну після автоматичного вставлення.
+
+Розмовляйте українською, англійською чи іншою підтримуваною мовою. Tacet може визначати мову для кожного диктування. Виберіть мову результату й під’єднайте провайдера обробки тексту, щоб вставляти переклад прямо в активне вікно.
+
+## Від голосу до готового речення
+
+Подивіться на індикатор запису, автоматичне визначення мови й приклад перекладу.
+
+[![Демонстраційний сценарій зі справжніми індикаторами запису та розпізнавання Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=uk#demo)
+
+| Налаштування | Історія |
+| --- | --- |
+| ![Загальні налаштування клавіш, дозволів і мови результату.](docs/media/settings-uk.webp) | ![Історія з демонстраційними текстами та керуванням первинним записом.](docs/media/history-uk.webp) |
 
 ## Встановлення на macOS 14 або новішій
 
