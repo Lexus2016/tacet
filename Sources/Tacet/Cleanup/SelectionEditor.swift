@@ -11,7 +11,11 @@ struct SelectionEditOutcome: Sendable {
 /// to English", "fix the mistakes", "remove it") or the replacement itself. One
 /// model call decides and applies it; the selection is replaced with the answer.
 final class SelectionEditor {
-    private var session: URLSession { SharedSession.cloud }
+    private let session: URLSession
+
+    init(session: URLSession = SharedSession.cloud) {
+        self.session = session
+    }
 
     func edit(selection: String,
               instruction: String,
@@ -74,7 +78,7 @@ final class SelectionEditor {
     /// Parses the model answer. `DELETE` means the selection must be removed;
     /// an empty answer is a failure, not a deletion.
     private static let commandVerbs = [
-        "переведи", "переклади", "переведи", "translate", "исправь", "виправ", "fix",
+        "переведи", "переклади", "перекласти", "translate", "исправь", "виправ", "fix",
         "удали", "видали", "delete", "remake", "перепиши", "rewrite", "сократи", "скороти",
         "summar", "перефразуй", "paraphrase",
     ]
@@ -82,11 +86,15 @@ final class SelectionEditor {
     /// True when the spoken words were a command and the model simply repeated
     /// them instead of applying the command.
     static func isEchoOfCommand(_ answer: String, instruction: String) -> Bool {
-        let a = answer.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let i = instruction.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let a = commandWords(answer)
+        let i = commandWords(instruction)
         guard !a.isEmpty, !i.isEmpty else { return false }
         guard commandVerbs.contains(where: { i.contains($0) }) else { return false }
         return a == i || a.hasPrefix(i) || i.hasPrefix(a)
+    }
+
+    private static func commandWords(_ text: String) -> String {
+        text.lowercased().split { $0.isWhitespace || $0.isPunctuation }.joined(separator: " ")
     }
 
     static func normalize(_ raw: String, selection: String) -> SelectionEditOutcome? {

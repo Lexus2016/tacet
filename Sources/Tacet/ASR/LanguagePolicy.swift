@@ -120,12 +120,28 @@ enum LanguagePolicy {
         }
         return names[value] ?? (value.count > 2 ? String(value.prefix(2)) : value)
     }
+
+    static func knownLanguage(_ raw: String?) -> String? {
+        guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !value.isEmpty,
+              let code = names[value] ?? Locale.Language(identifier: value).languageCode?.identifier,
+              Locale.LanguageCode.isoLanguageCodes.contains(.init(code)) else { return nil }
+        return code
+    }
 }
 
 /// Text-based language identification for engines that do not report one
 /// (Parakeet). On-device, instant, and only used for the label in History and
 /// for the Cyrillic sanity check — never to override a decode.
 enum TextLanguage {
+    static func source(in text: String, reported: String?) -> String? {
+        LanguagePolicy.knownLanguage(reported) ?? detect(text) ?? LanguagePolicy.cyrillicVerdict(text)
+    }
+
+    static func name(of code: String) -> String {
+        Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
+    }
+
     static func detect(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 8 else { return nil }

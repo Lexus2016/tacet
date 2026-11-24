@@ -92,6 +92,19 @@ final class LanguagePolicyTests: XCTestCase {
 }
 
 final class CleanupGuardTests: XCTestCase {
+    func testCleanupPromptUsesSourceLanguageWithoutForcingTranslation() {
+        XCTAssertEqual(TextLanguage.source(in: "короткий", reported: "uk-UA"), "uk")
+        XCTAssertEqual(TextLanguage.source(in: "слово", reported: "Russian"), "ru")
+        XCTAssertEqual(TextLanguage.source(in: "Її текст написано українською мовою.", reported: "unknown"), "uk")
+        XCTAssertNil(TextLanguage.source(in: "OK", reported: "auto"))
+
+        let prompt = CleanupPipeline.systemPrompt(sourceLanguage: "uk")
+        XCTAssertTrue(prompt.contains("Likely source language: Ukrainian"))
+        XCTAssertTrue(prompt.contains("mixed-language speech and quotations"))
+        XCTAssertTrue(prompt.contains("original transcript unchanged"))
+        XCTAssertTrue(CleanupPipeline.systemPrompt(sourceLanguage: nil).contains("infer its language when clear"))
+    }
+
     func testTranslationIsRejected() {
         XCTAssertFalse(CleanupGuard.isAcceptable(
             input: "Привіт, як справи?",

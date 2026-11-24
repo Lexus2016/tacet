@@ -448,6 +448,7 @@ final class DictationController: ObservableObject {
         switch result {
         case .success(let output):
             var text = output.transcript.text
+            let sourceLanguage = TextLanguage.source(in: text, reported: output.transcript.language)
             var cleanupEngine: String?
             var notes: [String] = []
 
@@ -460,7 +461,7 @@ final class DictationController: ObservableObject {
             let editingSelection = allowPaste && settings.selectionEditing && selection != .none
             if !editingSelection, settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
-                let cleaned = await cleanupPipeline.clean(text, configuration: configuration,
+                let cleaned = await cleanupPipeline.clean(text, sourceLanguage: sourceLanguage, configuration: configuration,
                                                           fallback: settings.cleanupFallback)
                 guard !Task.isCancelled else { return }
                 if cleaned.changed {
@@ -472,11 +473,10 @@ final class DictationController: ObservableObject {
             // Translation runs after cleanup: the model gets clean text and the
             // transcript keeps its original wording in History.
             if !editingSelection, settings.outputLanguage != "auto" {
-                let spoken = LanguagePolicy.normalize(output.transcript.language)
-                if spoken != settings.outputLanguage {
+                if sourceLanguage != settings.outputLanguage {
                     let outcome = await translator.translate(text,
                                                               to: settings.outputLanguage,
-                                                              configuration: configuration)
+                                                              configuration: configuration, sourceLanguage: sourceLanguage)
                     if outcome.translated {
                         text = outcome.text
                     } else {

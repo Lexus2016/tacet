@@ -483,7 +483,8 @@ enum CLIHarness {
 
         if settings.isCleanupConfigured {
             let t1 = Date()
-            let cleaned = await CleanupPipeline().clean(text, configuration: configuration,
+            let cleaned = await CleanupPipeline().clean(text, sourceLanguage: output.transcript.language,
+                                                        configuration: configuration,
                                                         fallback: settings.cleanupFallback)
             print(String(format: "cleanup %@ %.2f s, changed %@",
                          cleaned.engine, Date().timeIntervalSince(t1), cleaned.changed ? "yes" : "no"))
@@ -493,7 +494,8 @@ enum CLIHarness {
 
         if let target {
             let t2 = Date()
-            let outcome = await Translator().translate(text, to: target, configuration: configuration)
+            let outcome = await Translator().translate(text, to: target, configuration: configuration,
+                                                      sourceLanguage: output.transcript.language)
             print(String(format: "translate %.2f s, ok %@",
                          Date().timeIntervalSince(t2), outcome.translated ? "yes" : "no"))
             text = outcome.text

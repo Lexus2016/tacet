@@ -26,21 +26,23 @@ final class Translator {
         guard !trimmed.isEmpty, target != "auto" else { return original }
 
         // Already in the target language: no request needed.
-        if (sourceLanguage ?? TextLanguage.detect(trimmed)) == target {
+        let source = TextLanguage.source(in: trimmed, reported: sourceLanguage)
+        if source == target {
             return original
         }
 
         let backup = fallback.flatMap { $0.matches(configuration) ? nil : $0 }
         for model in [configuration, backup].compactMap({ $0 }) {
             guard !Task.isCancelled else { break }
-            if let answer = await attempt(trimmed, to: target, configuration: model, correctRecognition: correctRecognition) {
+            if let answer = await attempt(trimmed, to: target, sourceLanguage: source,
+                                          configuration: model, correctRecognition: correctRecognition) {
                 return TranslationOutcome(text: answer, translated: true)
             }
         }
         return original
     }
 
-    private func attempt(_ trimmed: String, to target: String, configuration: CleanupConfiguration,
+    private func attempt(_ trimmed: String, to target: String, sourceLanguage: String?, configuration: CleanupConfiguration,
                          correctRecognition: Bool) async -> String? {
         guard let endpoint = configuration.target else { return nil }
         let spec = endpoint.spec
@@ -58,7 +60,8 @@ final class Translator {
             "temperature": 0,
             "max_tokens": 4096,
             "messages": [
-                ["role": "system", "content": Self.systemPrompt(target: target, correctRecognition: correctRecognition)],
+                ["role": "system", "content": Self.systemPrompt(target: target, sourceLanguage: sourceLanguage,
+                                                               correctRecognition: correctRecognition)],
                 ["role": "user", "content": trimmed],
             ],
         ]
@@ -103,13 +106,17 @@ final class Translator {
         return content
     }
 
-    private static func systemPrompt(target: String, correctRecognition: Bool) -> String {
-        """
+    private static func systemPrompt(target: String, sourceLanguage: String?, correctRecognition: Bool) -> String {
+        let source = sourceLanguage.map { "\nLikely source language: \(TextLanguage.name(of: $0))." } ?? ""
+        let correction = correctRecognition
+            ? "\nFix clear transcription mistakes using the closest existing word in context. Preserve unclear words exactly as written. Never invent words."
+            : "\nPreserve any source word you cannot understand in context exactly as written."
+        return """
         Translate the user's text into \(languageName(target)).
         Return ONLY the translation: no quotes, no explanations, no preamble.
         Keep the meaning, names, numbers, URLs, code and formatting exactly.
         If the text is already in \(languageName(target)), return it unchanged.
-        """ + (correctRecognition ? "\nFix obvious transcription mistakes without adding or removing meaning." : "")
+        """ + source + correction
     }
 
     static func languageName(_ code: String) -> String {

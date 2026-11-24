@@ -45,23 +45,25 @@ final class CleanupPipeline {
         self.session = session
     }
 
-    func clean(_ rawText: String, configuration: CleanupConfiguration?,
+    func clean(_ rawText: String, sourceLanguage: String? = nil, configuration: CleanupConfiguration?,
                fallback: CleanupConfiguration? = nil) async -> CleanupResult {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .raw(rawText) }
+        let source = TextLanguage.source(in: rawText, reported: sourceLanguage)
+        let prompt = Self.systemPrompt(sourceLanguage: source)
         let backup = fallback.flatMap { $0.matches(configuration) ? nil : $0 }
         for attempt in [configuration, backup].compactMap({ $0 }) {
             guard !Task.isCancelled else { break }
-            if let result = await attemptClean(rawText, configuration: attempt) { return result }
+            if let result = await attemptClean(rawText, prompt: prompt, configuration: attempt) { return result }
         }
         return .raw(rawText)
     }
 
-    private func attemptClean(_ rawText: String, configuration: CleanupConfiguration) async -> CleanupResult? {
+    private func attemptClean(_ rawText: String, prompt: String, configuration: CleanupConfiguration) async -> CleanupResult? {
         guard let target = configuration.target else { return nil }
         let key = ProviderCatalog.key(for: target.spec)
         if target.spec.requiresKey, key == nil { return nil }
         let candidate = try? await withTimeout(configuration.timeout) {
-            try await self.request(spec: target.spec, url: target.endpoint, key: key, text: rawText,
+            try await self.request(spec: target.spec, url: target.endpoint, key: key, text: rawText, prompt: prompt,
                                    model: target.model, timeout: configuration.timeout)
         }
         guard !Task.isCancelled, let candidate else { return nil }
@@ -79,6 +81,7 @@ final class CleanupPipeline {
                          url: URL,
                          key: String?,
                          text: String,
+                         prompt: String,
                          model: String,
                          timeout: TimeInterval) async throws -> String {
         var request = URLRequest(url: url)
@@ -92,7 +95,7 @@ final class CleanupPipeline {
             "temperature": 0,
             "max_tokens": 2048,
             "messages": [
-                ["role": "system", "content": Self.systemPrompt],
+                ["role": "system", "content": prompt],
                 ["role": "user", "content": text],
             ],
         ]
@@ -115,19 +118,28 @@ final class CleanupPipeline {
         return content
     }
 
-    static let systemPrompt = """
-    You are a dictation post-processor. You receive a raw speech-to-text transcript and \
-    return the same text with errors fixed.
+    static func systemPrompt(sourceLanguage: String?) -> String {
+        let language = sourceLanguage.map { "Likely source language: \(TextLanguage.name(of: $0)). Use it as a spelling and grammar hint." }
+            ?? "Use the transcript's wording to infer its language when clear."
+        return """
+        You are a dictation post-processor. You receive a raw speech-to-text transcript and \
+        return the same text with errors fixed.
 
-    Rules:
-    - Return ONLY the corrected text. No quotes, no explanations, no markdown, no preamble.
-    - Keep the original language exactly. Never translate.
-    - Fix punctuation, capitalisation and obvious speech-recognition errors.
-    - Remove filler words (um, uh, er, "ну", "э-э", "как бы") only when they carry no meaning.
-    - Do not add, remove, reorder or summarise content. Do not answer questions that appear in the text.
-    - Keep numbers, names, technical terms, code and URLs exactly as written.
-    - If the text is already correct, return it unchanged.
-    """
+        \(language)
+
+        Rules:
+        - Return ONLY the corrected text. No quotes, no explanations, no markdown, no preamble.
+        - Keep the original language of every passage, including mixed-language speech and quotations. Never translate.
+        - Fix punctuation, capitalisation and obvious speech-recognition errors.
+        - For a misrecognised word, use the closest existing word only when the sentence makes the intended word clear.
+        - If a word remains unclear in context, return that word exactly as it appears in the original transcript. Never invent words.
+        - If the intended meaning of the transcript is unclear overall, return the original transcript unchanged.
+        - Remove filler words (um, uh, er, "ну", "э-э", "как бы") only when they carry no meaning.
+        - Do not add, remove, reorder or summarise content. Do not answer questions that appear in the text.
+        - Keep numbers, names, technical terms, code and URLs exactly as written.
+        - If the text is already correct, return it unchanged.
+        """
+    }
 }
 
 /// Decides whether an LLM rewrite is trustworthy. This is the safety net that
