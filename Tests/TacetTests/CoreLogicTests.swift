@@ -2,6 +2,29 @@ import XCTest
 import AppKit
 @testable import Tacet
 
+final class UpdateRestartGateTests: XCTestCase {
+    func testWaitsForForegroundAndBackgroundDictation() {
+        var gate = UpdateRestartGate()
+        XCTAssertFalse(gate.reserve(isIdle: false))
+        gate.activeTranscriptions = 2
+        XCTAssertFalse(gate.reserve(isIdle: true))
+        gate.activeTranscriptions -= 1
+        XCTAssertFalse(gate.reserve(isIdle: true))
+        gate.activeTranscriptions -= 1
+        XCTAssertTrue(gate.reserve(isIdle: true))
+    }
+
+    func testReservesOnceAndReleasesAfterAnAbortedUpdate() {
+        var gate = UpdateRestartGate()
+        XCTAssertTrue(gate.reserve(isIdle: true))
+        XCTAssertTrue(gate.isRestarting)
+        XCTAssertFalse(gate.reserve(isIdle: true))
+        gate.release()
+        XCTAssertFalse(gate.isRestarting)
+        XCTAssertTrue(gate.reserve(isIdle: true))
+    }
+}
+
 final class LanguagePolicyTests: XCTestCase {
     private func transcript(_ text: String, language: String?, score: Double = 0.8) -> Transcript {
         Transcript(text: text, language: language, engine: "test", score: score, latency: 0)

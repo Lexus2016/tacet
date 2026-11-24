@@ -40,6 +40,8 @@
 	<string>nCQQfIRlOIaEBPmuJvUk8sffI8/OdJP3eYJxLrZYuIA=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>LSApplicationCategoryType</key>

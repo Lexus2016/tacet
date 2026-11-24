@@ -31,6 +31,7 @@ final class DictationController: ObservableObject {
     private let languageMemory = LanguageMemory()
 
     private var isStarting = false
+    private var updateRestart = UpdateRestartGate()
     private var noteTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
@@ -104,6 +105,7 @@ final class DictationController: ObservableObject {
             for entry in pending {
                 guard !Task.isCancelled,
                       phase == .idle,
+                      !updateRestart.isRestarting,
                       let url = entry.audioURL
                 else { break }
                 guard FileManager.default.fileExists(atPath: url.path),
@@ -253,7 +255,7 @@ final class DictationController: ObservableObject {
     // MARK: Recording
 
     func startRecording() {
-        guard phase == .idle, !isStarting else { return }
+        guard phase == .idle, !isStarting, !updateRestart.isRestarting else { return }
         isStarting = true
         stopRequested = false
         let startingApp = NSWorkspace.shared.frontmostApplication
@@ -391,6 +393,8 @@ final class DictationController: ObservableObject {
                          autoRetry: Bool,
                          focus: SelectionReader.Focus? = nil,
                          selection: SelectionReader.Selection = .none) async {
+        updateRestart.activeTranscriptions += 1
+        defer { updateRestart.activeTranscriptions -= 1 }
         let started = Date()
         let appName = focus?.application.localizedName
 
@@ -724,7 +728,8 @@ final class DictationController: ObservableObject {
         retryTask?.cancel()
         retryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 8_000_000_000)
-            guard !Task.isCancelled, let self, self.phase == .idle else { return }
+            guard !Task.isCancelled, let self, self.phase == .idle,
+                  !self.updateRestart.isRestarting else { return }
             await self.process(clip: clip,
                                existingEntryID: entryID,
                                allowPaste: false,
@@ -756,7 +761,7 @@ final class DictationController: ObservableObject {
             status("The recording is gone")
             return
         }
-        guard phase == .idle, !isStarting else { return }
+        guard phase == .idle, !isStarting, !updateRestart.isRestarting else { return }
 
         phase = .processing
         status("Retrying…")
@@ -820,6 +825,14 @@ final class DictationController: ObservableObject {
     }
 
     // MARK: Helpers
+
+    func reserveUpdateRestart() -> Bool {
+        updateRestart.reserve(isIdle: phase == .idle && !isStarting)
+    }
+
+    func releaseUpdateRestart() {
+        updateRestart.release()
+    }
 
     private func status(_ text: String) {
         statusNote = text
