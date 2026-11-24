@@ -18,6 +18,7 @@ enum Theme {
 
     static let cardRadius: CGFloat = 14
     static let controlRadius: CGFloat = 8
+    static let settingsControlWidth: CGFloat = 176
 
     // MARK: Surfaces
 
@@ -182,6 +183,112 @@ struct SoftDivider: View {
         Rectangle()
             .fill(Color.primary.opacity(0.07))
             .frame(height: 1)
+    }
+}
+
+struct SettingsPicker: View {
+    struct Option: Equatable {
+        let id: String
+        let title: String
+
+        init(_ id: String, _ title: String) {
+            self.id = id
+            self.title = NSLocalizedString(title, comment: "")
+        }
+
+        init(_ id: String, name: String) {
+            self.id = id
+            self.title = name
+        }
+    }
+
+    let title: String
+    @Binding var selection: String
+    let options: [Option]
+    var width = Theme.settingsControlWidth
+
+    var body: some View {
+        SettingsPopUp(title: title, selection: $selection, options: options)
+            .frame(width: width, height: 27)
+    }
+}
+
+private struct SettingsPopUp: NSViewRepresentable {
+    let title: String
+    @Binding var selection: String
+    let options: [SettingsPicker.Option]
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let control = NSPopUpButton(frame: .zero, pullsDown: false)
+        control.bezelStyle = .rounded
+        control.font = .systemFont(ofSize: 12)
+        control.cell?.lineBreakMode = .byTruncatingTail
+        control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        control.setAccessibilityLabel(NSLocalizedString(title, comment: ""))
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.select(_:))
+        return control
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    func updateNSView(_ control: NSPopUpButton, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.selection = $selection
+
+        let entries = options.contains { $0.id == selection } ? options :
+            [SettingsPicker.Option(selection, title)] + options
+        if coordinator.options != entries {
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            for option in entries {
+                let item = NSMenuItem(title: option.title, action: nil, keyEquivalent: "")
+                item.representedObject = option.id
+                item.isEnabled = options.contains { $0.id == option.id }
+                menu.addItem(item)
+            }
+            control.menu = menu
+            coordinator.options = entries
+        }
+        if let index = entries.firstIndex(where: { $0.id == selection }),
+           control.indexOfSelectedItem != index {
+            control.selectItem(at: index)
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+        var options: [SettingsPicker.Option]?
+
+        init(selection: Binding<String>) { self.selection = selection }
+
+        @objc func select(_ sender: NSPopUpButton) {
+            guard let value = sender.selectedItem?.representedObject as? String else { return }
+            selection.wrappedValue = value
+        }
+    }
+}
+
+struct PendingActionLabel: View {
+    let title: LocalizedStringKey
+    let pendingTitle: LocalizedStringKey
+    let isPending: Bool
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if isPending {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            }
+            Text(isPending ? pendingTitle : title)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

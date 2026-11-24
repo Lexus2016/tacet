@@ -16,15 +16,21 @@ struct HotkeyRecorder: View {
     @State private var modifierMonitor: Any?
 
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .trailing, spacing: 4) {
             Button(action: toggle) {
                 HStack(spacing: 6) {
                     Image(systemName: isRecording ? "record.circle.fill" : "keyboard")
                         .foregroundStyle(isRecording ? Theme.danger : .secondary)
-                    Text(isRecording ? "Press keys…" : HotkeyFormat.title(keyCode: keyCode, modifiers: modifiers, label: label))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .frame(minWidth: 110)
+                    if isRecording {
+                        Text("Press keys…")
+                    } else {
+                        Text(HotkeyFormat.title(keyCode: keyCode, modifiers: modifiers, label: label))
+                    }
+                    Spacer(minLength: 0)
                 }
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .lineLimit(1)
+                .frame(width: Theme.settingsControlWidth - 24, alignment: .leading)
             }
             .buttonStyle(SoftButtonStyle())
 

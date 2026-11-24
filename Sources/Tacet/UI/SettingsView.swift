@@ -39,28 +39,23 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             sidebar
             Divider()
-            ScrollViewReader { scroll in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text(LocalizedStringKey(tab.title))
-                            .font(.system(size: 25, weight: .semibold))
-                            .accessibilityAddTraits(.isHeader)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(LocalizedStringKey(tab.title))
+                        .font(.system(size: 25, weight: .semibold))
+                        .accessibilityAddTraits(.isHeader)
 
-                        switch tab {
-                        case .general: GeneralSettingsView()
-                        case .providers:
-                            ProvidersSettingsView {
-                                scroll.scrollTo(ProvidersSettingsView.configurationAnchor, anchor: .top)
-                            }
-                        case .engines: ChainSettingsView()
-                        case .cleanup: CleanupSettingsView()
-                        case .about: AboutView()
-                        }
+                    switch tab {
+                    case .general: GeneralSettingsView()
+                    case .providers: ProvidersSettingsView()
+                    case .engines: ChainSettingsView()
+                    case .cleanup: CleanupSettingsView()
+                    case .about: AboutView()
                     }
-                    .frame(maxWidth: 710, alignment: .leading)
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .center)
                 }
+                .frame(maxWidth: 710, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .id(tab)
             .accessibilityIdentifier("settings-content")
@@ -101,6 +96,7 @@ struct GeneralSettingsView: View {
     @State private var accessibilityGranted = TextInserter.isAccessibilityTrusted()
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginError: String?
+    @State private var requestingMicrophone = false
 
     var body: some View {
         VStack(spacing: 18) {
@@ -117,12 +113,9 @@ struct GeneralSettingsView: View {
                 SoftRow("Mode", subtitle: settings.hotkeyMode == "hold"
                         ? "Hold the key while you speak"
                         : "Press once to start, once to stop") {
-                    Picker("Mode", selection: $settings.hotkeyMode) {
-                        Text("Push to talk").tag("hold")
-                        Text("Toggle").tag("toggle")
-                    }
-                    .labelsHidden()
-                    .frame(width: 130)
+                    SettingsPicker(title: "Mode", selection: $settings.hotkeyMode,
+                                   options: [.init("hold", "Push to talk"), .init("toggle", "Toggle")])
+                        .frame(width: Theme.settingsControlWidth)
                 }
 
                 if controller.hotkeyConflict {
@@ -156,27 +149,22 @@ struct GeneralSettingsView: View {
 
             SoftCard(title: "Language", systemImage: "globe") {
                 SoftRow("Language") {
-                    Picker("Language", selection: $settings.languageMode) {
-                        ForEach(LanguageOption.allCases) { option in
-                            Text(option.title).tag(option.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 180)
+                    SettingsPicker(title: "Language", selection: $settings.languageMode,
+                                   options: LanguageOption.allCases.map {
+                        .init($0.rawValue, $0.title)
+                    })
+                    .frame(width: Theme.settingsControlWidth)
                 }
 
                 SoftDivider()
 
                 SoftRow("Output language",
                         subtitle: "Dictate in any language; the inserted text is in this one") {
-                    Picker("Output language", selection: $settings.outputLanguage) {
-                        Text("Same as spoken").tag("auto")
-                        ForEach(LanguageOption.allCases.filter { $0 != .auto }) { option in
-                            Text(option.title).tag(option.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 180)
+                    SettingsPicker(title: "Output language", selection: $settings.outputLanguage,
+                                   options: LanguageOption.allCases.map {
+                        .init($0.rawValue, $0 == .auto ? "Same as spoken" : $0.title)
+                    })
+                    .frame(width: Theme.settingsControlWidth)
                 }
 
                 SoftDivider()
@@ -228,15 +216,6 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
-                SoftRow("Floating indicator") {
-                    Toggle("Floating indicator", isOn: $settings.showHUD)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                }
-
-                SoftDivider()
-
                 SoftRow("Sounds", subtitle: "Short Tacet cues for start, success and errors") {
                     Toggle("Sounds", isOn: $settings.playSounds)
                         .labelsHidden()
@@ -257,19 +236,12 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Interface language", subtitle: "Restart Tacet to apply") {
                     HStack(spacing: 8) {
-                        Picker("Interface language", selection: $settings.uiLanguage) {
-                            Text("System").tag("system")
-                            Text("English").tag("en")
-                            Text("Українська").tag("uk")
-                            Text("Français").tag("fr")
-                            Text("Español").tag("es")
-                            Text("Deutsch").tag("de")
-                            Text("Português").tag("pt")
-                            Text("中文").tag("zh-Hans")
-                            Text("हिन्दी").tag("hi")
-                        }
-                        .labelsHidden()
-                        .frame(width: 150)
+                        SettingsPicker(title: "Interface language", selection: $settings.uiLanguage,
+                                       options: [
+                            .init("system", "System"), .init("en", "English"), .init("uk", "Українська"),
+                            .init("fr", "Français"), .init("es", "Español"), .init("de", "Deutsch"),
+                            .init("pt", "Português"), .init("zh-Hans", "中文"), .init("hi", "हिन्दी"),
+                        ], width: Theme.settingsControlWidth - 43)
 
                         Button {
                             relaunch()
@@ -277,39 +249,49 @@ struct GeneralSettingsView: View {
                             Image(systemName: "arrow.clockwise")
                         }
                         .buttonStyle(SoftButtonStyle())
+                        .frame(width: 35)
                         .help(Text("Restart"))
+                        .accessibilityLabel(Text("Restart"))
                     }
+                    .frame(width: Theme.settingsControlWidth)
                 }
 
                 SoftDivider()
 
                 SoftRow("Keep audio", subtitle: "Recordings older than this are deleted, except failed ones") {
-                    Stepper("\(settings.keepAudioDays) d",
-                            value: $settings.keepAudioDays, in: 1...90)
-                        .frame(width: 100)
+                    Stepper(value: $settings.keepAudioDays, in: 1...90) {
+                        Text("\(settings.keepAudioDays) d")
+                            .monospacedDigit()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .frame(width: Theme.settingsControlWidth)
                 }
             }
 
             SoftCard(title: "Floating indicator", systemImage: "sparkles") {
+                SoftRow("Show indicator") {
+                    Toggle("Show indicator", isOn: $settings.showHUD)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                SoftDivider()
+
                 SoftRow("Theme") {
-                    Picker("Theme", selection: $settings.indicatorTheme) {
-                        ForEach(IndicatorTheme.allCases) { theme in
-                            Text(LocalizedStringKey(theme.title)).tag(theme.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
+                    SettingsPicker(title: "Theme", selection: $settings.indicatorTheme,
+                                   options: IndicatorTheme.allCases.map {
+                        .init($0.rawValue, $0.title)
+                    })
+                    .frame(width: Theme.settingsControlWidth)
                 }
 
                 SoftDivider()
 
                 SoftRow("Position", subtitle: "Where the indicator appears") {
-                    Picker("Position", selection: $settings.indicatorPosition) {
-                        Text("Bottom").tag("bottom")
-                        Text("Top").tag("top")
-                    }
-                    .labelsHidden()
-                    .frame(width: 120)
+                    SettingsPicker(title: "Position", selection: $settings.indicatorPosition,
+                                   options: [.init("top", "Top"), .init("bottom", "Bottom")])
+                        .frame(width: Theme.settingsControlWidth)
                 }
 
                 SoftDivider()
@@ -327,17 +309,14 @@ struct GeneralSettingsView: View {
                     HStack(spacing: 10) {
                         StatusDot(ok: micGranted)
                         if !micGranted {
-                            Button("Grant") {
-                                Task {
-                                    if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-                                        _ = await AVCaptureDevice.requestAccess(for: .audio)
-                                    } else {
-                                        openPrivacyPane("Microphone")
-                                    }
-                                    micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-                                }
+                            Button {
+                                requestMicrophone()
+                            } label: {
+                                PendingActionLabel(title: "Grant", pendingTitle: "Waiting for permission…",
+                                                   isPending: requestingMicrophone)
                             }
                             .buttonStyle(SoftButtonStyle())
+                            .disabled(requestingMicrophone)
                         }
                     }
                 }
@@ -363,6 +342,19 @@ struct GeneralSettingsView: View {
             let trusted = TextInserter.isAccessibilityTrusted()
             if trusted && !accessibilityGranted { controller.configureHotkey() }
             accessibilityGranted = trusted
+        }
+    }
+
+    private func requestMicrophone() {
+        guard !requestingMicrophone else { return }
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
+            openPrivacyPane("Microphone")
+            return
+        }
+        requestingMicrophone = true
+        Task {
+            micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+            requestingMicrophone = false
         }
     }
 
@@ -441,16 +433,9 @@ struct CleanupSettingsView: View {
 
             SoftCard(title: "Model", systemImage: "brain") {
                 SoftRow("Provider", subtitle: "Set the model and credentials in Providers.") {
-                    Picker("Provider", selection: $settings.cleanupProvider) {
-                        if !providers.contains(where: { $0.id == settings.cleanupProvider }) {
-                            Text("Choose a provider").tag(settings.cleanupProvider)
-                        }
-                        ForEach(providers) { provider in
-                            Text(provider.name).tag(provider.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 204)
+                    SettingsPicker(title: "Choose a provider", selection: $settings.cleanupProvider,
+                                   options: providers.map { .init($0.id, name: $0.name) })
+                        .frame(width: Theme.settingsControlWidth)
                 }
 
                 if providers.contains(where: { $0.id == settings.cleanupProvider }) {
@@ -465,9 +450,13 @@ struct CleanupSettingsView: View {
 
                     SoftDivider()
                     SoftRow("Timeout", subtitle: "On timeout the raw transcript is inserted") {
-                        Stepper(String(format: "%.1f s", settings.cleanupTimeout),
-                                value: $settings.cleanupTimeout, in: 1...10, step: 0.5)
-                            .frame(width: 100)
+                        Stepper(value: $settings.cleanupTimeout, in: 1...10, step: 0.5) {
+                            Text(settings.cleanupTimeout.formatted(.number.precision(.fractionLength(1))) + " " +
+                                 String(localized: "s"))
+                                .monospacedDigit()
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        .frame(width: Theme.settingsControlWidth)
                     }
 
                     SoftDivider()
@@ -489,10 +478,11 @@ private struct CleanupTestRow: View {
                 Text("Try it on a sample sentence")
                     .font(.system(size: 13))
                 Spacer()
-                if busy {
-                    ProgressView().controlSize(.small)
+                Button {
+                    run()
+                } label: {
+                    PendingActionLabel(title: "Test", pendingTitle: "Testing…", isPending: busy)
                 }
-                Button("Test") { run() }
                     .buttonStyle(SoftButtonStyle())
                     .disabled(busy || !settings.isCleanupConfigured)
             }
@@ -508,6 +498,7 @@ private struct CleanupTestRow: View {
     }
 
     private func run() {
+        guard !busy else { return }
         busy = true
         message = nil
 

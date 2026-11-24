@@ -31,7 +31,8 @@ actor ParakeetRecognizer: SpeechRecognizer {
 
     /// Loads the model into memory without downloading. Called by the pipeline
     /// on the first dictation and by Settings after a download.
-    func warmUp() async throws {        if manager != nil { return }
+    func warmUp() async throws {
+        if manager != nil { return }
         if let loadTask {
             manager = try await loadTask.value
             return
@@ -57,21 +58,13 @@ actor ParakeetRecognizer: SpeechRecognizer {
     /// Frees the model after a quiet period. The next dictation reloads it from
     /// disk instead of keeping a gigabyte resident all day.
     func unload() {
+        guard loadTask == nil else { return }
         manager = nil
-        loadTask = nil
     }
 
     /// Explicit download from Settings. Returns the size on disk once ready.
     func downloadIfNeeded() async throws {
-        if isConfigured() {
-            try await warmUp()
-            return
-        }
-        let models = try await AsrModels.downloadAndLoad(version: .v3)
-        let manager = AsrManager(config: .default)
-        try await manager.loadModels(models)
-        self.manager = manager
-        self.loadTask = nil
+        try await warmUp()
     }
 
     func transcribe(_ clip: AudioClip, language: String?) async throws -> Transcript {

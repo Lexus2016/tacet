@@ -1,189 +1,222 @@
 import SwiftUI
 
-/// One tab for every provider: key, models, a real connection test and the
-/// option to remove it from the chains. Engines and Cleanup only ever list what
-/// is configured here.
 struct ProvidersSettingsView: View {
-    static let configurationAnchor = "provider-configuration"
-    let showConfiguration: () -> Void
-
-    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var custom = CustomProviderStore.shared
     @ObservedObject private var health = ProviderHealth.shared
+    @State private var presentedSheet: ProviderSheet?
 
-    @State private var showingAdd = false
-    @State private var newName = ""
-    @State private var newURL = ""
-    @State private var newKey = ""
-    @State private var editingProvider: CustomProvider?
-    @State private var keyError: String?
-    @State private var selectedProvider = EngineID.groq
+    private enum ProviderSheet: Identifiable {
+        case add, configure(String)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            overview
-
-            SoftCard(title: "Provider connections", systemImage: "server.rack") {
-                SoftRow("Provider") {
-                    Picker("Provider", selection: $selectedProvider) {
-                        ForEach(ProviderCatalog.all) { spec in
-                            Text(spec.name).tag(spec.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 204)
-                }
-                SoftDivider()
-                HStack(spacing: 8) {
-                    Spacer()
-                    if let provider = custom.providers.first(where: { $0.id == selectedProvider }) {
-                        Button("Edit connection…") { openForm(provider) }
-                            .buttonStyle(SoftButtonStyle())
-                    }
-                    Button {
-                        openForm(nil)
-                    } label: {
-                        Label("Add provider…", systemImage: "plus")
-                    }
-                    .buttonStyle(SoftButtonStyle())
-                }
-                .padding(.vertical, 4)
+        var id: String {
+            switch self {
+            case .add: "add"
+            case .configure(let provider): provider
             }
-
-            if let spec = ProviderCatalog.spec(selectedProvider) {
-                VStack {
-                    ProviderConfigCard(spec: spec).id(spec.id)
-                }
-                .id(Self.configurationAnchor)
-            }
-
-            ParakeetCard()
-        }
-        .onAppear { health.refresh(configurationOnly: true) }
-        .onChange(of: custom.providers) { _, _ in
-            if ProviderCatalog.spec(selectedProvider) == nil { selectedProvider = EngineID.groq }
-        }
-        .sheet(isPresented: $showingAdd) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(editingProvider == nil ? "New provider" : "Edit connection")
-                    .font(.headline)
-
-                TextField("Name", text: $newName).textFieldStyle(.roundedBorder)
-                TextField("Base URL (https://…/v1)", text: $newURL).textFieldStyle(.roundedBorder)
-                if editingProvider == nil {
-                    SecureField("API key (optional)", text: $newKey).textFieldStyle(.roundedBorder)
-                }
-
-                if let keyError {
-                    Text(keyError).foregroundStyle(Theme.warning)
-                }
-
-                HStack {
-                    Spacer()
-                    Button("Cancel") { showingAdd = false }
-                        .keyboardShortcut(.cancelAction)
-                    Button(editingProvider == nil ? "Add" : "Save") { save() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(ProviderSpec.validBaseURL(newURL) == nil ||
-                                  newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(22)
-            .frame(width: 410)
         }
     }
 
     private var providerIDs: [String] {
         var seen = Set<String>()
-        return health.targets.map(\.id.provider).filter { seen.insert($0).inserted }
+        let ordered = health.targets.map(\.id.provider) +
+            ProviderCatalog.all.map(\.id) + [EngineID.parakeet]
+        return ordered.filter { seen.insert($0).inserted }
     }
 
-    private var overview: some View {
+    var body: some View {
         SoftCard(title: "Provider overview", systemImage: "network") {
-            if health.targets.isEmpty {
-                Text("No providers are connected or in use.")
+            actions
+            ForEach(providerIDs, id: \.self) { provider in
+                SoftDivider()
+                providerRow(provider)
+            }
+        }
+        .onAppear { health.refresh(configurationOnly: true) }
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .add:
+                AddProviderSheet()
+            case .configure(let provider):
+                ProviderConfigurationSheet(providerID: provider)
+            }
+        }
+    }
+
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button {
+                    health.refresh()
+                } label: {
+                    PendingActionLabel(title: "Check now", pendingTitle: "Checking providers…",
+                                       isPending: health.isChecking)
+                }
+                .buttonStyle(SoftButtonStyle())
+                .disabled(health.isChecking || health.targets.isEmpty)
+
+                Button {
+                    presentedSheet = .add
+                } label: {
+                    Label("Add provider…", systemImage: "plus")
+                }
+                .buttonStyle(SoftButtonStyle())
+            }
+            if let finished = health.lastCheck {
+                Text("Last checked at \(finished, style: .time)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.vertical, 10)
-            }
-            ForEach(providerIDs, id: \.self) { provider in
-                let targets = health.targets.filter { $0.id.provider == provider }
-                if let first = targets.first {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(first.name).font(.subheadline.weight(.semibold))
-                            Spacer()
-                            if first.id.capability != .local {
-                                Button("Configure") {
-                                    selectedProvider = provider
-                                    showConfiguration()
-                                }
-                                    .buttonStyle(SoftButtonStyle())
-                            }
-                        }
-                        ForEach(targets) { target in
-                            let condition = health.condition(for: target.id)
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer(minLength: 6)
-                                ProviderStatusLabel(condition: condition)
-                            }
-                            if let reason = condition.reason {
-                                Text(reason)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 8)
-                    SoftDivider()
-                }
-            }
-            HStack {
+            } else {
                 Text("Connections are checked every minute.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func providerRow(_ provider: String) -> some View {
+        let targets = health.targets.filter { $0.id.provider == provider }
+        let isLocal = provider == EngineID.parakeet
+        let name = isLocal ? String(localized: "Parakeet (local)") :
+            (ProviderCatalog.spec(provider)?.name ?? EngineID.displayName(provider))
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(verbatim: name)
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button("Check now") { health.refresh() }
+                Button("Configure") { presentedSheet = .configure(provider) }
                     .buttonStyle(SoftButtonStyle())
+                    .accessibilityLabel(Text("Configure \(name)"))
             }
-            .padding(.vertical, 6)
+
+            if targets.isEmpty {
+                Text(isLocal ? "Model not downloaded" : "Not configured")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(targets) { target in
+                let condition = health.condition(for: target.id)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    ProviderStatusLabel(condition: condition)
+                }
+                if let reason = condition.reason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct ProviderConfigurationSheet: View {
+    let providerID: String
+
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var custom = CustomProviderStore.shared
+
+    private var isLocal: Bool { providerID == EngineID.parakeet }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(isLocal ? String(localized: "Parakeet (local)") :
+                    (ProviderCatalog.spec(providerID)?.name ?? EngineID.displayName(providerID)))
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+                .padding(18)
+
+            Divider()
+            if isLocal {
+                ParakeetCard()
+                    .padding(18)
+            } else if let spec = ProviderCatalog.spec(providerID) {
+                ScrollView {
+                    ProviderConfigCard(spec: spec)
+                        .padding(18)
+                }
+                .frame(height: 420)
+            }
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(14)
+        }
+        .frame(width: 570)
+        .background(SoftWindowBackground())
+    }
+}
+
+private struct AddProviderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var baseURL = ""
+    @State private var key = ""
+    @State private var keyError: String?
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("New provider")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Name", text: $name, prompt: Text("Name"))
+                TextField("Base URL", text: $baseURL, prompt: Text("https://…/v1"))
+                SecureField("API key (optional)", text: $key, prompt: Text("API key (optional)"))
+            }
+            .textFieldStyle(.roundedBorder)
+
+            if let keyError {
+                Text(keyError)
+                    .font(.caption)
+                    .foregroundStyle(Theme.warning)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Add") { add() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmedName.isEmpty || ProviderSpec.validBaseURL(baseURL) == nil)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+        .background(SoftWindowBackground())
     }
 
-    private func openForm(_ provider: CustomProvider?) {
-        editingProvider = provider
-        newName = provider?.name ?? ""
-        newURL = provider?.baseURL ?? ""
-        newKey = ""
-        keyError = nil
-        showingAdd = true
-    }
-
-    private func save() {
-        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = ProviderSpec.validBaseURL(newURL), !name.isEmpty else { return }
-        if let provider = editingProvider {
-            custom.update(id: provider.id, name: name, baseURL: url.absoluteString)
-        } else {
-            let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let id = custom.add(name: name, baseURL: url.absoluteString, key: key) else {
-                keyError = String(localized: "The API key could not be saved.")
-                return
-            }
-            selectedProvider = id
+    private func add() {
+        guard let url = ProviderSpec.validBaseURL(baseURL), !trimmedName.isEmpty else { return }
+        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard CustomProviderStore.shared.add(name: trimmedName, baseURL: url.absoluteString, key: trimmedKey) != nil else {
+            keyError = String(localized: "The API key could not be saved.")
+            return
         }
-        newKey = ""
-        showingAdd = false
+        ProviderHealth.shared.refresh(configurationOnly: true)
+        dismiss()
     }
 }
 
 private struct ProviderConfigCard: View {
     let spec: ProviderSpec
 
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
     @State private var showingChatModels = false
     @State private var showingASRModels = false
@@ -209,7 +242,7 @@ private struct ProviderConfigCard: View {
     }
 
     var body: some View {
-        SoftCard(title: spec.name, systemImage: "server.rack") {
+        SoftCard {
             if spec.requiresKey || isCustom {
                 APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey)
             }
@@ -229,14 +262,9 @@ private struct ProviderConfigCard: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 232)
                 }
-            } else if isCustom {
+            } else if let provider = CustomProviderStore.shared.providers.first(where: { $0.id == spec.id }) {
                 SoftDivider()
-                SoftRow("Base URL") {
-                    Text(spec.baseURL)
-                        .font(.caption.monospaced())
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-                }
+                CustomConnectionFields(provider: provider)
             }
 
             SoftDivider()
@@ -286,7 +314,7 @@ private struct ProviderConfigCard: View {
                             .frame(width: 13)
                         }
                         .buttonStyle(SoftButtonStyle())
-                        .help(Text("Browse")).accessibilityLabel(Text("Browse models"))
+                        .help(Text("Browse")).accessibilityLabel(Text("Browse transcription models"))
                     }
                 }
             }
@@ -325,6 +353,8 @@ private struct ProviderConfigCard: View {
                 settings.engineOrder.removeAll { $0 == spec.id }
                 if settings.cleanupProvider == spec.id { settings.cleanupProvider = EngineID.groq }
                 CustomProviderStore.shared.remove(id: spec.id)
+                ProviderHealth.shared.refresh(configurationOnly: true)
+                dismiss()
             }
         }
         .sheet(isPresented: $showingChatModels) {
@@ -336,18 +366,84 @@ private struct ProviderConfigCard: View {
     }
 }
 
-private struct ParakeetCard: View {
-    @State private var busy = false
-    @State private var status = ""
-    @State private var error: String?
+private struct CustomConnectionFields: View {
+    let provider: CustomProvider
+    @State private var name: String
+    @State private var baseURL: String
+
+    init(provider: CustomProvider) {
+        self.provider = provider
+        _name = State(initialValue: provider.name)
+        _baseURL = State(initialValue: provider.baseURL)
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var validatedURL: URL? { ProviderSpec.validBaseURL(baseURL) }
 
     var body: some View {
-        SoftCard(title: "Parakeet (local)", systemImage: "cpu") {
+        SoftRow("Name") {
+            TextField("Name", text: $name)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 232)
+        }
+        SoftDivider()
+        SoftRow("Base URL") {
+            TextField("Base URL", text: $baseURL)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 232)
+        }
+        HStack {
+            Spacer()
+            Button("Save connection") {
+                guard let validatedURL, !trimmedName.isEmpty else { return }
+                CustomProviderStore.shared.update(id: provider.id, name: trimmedName,
+                                                  baseURL: validatedURL.absoluteString)
+                ProviderHealth.shared.refresh(configurationOnly: true)
+            }
+            .buttonStyle(SoftButtonStyle())
+            .disabled(trimmedName.isEmpty || validatedURL == nil ||
+                      (provider.name == trimmedName && provider.baseURL == validatedURL?.absoluteString))
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+@MainActor
+private final class ParakeetSettingsState: ObservableObject {
+    static let shared = ParakeetSettingsState()
+
+    @Published private(set) var busy = false
+    @Published private(set) var error: String?
+
+    func load() {
+        guard !busy else { return }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await ParakeetRecognizer.shared.downloadIfNeeded()
+                ProviderHealth.shared.refresh(configurationOnly: true)
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct ParakeetCard: View {
+    @ObservedObject private var operation = ParakeetSettingsState.shared
+
+    var body: some View {
+        let configured = ParakeetRecognizer.shared.isConfigured()
+        SoftCard {
             HStack(spacing: 10) {
-                StatusDot(ok: ParakeetRecognizer.shared.isConfigured())
+                StatusDot(ok: configured)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ParakeetRecognizer.shared.isConfigured() ? "Model ready" : "Model not downloaded")
+                    Text(configured ? "Model ready" : "Model not downloaded")
                         .font(.system(size: 13))
                     Text("Offline fallback, 25 European languages, no key needed")
                         .font(.system(size: 11))
@@ -356,42 +452,22 @@ private struct ParakeetCard: View {
 
                 Spacer()
 
-                if busy { ProgressView().controlSize(.small) }
-
-                Button(ParakeetRecognizer.shared.isConfigured() ? "Reload" : "Download") {
-                    download()
+                Button {
+                    operation.load()
+                } label: {
+                    PendingActionLabel(title: configured ? "Load model" : "Download",
+                                       pendingTitle: configured ? "Loading model…" : "Downloading…",
+                                       isPending: operation.busy)
                 }
                 .buttonStyle(SoftProminentButtonStyle())
-                .disabled(busy)
+                .disabled(operation.busy)
             }
             .padding(.vertical, 6)
 
-            if !status.isEmpty {
-                Text(status).font(.system(size: 11)).foregroundStyle(.secondary)
+            if let error = operation.error {
+                Text(error).font(.caption).foregroundStyle(Theme.warning)
+                    .padding(.bottom, 6)
             }
-            if let error {
-                Text(error).font(.system(size: 11)).foregroundStyle(Theme.warning)
-            }
-        }
-        .onAppear {
-            status = ""
-        }
-    }
-
-    private func download() {
-        busy = true
-        error = nil
-        status = "Downloading… the app stays usable meanwhile."
-        Task {
-            do {
-                try await ParakeetRecognizer.shared.downloadIfNeeded()
-                status = "Model ready"
-                ProviderHealth.shared.refresh()
-            } catch {
-                self.error = error.localizedDescription
-                status = "Download failed"
-            }
-            busy = false
         }
     }
 }

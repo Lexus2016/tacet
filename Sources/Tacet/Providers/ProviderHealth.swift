@@ -182,6 +182,8 @@ final class ProviderHealth: ObservableObject {
     @Published private(set) var targets: [ProviderTarget] = []
     @Published private(set) var conditions: [ProviderTarget.ID: ProviderCondition] = [:]
     @Published private(set) var failures: [ProviderTarget.ID: String] = [:]
+    @Published private(set) var isChecking = false
+    @Published private(set) var lastCheck: Date?
 
     private var lastRequest: [ProviderTarget.ID: Date] = [:]
     private var credentialsChanged: [String: Date] = [:]
@@ -204,10 +206,11 @@ final class ProviderHealth: ObservableObject {
         }
     }
 
-    func refresh(configurationOnly: Bool = false) {
+    func refresh(configurationOnly: Bool = false, force: Bool = false) {
         let updated = configuredTargets()
         let unchanged = updated == targets
         guard !configurationOnly || !unchanged else { return }
+        guard !unchanged || !isChecking || force else { return }
         if !unchanged {
             let retained = Set(targets).intersection(updated).map(\.id)
             conditions = conditions.filter { retained.contains($0.key) }
@@ -216,6 +219,12 @@ final class ProviderHealth: ObservableObject {
             targets = updated
         }
         checks?.cancel()
+        isChecking = !updated.isEmpty
+        guard isChecking else {
+            lastCheck = nil
+            checks = nil
+            return
+        }
         checks = Task {
             await withTaskGroup(of: (ProviderTarget.ID, ProviderCondition).self) { group in
                 for target in updated {
@@ -226,6 +235,10 @@ final class ProviderHealth: ObservableObject {
                     conditions[id] = condition
                 }
             }
+            guard !Task.isCancelled else { return }
+            lastCheck = Date()
+            isChecking = false
+            checks = nil
         }
     }
 
@@ -234,7 +247,7 @@ final class ProviderHealth: ObservableObject {
         conditions = conditions.filter { $0.key.provider != provider }
         failures = failures.filter { $0.key.provider != provider }
         lastRequest = lastRequest.filter { $0.key.provider != provider }
-        refresh()
+        refresh(force: true)
     }
 
     func condition(for id: ProviderTarget.ID) -> ProviderCondition {

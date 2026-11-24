@@ -27,8 +27,11 @@ struct ModelChooser: View {
                 Text("\(spec.name) models")
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
-                if loading { ProgressView().controlSize(.small) }
-                Button("Refresh") { load() }
+                Button {
+                    load()
+                } label: {
+                    PendingActionLabel(title: "Refresh", pendingTitle: "Loading models…", isPending: loading)
+                }
                     .buttonStyle(SoftButtonStyle())
                     .disabled(loading)
                 Button("Close") { dismiss() }
@@ -94,6 +97,7 @@ struct ModelChooser: View {
     }
 
     private func load() {
+        guard !loading else { return }
         loading = true
         error = nil
         Task {
@@ -127,8 +131,11 @@ struct ProviderTestRow: View {
                 Text(LocalizedStringKey(title))
                     .font(.system(size: 13))
                 Spacer()
-                if busy { ProgressView().controlSize(.small) }
-                Button("Test") { run() }
+                Button {
+                    run()
+                } label: {
+                    PendingActionLabel(title: "Test", pendingTitle: "Testing…", isPending: busy)
+                }
                     .buttonStyle(SoftButtonStyle())
                     .disabled(busy || model.isEmpty)
             }
@@ -146,6 +153,7 @@ struct ProviderTestRow: View {
     }
 
     private func run() {
+        guard !busy else { return }
         busy = true
         message = nil
         Task {
