@@ -9,8 +9,7 @@ final class CloudRecognizer: SpeechRecognizer {
         let displayName: String
         let baseURL: URL
         let model: String
-        let keychainAccount: String
-        let environmentKey: String
+        let spec: ProviderSpec
         let timeout: TimeInterval
     }
 
@@ -27,28 +26,27 @@ final class CloudRecognizer: SpeechRecognizer {
     private var session: URLSession { SharedSession.cloud }
 
     private var apiKey: String? {
-        Keychain.secret(configuration.keychainAccount, environment: configuration.environmentKey)
+        ProviderCatalog.key(for: configuration.spec)
     }
 
     func isConfigured() -> Bool {
-        apiKey != nil && !configuration.model.isEmpty
+        (!configuration.spec.requiresKey || apiKey != nil) && !configuration.model.isEmpty
     }
 
-    var notConfiguredReason: String {
-        if apiKey == nil { return "No API key" }
-        return "No model selected"
+    func configurationIssue() -> String? {
+        if configuration.spec.requiresKey, apiKey == nil { return "No API key" }
+        return configuration.model.isEmpty ? "No model selected" : nil
     }
 
     func transcribe(_ clip: AudioClip, language: String?) async throws -> Transcript {
-        guard let apiKey else { throw RecognitionError.missingKey(displayName) }
+        let key = apiKey
+        if configuration.spec.requiresKey, key == nil { throw RecognitionError.missingKey(displayName) }
 
-        let boundary = "tacet-\(UUID().uuidString)"
-        let body = try makeBody(boundary: boundary, clip: clip, language: language)
-        var request = URLRequest(url: configuration.baseURL.appendingPathComponent("audio/transcriptions"))
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+        let request = Self.makeRequest(
+            spec: configuration.spec, endpoint: configuration.baseURL, key: key,
+            model: configuration.model, timeout: configuration.timeout,
+            audio: try Data(contentsOf: clip.url), language: language
+        )
 
         let started = Date()
         let (data, response) = try await session.data(for: request)
@@ -78,7 +76,7 @@ final class CloudRecognizer: SpeechRecognizer {
 
         return Transcript(
             text: text,
-            language: LanguagePolicy.normalize(decoded.language),
+            language: LanguagePolicy.normalize(decoded.language) ?? TextLanguage.detect(text) ?? language,
             engine: id,
             score: Self.confidence(from: segments),
             latency: latency
@@ -87,7 +85,15 @@ final class CloudRecognizer: SpeechRecognizer {
 
     // MARK: Request
 
-    private func makeBody(boundary: String, clip: AudioClip, language: String?) throws -> Data {
+    static func makeRequest(spec: ProviderSpec, endpoint: URL, key: String?, model: String,
+                            timeout: TimeInterval, audio: Data, language: String?) -> URLRequest {
+        let boundary = "tacet-\(UUID().uuidString)"
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        spec.setHeaders(on: &request, key: key)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
         var body = Data()
 
         func append(_ string: String) {
@@ -100,22 +106,24 @@ final class CloudRecognizer: SpeechRecognizer {
             append("\(value)\r\n")
         }
 
-        let audio = try Data(contentsOf: clip.url)
         append("--\(boundary)\r\n")
         append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n")
         append("Content-Type: audio/wav\r\n\r\n")
         body.append(audio)
         append("\r\n")
 
-        field("model", configuration.model)
-        field("response_format", "verbose_json")
+        field("model", model)
+        let verbose = spec.id == "groq" || ["whisper-1", "openai/whisper-1", "openai/whisper-large-v3",
+                                            "openai/whisper-large-v3-turbo"].contains(model)
+        field("response_format", verbose ? "verbose_json" : "json")
         field("temperature", "0")
         if let language {
             field("language", language)
         }
 
         append("--\(boundary)--\r\n")
-        return body
+        request.httpBody = body
+        return request
     }
 
     // MARK: Response

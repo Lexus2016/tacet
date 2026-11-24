@@ -52,7 +52,6 @@
 "Paste the key" = "Встав ключ";
 "Save" = "Зберегти";
 "Clear" = "Очистити";
-"Stored in the Keychain" = "Збережено в Keychain";
 "No key" = "Немає ключа";
 "Test connection" = "Перевірити з'єднання";
 "Test" = "Тест";
@@ -120,7 +119,6 @@
 "Selection removed" = "Виділення видалено";
 "Microphone blocked" = "Мікрофон заблоковано";
 "Recovered — in History" = "Відновлено — в Історії";
-"Preview" = "Перегляд";
 "Preparing microphone…" = "Підготовка мікрофона…";
 
 "Works." = "Працює.";
@@ -152,5 +150,62 @@
 
 "These are the speech-recognition engines used for voice transcription, tried in this order. Only configured providers are listed; failed ones are skipped." = "Це рушії розпізнавання мовлення для транскрипції голосу, пробуються в цьому порядку. Показані лише налаштовані провайдери; невдалі пропускаються.";
 
-"Floating indicator" = "Плаваючий індикатор";
 "Custom / OpenAI-compatible" = "Свій / OpenAI-сумісний";
+
+"Tacet Settings" = "Налаштування Tacet";
+"Tacet History" = "Історія Tacet";
+"Provider connections" = "Підключення до сервісів";
+"Edit connection…" = "Редагувати підключення…";
+"Edit connection" = "Редагувати підключення";
+"Chat model" = "Модель для обробки тексту";
+"Chat base URL" = "Адреса для обробки тексту";
+"Optional. Uses the base URL above when empty." = "Необов’язково. Якщо порожньо, використовується адреса вище.";
+"Browse models" = "Переглянути моделі";
+"Remove provider…" = "Видалити провайдера…";
+"Remove this provider?" = "Видалити цього провайдера?";
+"The API key could not be saved." = "Не вдалося зберегти ключ доступу.";
+"The API key could not be removed." = "Не вдалося видалити ключ доступу.";
+"Choose a model first." = "Спершу виберіть модель.";
+"Choose a provider" = "Виберіть провайдера";
+"The provider returned an unexpected response." = "Провайдер повернув неочікувану відповідь.";
+"No matching models" = "Моделей за цим запитом немає";
+"No matching dictations" = "Диктантів за цим запитом немає";
+"Set the model and credentials in Providers." = "Виберіть модель і вкажіть ключ у розділі «Провайдери».";
+"Tacet tries engines in this order and uses the first successful transcript." = "Tacet пробує рушії в цьому порядку й використовує перший успішний результат.";
+"Add engine…" = "Додати рушій…";
+"Move up" = "Перемістити вгору";
+"Move down" = "Перемістити вниз";
+"Remove from chain" = "Вилучити з черги";
+"Transcription turned off in Providers" = "Розпізнавання вимкнено в розділі «Провайдери»";
+"Set up a provider or download Parakeet to add an engine." = "Налаштуйте провайдера або завантажте Parakeet, щоб додати рушій.";
+"Click, then press the combination you want. You can also use a single ⌘, ⌥, ⌃ or ⇧." = "Натисніть і введіть потрібну комбінацію. Можна також використати одну клавішу ⌘, ⌥, ⌃ або ⇧.";
+"Keeps your existing clipboard. Turn off to copy dictations for manual pasting." = "Зберігає вміст буфера. Вимкніть, щоб копіювати текст для ручного вставлення.";
+"Selection edit failed. The instruction is in History." = "Не вдалося відредагувати виділення. Команда збережена в історії.";
+"Selection could not be read. Text saved in History." = "Не вдалося прочитати виділення. Текст збережено в історії.";
+"Selection left unchanged. Result kept in History." = "Виділення залишилося без змін. Результат збережено в історії.";
+"Could not insert safely. Text saved in History." = "Не вдалося безпечно вставити текст. Його збережено в історії.";
+"Copied to clipboard, press ⌘V" = "Скопійовано до буфера. Натисніть ⌘V, щоб вставити.";
+"Recovered — open History to copy" = "Запис відновлено. Відкрийте історію, щоб скопіювати текст.";
+"Source code" = "Вихідний код";
+"GPL-3.0 · Based on TypeWhisper" = "GPL-3.0 · На основі TypeWhisper";
+"Dictate into your editor with a keyboard shortcut. Use on-device recognition or connect a cloud provider. Tacet keeps your clipboard intact when it inserts text automatically." = "Диктуйте в редактор за допомогою гарячої клавіші. Розпізнавайте мовлення на Mac або під’єднайте хмарний сервіс. Після автоматичного вставлення Tacet повертає вміст буфера обміну.";
+
+"Delete this dictation?" = "Видалити цей диктант?";
+"This removes the transcript and its saved recording." = "Текст і збережений аудіозапис буде видалено.";
+"Insertion" = "Вставлення";
+"In History" = "В історії";
+"Latency" = "Обробка";
+"Not transcribed" = "Не розпізнано";
+"Short Tacet cues for start, success and errors" = "Короткі звуки початку, успіху та помилки.";
+"Restart Tacet to apply" = "Перезапустіть Tacet, щоб застосувати.";
+"Version %@" = "Версія %@";
+"Audio" = "Аудіо";
+"App" = "Застосунок";
+"Transcription model" = "Модель розпізнавання";
+"Stored in the Keychain" = "Збережено у в’язці ключів";
+
+"Tacet ready" = "Tacet готовий";
+"Tacet preparing microphone" = "Tacet готує мікрофон";
+"Tacet recording" = "Tacet записує";
+"Tacet transcribing" = "Tacet розпізнає мовлення";
+"Tacet needs attention" = "Tacet потребує уваги";

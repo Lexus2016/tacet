@@ -1,11 +1,9 @@
 import Foundation
 
 struct EngineConfiguration: Sendable {
-    let groqModel: String
     let openAIBaseURL: String
-    let openAIModel: String
     let cloudTimeout: TimeInterval
-    var asrModels: [String: String] = [:]
+    let asrModels: [String: String]
 }
 
 /// Runs the configured engine chain for one clip.
@@ -32,7 +30,9 @@ final class TranscriptionPipeline {
         // text, which no post-hoc text check can see.
         let voiceCheck = startVoiceLanguageCheck(clip: clip, settings: settings)
 
+        defer { voiceCheck?.cancel() }
         for engineID in settings.engineOrder {
+            if Task.isCancelled { break }
             guard let recognizer = makeRecognizer(engineID, engines: engines) else {
                 attempts.append(Attempt(engine: engineID, error: "Unknown engine", latency: 0))
                 continue
@@ -162,51 +162,16 @@ final class TranscriptionPipeline {
     }
 
     private func makeRecognizer(_ id: String, engines: EngineConfiguration) -> SpeechRecognizer? {
-        switch id {
-        case EngineID.groq:
-            guard let url = URL(string: "https://api.groq.com/openai/v1") else { return nil }
-            return CloudRecognizer(configuration: .init(
-                id: EngineID.groq,
-                displayName: "Groq",
-                baseURL: url,
-                model: engines.groqModel,
-                keychainAccount: KeychainAccount.groq,
-                environmentKey: "GROQ_API_KEY",
-                timeout: engines.cloudTimeout
-            ))
+        if id == EngineID.parakeet { return parakeet }
+        guard let spec = ProviderCatalog.spec(id), spec.supportsTranscription,
+              let endpoint = spec.endpoint("audio/transcriptions", baseURL: id == EngineID.openAI ? engines.openAIBaseURL : nil)
+        else { return nil }
 
-        case EngineID.openAI:
-            guard let url = URL(string: engines.openAIBaseURL) else { return nil }
-            return CloudRecognizer(configuration: .init(
-                id: EngineID.openAI,
-                displayName: "OpenAI-compatible",
-                baseURL: url,
-                model: engines.openAIModel,
-                keychainAccount: KeychainAccount.openAI,
-                environmentKey: "OPENAI_API_KEY",
-                timeout: engines.cloudTimeout
-            ))
-
-        case EngineID.parakeet:
-            return parakeet
-
-        default:
-            // Any other provider is tried through the OpenAI-compatible
-            // transcription endpoint with its own key and model.
-            guard let spec = ProviderCatalog.spec(id),
-                  let url = URL(string: spec.baseURL)
-            else { return nil }
-
-            return CloudRecognizer(configuration: .init(
-                id: spec.id,
-                displayName: spec.name,
-                baseURL: url,
-                model: engines.asrModels[spec.id] ?? ProviderCatalog.defaultASRModel(for: spec.id),
-                keychainAccount: spec.id,
-                environmentKey: spec.environmentKey ?? "",
-                timeout: engines.cloudTimeout
-            ))
-        }
+        let model = engines.asrModels[id] ?? ProviderCatalog.defaultASRModel(for: id)
+        return CloudRecognizer(configuration: .init(
+            id: id, displayName: spec.name, baseURL: endpoint, model: model,
+            spec: spec, timeout: engines.cloudTimeout
+        ))
     }
 
     private static func describe(_ error: Error) -> String {

@@ -17,6 +17,45 @@ enum CLIHarness {
     static func runIfRequested() -> Bool {
         let arguments = CommandLine.arguments
 
+        #if DEBUG
+        if arguments.contains("--check-ollama-auth") {
+            Task {
+                guard let spec = ProviderCatalog.spec("ollamaCloud"),
+                      let url = spec.endpoint("chat/completions") else { exit(2) }
+                guard let key = Keychain.string(spec.keychainAccount) else {
+                    print("Ollama Cloud has no readable Keychain entry.")
+                    exit(3)
+                }
+
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 12
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                spec.setHeaders(on: &request, key: key)
+                request.httpBody = Data(#"{"model":"tacet-audit-intentionally-nonexistent-model","messages":[{"role":"user","content":"diagnostic"}]}"#.utf8)
+                do {
+                    let (_, response) = try await SharedSession.cloud.data(for: request)
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    print("Ollama Cloud Keychain authentication: HTTP \(status).")
+                    exit(status == 404 ? 0 : 4)
+                } catch {
+                    print("Ollama Cloud connection failed.")
+                    exit(5)
+                }
+            }
+            return true
+        }
+        if arguments.contains("--check-editor-input") {
+            Task {
+                let expectedApp = value(after: "--app", in: arguments)
+                let expectedSelection = value(after: "--selection", in: arguments)
+                await checkEditorInput(appID: expectedApp, selection: expectedSelection,
+                                       probeOnly: arguments.contains("--probe-copy"))
+            }
+            return true
+        }
+        #endif
+
         if arguments.contains("--preview-hud") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 HUDController.shared.showRecording()
@@ -26,6 +65,24 @@ enum CLIHarness {
                 exit(0)
             }
             return false
+        }
+
+        if let path = value(after: "--render-hud", in: arguments) {
+            let theme = IndicatorTheme(rawValue: value(after: "--theme", in: arguments) ?? "glass") ?? .glass
+            Task {
+                let hud = HUDController.shared
+                if arguments.contains("--processing") {
+                    hud.showProcessing(theme: theme)
+                } else {
+                    hud.showRecording(theme: theme)
+                    hud.updateLevel(0.55)
+                }
+                try? await Task.sleep(for: .milliseconds(240))
+                let rendered = hud.previewWindow.map { render($0, to: path) } ?? false
+                hud.hide()
+                exit(rendered ? 0 : 1)
+            }
+            return true
         }
 
         if arguments.contains("--check-hotkey") {
@@ -52,31 +109,38 @@ enum CLIHarness {
                     NSLog("render timed out")
                     exit(2)
                 }
-                renderSettings(to: path)
+                let tab = SettingsView.Tab(rawValue: value(after: "--tab", in: arguments) ?? "") ?? .general
+                let appearance = value(after: "--appearance", in: arguments) == "dark" ? NSAppearance.Name.darkAqua : .aqua
+                let window = arguments.contains("--history") ? makeHistoryWindow(entries: sampleEntries()) : makeSettingsWindow(tab: tab)
+                if arguments.contains("--minimum-size") {
+                    window.setContentSize(arguments.contains("--history") ? AppWindows.historyMinimum : AppWindows.settingsMinimum)
+                }
+                window.appearance = NSAppearance(named: appearance)
+                if !render(window, to: path) { exit(1) }
                 exit(0)
             }
             return true
         }
 
-        if arguments.contains("--preview-ui") {
+        if arguments.contains("--preview-ui") || arguments.contains("--preview-history") {
             let tab = SettingsView.Tab(rawValue: value(after: "--tab", in: arguments) ?? "") ?? .general
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                NSApp.activate()
-                let window = makeSettingsWindow(tab: tab)
+            DispatchQueue.main.async {
+                let window = arguments.contains("--preview-history")
+                    ? makeHistoryWindow(entries: sampleEntries())
+                    : makeSettingsWindow(tab: tab)
                 previewWindow = window
+                NSApp.setActivationPolicy(.regular)
+                TacetIcon.applyToDock()
                 window.makeKeyAndOrderFront(nil)
-            }
-            return false
-        }
-
-        if arguments.contains("--preview-history") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 NSApp.activate()
-                let window = makeHistoryWindow(entries: sampleEntries())
-                previewWindow = window
-                window.makeKeyAndOrderFront(nil)
+                if arguments.contains("--trace-window") {
+                    traceWindowFrame(window)
+                    NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: window, queue: .main) { _ in
+                        MainActor.assumeIsolated { traceWindowFrame(window) }
+                    }
+                }
             }
-            return false
+            return true
         }
 
         if arguments.contains("--prepare-parakeet") {
@@ -136,10 +200,9 @@ enum CLIHarness {
                 let settings = AppSettings.shared
                 let configuration = CleanupConfiguration(
                     provider: settings.cleanupProvider,
-                    baseURL: settings.cleanupBaseURL,
+                    baseURL: settings.openAIChatBaseURL,
                     model: settings.chatModel(for: settings.cleanupProvider),
-                    timeout: max(6, settings.cleanupTimeout + 4),
-                    secondaryProvider: nil
+                    timeout: max(6, settings.cleanupTimeout + 4)
                 )
                 let started = Date()
                 let outcome = await SelectionEditor().edit(selection: selection,
@@ -160,10 +223,9 @@ enum CLIHarness {
                 let settings = AppSettings.shared
                 let configuration = CleanupConfiguration(
                     provider: settings.cleanupProvider,
-                    baseURL: settings.cleanupBaseURL,
+                    baseURL: settings.openAIChatBaseURL,
                     model: settings.chatModel(for: settings.cleanupProvider),
-                    timeout: max(4, settings.cleanupTimeout + 2),
-                    secondaryProvider: nil
+                    timeout: max(4, settings.cleanupTimeout + 2)
                 )
                 if let spec = ProviderCatalog.spec(configuration.provider) {
                     print("provider: \(spec.id), model: \(configuration.model), base: \(spec.baseURL)")
@@ -203,6 +265,56 @@ enum CLIHarness {
         return false
     }
 
+    #if DEBUG
+    private static func checkEditorInput(appID: String?, selection: String?, probeOnly: Bool) async {
+        guard TextInserter.isAccessibilityTrusted() else {
+            print("Accessibility is unavailable for this build.")
+            exit(2)
+        }
+        guard let appID, let selection, selection.hasPrefix("Tacet audit "), let focus = SelectionReader.Focus(),
+              focus.application.bundleIdentifier == appID else {
+            let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unavailable"
+            print("The dedicated editor fixture is not focused (frontmost: \(frontmost)).")
+            exit(3)
+        }
+
+        let before = pasteboardContent()
+        let captured = await SelectionReader.read(in: focus)
+        if probeOnly {
+            switch captured {
+            case .none: print("Selection: none.")
+            case .unreadable: print("Selection: unreadable.")
+            case .text(let text, let range):
+                print("Selection: text; exact fixture: \(text == selection); trailing newline: \(text.last?.isNewline == true); range exposed: \(range != nil).")
+            }
+            exit(before == pasteboardContent() ? 0 : 5)
+        }
+        guard case .text(let text, _) = captured, text == selection else {
+            print("The selected fixture could not be read.")
+            exit(4)
+        }
+        guard before == pasteboardContent() else {
+            print("Clipboard changed after reading the selection.")
+            exit(5)
+        }
+        guard await TextInserter.paste("Tacet audit replacement verified.", in: focus),
+              before == pasteboardContent() else {
+            print("Could not post the replacement and preserve the clipboard.")
+            exit(6)
+        }
+        print("Selection read, replacement posted, clipboard contents verified.")
+        exit(0)
+    }
+
+    private static func pasteboardContent() -> [[String: Data]] {
+        (NSPasteboard.general.pasteboardItems ?? []).map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type.rawValue, $0) }
+            })
+        }
+    }
+    #endif
+
     private static func value(after flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
         return arguments[index + 1]
@@ -210,54 +322,46 @@ enum CLIHarness {
 
     // MARK: Windows
 
+    private static func traceWindowFrame(_ window: NSWindow) {
+        let line = "Window frame: \(NSStringFromRect(window.frame))\n"
+        FileHandle.standardOutput.write(Data(line.utf8))
+    }
+
     private static func makeSettingsWindow(tab: SettingsView.Tab) -> NSWindow {
-        let root = SettingsView(initialTab: tab).environmentObject(DictationController.shared)
-        return wrap(root, size: NSSize(width: 620, height: 660), title: "Tacet Settings")
+        AppWindows.makeWindow(title: String(localized: "Tacet Settings"),
+                              size: AppWindows.settingsSize, minimum: AppWindows.settingsMinimum) {
+            SettingsView(initialTab: tab).environmentObject(DictationController.shared)
+        }
     }
 
     private static func makeHistoryWindow(entries: [HistoryEntry]) -> NSWindow {
-        let root = HistoryView(entries: entries).environmentObject(DictationController.shared)
-        return wrap(root, size: NSSize(width: 900, height: 600), title: "Tacet History")
-    }
-
-    private static func wrap<Content: View>(_ root: Content, size: NSSize, title: String) -> NSWindow {
-        let hosting = NSHostingView(rootView: root)
-        hosting.setFrameSize(size)
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = title
-        window.contentView = hosting
-        window.center()
-        window.level = .floating // harness only: keeps the preview above the terminal
-        return window
+        AppWindows.makeWindow(title: String(localized: "Tacet History"),
+                              size: AppWindows.historySize, minimum: AppWindows.historyMinimum) {
+            HistoryView(entries: entries).environmentObject(DictationController.shared)
+        }
     }
 
     /// Renders the settings window off-screen and writes a PNG.
-    static func renderSettings(to path: String) {
-        let window = makeSettingsWindow(tab: .general)
-        guard let hosting = window.contentView else { return }
-        window.orderFrontRegardless()
+    private static func render(_ window: NSWindow, to path: String) -> Bool {
+        guard let hosting = window.contentView else { return false }
         hosting.layoutSubtreeIfNeeded()
 
         guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
             print("could not allocate a bitmap")
-            return
+            return false
         }
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else {
             print("could not encode a PNG")
-            return
+            return false
         }
         do {
             try data.write(to: URL(fileURLWithPath: path))
             print("wrote \(path)")
+            return true
         } catch {
             print("write failed: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -312,16 +416,11 @@ enum CLIHarness {
         let settings = AppSettings.shared
         let pipelineSettings = PipelineSettings(
             languageOverride: settings.languageOverride,
-            engineOrder: settings.engineOrder,
+            engineOrder: settings.activeEngineOrder,
             dualLanguageCheck: false,
             cloudTimeout: settings.cloudTimeout
         )
-        let engines = EngineConfiguration(
-            groqModel: settings.groqModel,
-            openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.openAIModel,
-            cloudTimeout: settings.cloudTimeout
-        )
+        let engines = settings.engineConfiguration
 
         print("audio: \(String(format: "%.2f", clip.duration)) s, runs: \(count)")
         var times: [Double] = []
@@ -355,22 +454,16 @@ enum CLIHarness {
         let settings = AppSettings.shared
         let pipelineSettings = PipelineSettings(
             languageOverride: settings.languageOverride,
-            engineOrder: settings.engineOrder,
+            engineOrder: settings.activeEngineOrder,
             dualLanguageCheck: settings.dualLanguageCheck,
             cloudTimeout: settings.cloudTimeout
         )
-        let engines = EngineConfiguration(
-            groqModel: settings.groqModel,
-            openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.openAIModel,
-            cloudTimeout: settings.cloudTimeout
-        )
+        let engines = settings.engineConfiguration
         let configuration = CleanupConfiguration(
             provider: settings.cleanupProvider,
-            baseURL: settings.cleanupBaseURL,
+            baseURL: settings.openAIChatBaseURL,
             model: settings.chatModel(for: settings.cleanupProvider),
-            timeout: settings.cleanupTimeout,
-            secondaryProvider: nil
+            timeout: settings.cleanupTimeout
         )
 
         print(String(format: "audio: %.1f s", clip.duration))
@@ -422,16 +515,11 @@ enum CLIHarness {
             let settings = AppSettings.shared
             let pipelineSettings = PipelineSettings(
                 languageOverride: languageOverride ?? settings.languageOverride,
-                engineOrder: engineOrder ?? settings.engineOrder,
+                engineOrder: engineOrder ?? settings.activeEngineOrder,
                 dualLanguageCheck: settings.dualLanguageCheck,
                 cloudTimeout: settings.cloudTimeout
             )
-            let engines = EngineConfiguration(
-                groqModel: settings.groqModel,
-                openAIBaseURL: settings.openAIBaseURL,
-                openAIModel: settings.openAIModel,
-                cloudTimeout: settings.cloudTimeout
-            )
+            let engines = settings.engineConfiguration
 
             let started = Date()
             let result = await TranscriptionPipeline().transcribe(clip, settings: pipelineSettings, engines: engines)

@@ -15,7 +15,6 @@ struct CleanupConfiguration: Sendable {
     let baseURL: String
     let model: String
     let timeout: TimeInterval
-    let secondaryProvider: String?
 }
 
 /// The cleanup pass is a quality feature, not a dependency. Every path that
@@ -28,74 +27,41 @@ final class CleanupPipeline {
               !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return .raw(rawText) }
 
-        var providers: [String] = [configuration.provider]
-        if let secondary = configuration.secondaryProvider, !providers.contains(secondary) {
-            providers.append(secondary)
+        guard let spec = ProviderCatalog.spec(configuration.provider) else { return .raw(rawText) }
+        let key = ProviderCatalog.key(for: spec)
+        if spec.requiresKey, key == nil { return .raw(rawText) }
+
+        let candidate = try? await withTimeout(configuration.timeout) {
+            try await self.request(spec: spec, key: key, text: rawText, configuration: configuration)
         }
-
-        for provider in providers {
-            guard let spec = ProviderCatalog.spec(provider) else { continue }
-            let key = ProviderCatalog.key(for: spec)
-            if spec.requiresKey, key == nil { continue }
-
-            if let candidate = try? await attempt(provider: provider,
-                                                  spec: spec,
-                                                  key: key,
-                                                  text: rawText,
-                                                  configuration: configuration) {
-                let normalized = CleanupGuard.normalize(candidate)
-                if CleanupGuard.isAcceptable(input: rawText, output: normalized) {
-                    return CleanupResult(text: normalized, engine: provider, changed: normalized != rawText)
-                }
-            }
-        }
-
-        return .raw(rawText)
-    }
-
-    private func attempt(provider: String,
-                         spec: ProviderSpec,
-                         key: String?,
-                         text: String,
-                         configuration: CleanupConfiguration) async throws -> String {
-        try await withTimeout(configuration.timeout) {
-            try await self.request(provider: provider,
-                                   spec: spec,
-                                   key: key,
-                                   text: text,
-                                   configuration: configuration)
-        }
+        guard let candidate else { return .raw(rawText) }
+        let normalized = CleanupGuard.normalize(candidate)
+        guard CleanupGuard.isAcceptable(input: rawText, output: normalized) else { return .raw(rawText) }
+        return CleanupResult(text: normalized, engine: spec.id, changed: normalized != rawText)
     }
 
     // MARK: Request
 
-    private func request(provider: String,
-                         spec: ProviderSpec,
+    private func request(spec: ProviderSpec,
                          key: String?,
                          text: String,
                          configuration: CleanupConfiguration) async throws -> String {
-        let base = provider == "openai"
+        let base = spec.id == EngineID.openAI
             ? configuration.baseURL
             : spec.baseURL
 
-        guard let url = URL(string: base)?.appendingPathComponent("chat/completions") else {
+        guard let url = spec.endpoint("chat/completions", baseURL: base) else {
             throw RecognitionError.failed("Invalid cleanup endpoint")
         }
-
-        let model = provider == configuration.provider
-            ? configuration.model
-            : ProviderCatalog.defaultChatModel(for: provider)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = max(configuration.timeout, 5)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let key {
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        }
+        spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
-            "model": model,
+            "model": configuration.model,
             "temperature": 0,
             "max_tokens": 2048,
             "messages": [

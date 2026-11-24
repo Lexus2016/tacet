@@ -88,6 +88,8 @@ final class AppSettings: ObservableObject {
     }
 
     func isASREnabled(for provider: String) -> Bool {
+        if provider == EngineID.parakeet { return true }
+        guard ProviderCatalog.spec(provider)?.supportsTranscription == true else { return false }
         if let stored = asrEnabled[provider] { return stored }
         return provider == EngineID.groq || provider == EngineID.openAI || provider == EngineID.parakeet
     }
@@ -98,7 +100,9 @@ final class AppSettings: ObservableObject {
 
     func asrModel(for provider: String) -> String {
         let stored = asrModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return stored.isEmpty ? ProviderCatalog.defaultASRModel(for: provider) : stored
+        if !stored.isEmpty { return stored }
+        let legacy = provider == EngineID.groq ? groqModel : provider == EngineID.openAI ? openAIModel : ""
+        return legacy.isEmpty ? ProviderCatalog.defaultASRModel(for: provider) : legacy
     }
 
     func setASRModel(_ model: String, for provider: String) {
@@ -140,12 +144,7 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(soundStyle, forKey: "soundStyle") }
     }
 
-    /// "island", "notch", "overlay" or "minimal".
-    @Published var indicatorStyle: String {
-        didSet { defaults.set(indicatorStyle, forKey: "indicatorStyle") }
-    }
-
-    /// "bottom" or "top", for the island and overlay styles.
+    /// "bottom" or "top". / "bottom" або "top".
     @Published var indicatorPosition: String {
         didSet { defaults.set(indicatorPosition, forKey: "indicatorPosition") }
     }
@@ -209,12 +208,26 @@ final class AppSettings: ObservableObject {
 
     // MARK: Derived
 
+    var activeEngineOrder: [String] { engineOrder.filter { isASREnabled(for: $0) } }
+
+    var engineConfiguration: EngineConfiguration {
+        EngineConfiguration(openAIBaseURL: openAIBaseURL, cloudTimeout: cloudTimeout,
+                            asrModels: Dictionary(uniqueKeysWithValues: ProviderCatalog.all.map {
+                                ($0.id, asrModel(for: $0.id))
+                            }))
+    }
+
     var languageOverride: String? {
         languageMode == "auto" ? nil : languageMode
     }
 
+    var openAIChatBaseURL: String {
+        cleanupBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? openAIBaseURL : cleanupBaseURL
+    }
+
     var isCleanupConfigured: Bool {
-        cleanupEnabled && !chatModel(for: cleanupProvider).isEmpty
+        guard cleanupEnabled, let spec = ProviderCatalog.spec(cleanupProvider) else { return false }
+        return ProviderCatalog.isConfigured(spec) && !chatModel(for: cleanupProvider).isEmpty
     }
 
     // MARK: Init
@@ -241,14 +254,14 @@ final class AppSettings: ObservableObject {
             }
         }
         chatModels = models
-        cleanupBaseURL = defaults.string(forKey: "cleanupBaseURL") ?? "https://api.groq.com/openai/v1"
+        let legacyChatURL = defaults.string(forKey: "cleanupBaseURL") ?? ""
+        cleanupBaseURL = legacyChatURL == "https://api.groq.com/openai/v1" ? "" : legacyChatURL
         let storedTimeout = defaults.object(forKey: "cleanupTimeout") as? Double
         // 1.5 s was the default before the 120B model; it is too tight for it.
         cleanupTimeout = (storedTimeout == nil || storedTimeout == 1.5) ? 3.0 : (storedTimeout ?? 3.0)
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
-        indicatorStyle = defaults.string(forKey: "indicatorStyle") ?? "island"
         indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
         indicatorTheme = defaults.string(forKey: "indicatorTheme") ?? "classic"
         uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"

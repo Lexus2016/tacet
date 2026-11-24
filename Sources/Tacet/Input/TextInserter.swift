@@ -19,42 +19,23 @@ enum TextInserter {
         return pasteboard.setString(text, forType: .string)
     }
 
-    /// Pastes with ⌘V. Returns false when Accessibility is not granted, in which
-    /// case the caller leaves the text on the clipboard.
-    @discardableResult
-    static func paste() -> Bool {
-        guard isAccessibilityTrusted() else { return false }
-        guard let source = CGEventSource(stateID: .combinedSessionState) else { return false }
-
-        usleep(45_000)
-
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cgAnnotatedSessionEventTap)
-        keyUp?.post(tap: .cgAnnotatedSessionEventTap)
-
-        return true
-    }
-
-    /// Sends Backspace, which removes the current selection.
-    @discardableResult
-    static func deleteSelection() -> Bool {
-        guard isAccessibilityTrusted(), let source = CGEventSource(stateID: .combinedSessionState) else {
-            return false
+    static func paste(_ text: String, in focus: SelectionReader.Focus) async -> Bool {
+        guard isAccessibilityTrusted(), focus.isCurrent else { return false }
+        return await TemporaryClipboard.paste(text, on: .general) {
+            focus.isCurrent && sendKey(0x09, command: true, to: focus.application)
         }
-
-        usleep(45_000)
-
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x33, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x33, keyDown: false)
-        keyDown?.post(tap: .cgAnnotatedSessionEventTap)
-        keyUp?.post(tap: .cgAnnotatedSessionEventTap)
-        return true
     }
 
-    static var frontmostAppName: String? {
-        NSWorkspace.shared.frontmostApplication?.localizedName
+    static func sendKey(_ key: CGKeyCode, command: Bool = false, to application: NSRunningApplication) -> Bool {
+        guard isAccessibilityTrusted(), !application.isTerminated,
+              let source = CGEventSource(stateID: .privateState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return false }
+
+        down.flags = command ? .maskCommand : []
+        up.flags = down.flags
+        down.postToPid(application.processIdentifier)
+        up.postToPid(application.processIdentifier)
+        return true
     }
 }

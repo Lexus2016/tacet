@@ -3,9 +3,11 @@ import SwiftUI
 
 struct HistoryView: View {
     @EnvironmentObject private var controller: DictationController
+    @Environment(\.colorScheme) private var scheme
     @State private var selection: HistoryEntry.ID?
     @State private var search = ""
     @State private var showingRaw = false
+    @State private var entryToDelete: HistoryEntry?
 
     private let previewEntries: [HistoryEntry]?
 
@@ -42,12 +44,24 @@ struct HistoryView: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 840, minHeight: 560)
-        .glassWindow()
+        .background(SoftWindowBackground())
         .tint(Theme.accent)
         .onAppear {
-            controller.refreshHistory()
+            if previewEntries == nil { controller.refreshHistory() }
             if selection == nil { selection = source.first?.id }
+        }
+        .alert("Delete this dictation?", isPresented: Binding(
+            get: { entryToDelete != nil },
+            set: { if !$0 { entryToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { entryToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let entryToDelete { controller.delete(entryToDelete) }
+                self.entryToDelete = nil
+                selection = nil
+            }
+        } message: {
+            Text("This removes the transcript and its saved recording.")
         }
     }
 
@@ -68,14 +82,14 @@ struct HistoryView: View {
             .background {
                 let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
                 shape
-                    .fill(Theme.trackFill(.dark))
+                    .fill(Theme.trackFill(scheme))
                     .overlay(shape.stroke(Color.white.opacity(0.06), lineWidth: 0.8))
             }
             .padding(.horizontal, 14)
 
             if filtered.isEmpty {
                 Spacer()
-                Text("No dictations yet")
+                Text(search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No dictations yet" : "No matching dictations")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -83,13 +97,14 @@ struct HistoryView: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 6) {
                         ForEach(filtered) { entry in
-                            HistoryRow(entry: entry, isSelected: entry.id == selection)
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                                        selection = entry.id
-                                        showingRaw = false
-                                    }
-                                }
+                            Button {
+                                selection = entry.id
+                                showingRaw = false
+                            } label: {
+                                HistoryRow(entry: entry, isSelected: entry.id == selection)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(entry.id == selection ? .isSelected : [])
                         }
                     }
                     .padding(.horizontal, 12)
@@ -97,7 +112,7 @@ struct HistoryView: View {
                 }
             }
         }
-        .padding(.top, 40)
+        .padding(.top, 18)
     }
 
     // MARK: Detail
@@ -175,8 +190,7 @@ struct HistoryView: View {
                     Spacer()
 
                     Button("Delete") {
-                        controller.delete(entry)
-                        selection = nil
+                        entryToDelete = entry
                     }
                     .buttonStyle(SoftButtonStyle(destructive: true))
                 }
@@ -203,31 +217,34 @@ struct HistoryView: View {
 
     private func displayText(_ entry: HistoryEntry) -> String {
         if showingRaw, let raw = entry.rawText { return raw }
-        return entry.text.isEmpty
-            ? "The engines could not transcribe this recording. It is still on disk — press Retry."
+        return entry.text.isEmpty && entry.status == .unrecovered
+            ? String(localized: "The engines could not transcribe this recording. It is still on disk — press Retry.")
             : entry.text
     }
 
     private func metadata(_ entry: HistoryEntry) -> some View {
-        HStack(spacing: 14) {
-            label("audio", String(format: "%.1f s", entry.duration))
-            label("latency", String(format: "%.2f s", entry.latency))
+        HStack(alignment: .top, spacing: 12) {
+            label("Audio", String(format: "%.1f s", entry.duration))
+            label("Latency", String(format: "%.2f s", entry.latency))
             if let app = entry.appName {
-                label("app", app)
+                label("App", app)
             }
-            label("inserted", entry.inserted ? "yes" : "copied only")
-            Spacer()
+            label("Insertion", entry.inserted ? String(localized: "Inserted") : String(localized: "In History"))
         }
-        .font(.system(size: 10.5))
+        .font(.caption2.monospacedDigit())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func label(_ title: String, _ value: String) -> some View {
-        HStack(spacing: 4) {
-            Text(title.uppercased())
-                .foregroundStyle(.tertiary)
-            Text(value)
+    private func label(_ title: LocalizedStringKey, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -244,7 +261,7 @@ private struct HistoryRow: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Theme.warning)
                 }
-                Text(entry.text.isEmpty ? "Not transcribed" : entry.text)
+                Text(entry.text.isEmpty ? String(localized: "Not transcribed") : entry.text)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(2)
                     .foregroundStyle(entry.text.isEmpty ? .secondary : .primary)

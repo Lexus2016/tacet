@@ -38,8 +38,8 @@ enum Keychain {
                 kSecAttrService as String: service,
                 kSecAttrAccount as String: account,
             ]
-            SecItemDelete(query as CFDictionary)
-            return true
+            let status = SecItemDelete(query as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
         }
 
         let data = Data(trimmed.utf8)

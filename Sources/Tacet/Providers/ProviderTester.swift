@@ -6,25 +6,23 @@ import Foundation
 enum ProviderTester {
     static func testChat(spec: ProviderSpec,
                          baseURL: String?,
-                         model: String) async -> Result<String, Error> {
-        let base = (baseURL ?? spec.baseURL).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: base)?.appendingPathComponent("chat/completions"),
-              !model.isEmpty
-        else { return .failure(ModelCatalog.Failure.noBaseURL) }
+                         model: String,
+                         session: URLSession = SharedSession.cloud) async -> Result<String, Error> {
+        guard let url = spec.endpoint("chat/completions", baseURL: baseURL) else {
+            return .failure(ModelCatalog.Failure.noBaseURL)
+        }
+        guard !model.isEmpty else { return .failure(ModelCatalog.Failure.noModel) }
 
-        guard let key = ProviderCatalog.key(for: spec) else {
-            return .failure(ModelCatalog.Failure.http(401, "No API key saved"))
+        let key = ProviderCatalog.key(for: spec)
+        guard !spec.requiresKey || key != nil else {
+            return .failure(ModelCatalog.Failure.http(401, String(localized: "No API key saved")))
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        if spec.id == "openrouter" {
-            request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")
-            request.setValue("Tacet", forHTTPHeaderField: "X-Title")
-        }
+        spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
             "model": model,
@@ -35,75 +33,56 @@ enum ProviderTester {
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         do {
-            let (data, response) = try await SharedSession.cloud.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return .failure(ModelCatalog.Failure.http(0, "No response"))
             }
             guard (200..<300).contains(http.statusCode) else {
                 return .failure(ModelCatalog.Failure.http(http.statusCode, message(from: data)))
             }
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return .failure(ModelCatalog.Failure.empty)
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let choices = object["choices"] as? [[String: Any]],
+                  let message = choices.first?["message"] as? [String: Any] else {
+                return .failure(ModelCatalog.Failure.unexpectedResponse)
             }
-            if let choices = object["choices"] as? [[String: Any]],
-               let message = choices.first?["message"] as? [String: Any],
-               let content = message["content"] as? String {
-                return .success(content.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            // Reasoning models can return an empty content field; the
-            // connection itself is fine.
-            return .success("")
+            // Reasoning models can use the full token budget before producing text.
+            // Моделі з міркуванням іноді вичерпують ліміт до появи тексту.
+            return .success((message["content"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             return .failure(error)
         }
     }
 
-    static func testTranscription(spec: ProviderSpec, model: String) async -> Result<String, Error> {
-        guard let url = URL(string: spec.baseURL)?.appendingPathComponent("audio/transcriptions"),
-              !model.isEmpty
-        else {
+    static func testTranscription(spec: ProviderSpec,
+                                  baseURL: String?,
+                                  model: String,
+                                  session: URLSession = SharedSession.cloud) async -> Result<String, Error> {
+        guard let url = spec.endpoint("audio/transcriptions", baseURL: baseURL) else {
             return .failure(ModelCatalog.Failure.noBaseURL)
         }
+        guard !model.isEmpty else { return .failure(ModelCatalog.Failure.noModel) }
 
-        guard let key = ProviderCatalog.key(for: spec) else {
-            return .failure(ModelCatalog.Failure.http(401, "No API key"))
+        let key = ProviderCatalog.key(for: spec)
+        guard !spec.requiresKey || key != nil else {
+            return .failure(ModelCatalog.Failure.http(401, String(localized: "No API key saved")))
         }
 
-        let silence = SilenceWav.data(seconds: 0.6)
-        let boundary = "tacet-test-\(UUID().uuidString)"
-
-        var body = Data()
-        func append(_ string: String) { body.append(Data(string.utf8)) }
-
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"file\"; filename=\"silence.wav\"\r\n")
-        append("Content-Type: audio/wav\r\n\r\n")
-        body.append(silence)
-        append("\r\n")
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"model\"\r\n\r\n")
-        append("\(model)\r\n")
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n")
-        append("json\r\n")
-        append("--\(boundary)--\r\n")
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+        let request = CloudRecognizer.makeRequest(
+            spec: spec, endpoint: url, key: key, model: model, timeout: 30,
+            audio: SilenceWav.data(seconds: 0.6), language: nil
+        )
 
         do {
-            let (data, response) = try await SharedSession.cloud.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return .failure(ModelCatalog.Failure.http(0, "No response"))
             }
             guard (200..<300).contains(http.statusCode) else {
                 return .failure(ModelCatalog.Failure.http(http.statusCode, message(from: data)))
             }
-            return .success("Key, endpoint and model accepted.")
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["text"] is String else { return .failure(ModelCatalog.Failure.unexpectedResponse) }
+            return .success("")
         } catch {
             return .failure(error)
         }

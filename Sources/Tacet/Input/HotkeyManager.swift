@@ -10,6 +10,7 @@ final class HotkeyManager {
     /// Called when a modifier-only press turned out to be a normal shortcut
     /// (another key was pressed while the modifier was held).
     var onCancel: (() -> Void)?
+    var togglesOnModifierRelease: (() -> Bool)?
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
@@ -21,6 +22,7 @@ final class HotkeyManager {
     private var modifierDown = false
     private var modifierStarted = false
     private var modifierSawKey = false
+    private var modifierPressedKeyCode: UInt16?
     private var pendingPress: DispatchWorkItem?
 
     deinit {
@@ -61,41 +63,52 @@ final class HotkeyManager {
 
             if isDown, !modifierDown {
                 modifierDown = true
+                modifierPressedKeyCode = event.keyCode
                 modifierStarted = false
                 modifierSawKey = false
 
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self, self.modifierDown, !self.modifierSawKey else { return }
-                    self.modifierStarted = true
-                    self.onPress?()
+                if togglesOnModifierRelease?() != true {
+                    let work = DispatchWorkItem { [weak self] in
+                        guard let self, self.modifierDown, !self.modifierSawKey else { return }
+                        self.modifierStarted = true
+                        self.onPress?()
+                    }
+                    pendingPress = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
                 }
-                pendingPress = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
-
-            } else if !isDown, modifierDown {
+            } else if modifierDown, event.keyCode == modifierPressedKeyCode, relevant != modifierMask {
                 modifierDown = false
+                modifierPressedKeyCode = nil
                 pendingPress?.cancel()
                 pendingPress = nil
 
                 if modifierStarted {
                     modifierStarted = false
                     onRelease?()
+                } else if !modifierSawKey, togglesOnModifierRelease?() == true {
+                    onPress?()
                 }
+            } else if modifierDown, relevant != modifierMask {
+                cancelModifierShortcut()
             }
 
         case .keyDown:
             guard modifierDown else { return }
-            modifierSawKey = true
-            pendingPress?.cancel()
-            pendingPress = nil
-
-            if modifierStarted {
-                modifierStarted = false
-                onCancel?()
-            }
+            cancelModifierShortcut()
 
         default:
             break
+        }
+    }
+
+    private func cancelModifierShortcut() {
+        modifierSawKey = true
+        pendingPress?.cancel()
+        pendingPress = nil
+
+        if modifierStarted {
+            modifierStarted = false
+            onCancel?()
         }
     }
 
@@ -158,6 +171,7 @@ final class HotkeyManager {
         pendingPress?.cancel()
         pendingPress = nil
         modifierDown = false
+        modifierPressedKeyCode = nil
         modifierStarted = false
 
         if let modifierMonitor {

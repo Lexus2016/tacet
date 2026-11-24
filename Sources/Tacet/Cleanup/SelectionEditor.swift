@@ -25,15 +25,13 @@ final class SelectionEditor {
         if spec.requiresKey, key == nil { return nil }
 
         let base = configuration.provider == "openai" ? configuration.baseURL : spec.baseURL
-        guard let url = URL(string: base)?.appendingPathComponent("chat/completions") else { return nil }
+        guard let url = spec.endpoint("chat/completions", baseURL: base) else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = max(6, configuration.timeout + 4)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let key {
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        }
+        spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
             "model": configuration.model,
@@ -46,12 +44,31 @@ final class SelectionEditor {
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
+        let preparedRequest = request
         guard let answer = try? await withTimeout(max(6, configuration.timeout + 4), operation: {
-            try await Self.send(request, session: self.session)
+            try await Self.send(preparedRequest, session: self.session)
         }) else { return nil }
 
-        if Self.isEchoOfCommand(answer, instruction: spoken) { return nil }
-        return Self.normalize(answer, selection: selected)
+        return Self.validatedAnswer(answer, selection: selected, instruction: spoken)
+    }
+
+    static func validatedAnswer(_ answer: String, selection: String, instruction: String) -> SelectionEditOutcome? {
+        guard let result = normalize(answer, selection: selection) else { return nil }
+        if !result.text.isEmpty {
+            return isEchoOfCommand(answer, instruction: instruction) ? nil : result
+        }
+
+        // Only a clear request for complete deletion can remove the whole selection.
+        // Видаляємо все виділення лише за однозначною командою повного видалення.
+        let words = instruction.lowercased().split(whereSeparator: { $0.isWhitespace || $0.isPunctuation })
+        let command = words.joined(separator: " ")
+        let deletionCommands: Set<String> = [
+            "delete", "delete it", "delete this", "delete selected text", "delete the selection",
+            "please delete it", "remove", "remove it", "remove this", "remove the selection",
+            "видали", "видали це", "видали виділення", "видали виділений текст", "прибери це",
+            "удали", "удали это", "удали выделение", "удали выделенный текст",
+        ]
+        return deletionCommands.contains(command) ? result : nil
     }
 
     /// Parses the model answer. `DELETE` means the selection must be removed;

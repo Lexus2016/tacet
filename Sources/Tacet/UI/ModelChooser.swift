@@ -5,8 +5,10 @@ import SwiftUI
 struct ModelChooser: View {
     let spec: ProviderSpec
     var baseURL: String?
+    var transcription = false
     @Binding var selection: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
 
     @State private var models: [String] = []
     @State private var search = ""
@@ -41,7 +43,7 @@ struct ModelChooser: View {
                     .textFieldStyle(.plain)
             }
             .padding(8)
-            .background(Theme.trackFill(.dark), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(Theme.trackFill(scheme), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .padding(.horizontal, 14)
 
             if let error {
@@ -50,6 +52,12 @@ struct ModelChooser: View {
                     .foregroundStyle(Theme.warning)
                     .padding(.horizontal, 14)
                     .padding(.top, 8)
+            }
+
+            if !loading, error == nil, filtered.isEmpty {
+                Text("No matching models")
+                    .foregroundStyle(.secondary)
+                    .padding()
             }
 
             ScrollView {
@@ -90,7 +98,7 @@ struct ModelChooser: View {
         error = nil
         Task {
             do {
-                models = try await ModelCatalog.fetch(spec: spec, baseURL: baseURL)
+                models = try await ModelCatalog.fetch(spec: spec, baseURL: baseURL, transcription: transcription)
             } catch {
                 self.error = error.localizedDescription
             }
@@ -122,7 +130,7 @@ struct ProviderTestRow: View {
                 if busy { ProgressView().controlSize(.small) }
                 Button("Test") { run() }
                     .buttonStyle(SoftButtonStyle())
-                    .disabled(busy)
+                    .disabled(busy || model.isEmpty)
             }
 
             if let message {
@@ -133,6 +141,8 @@ struct ProviderTestRow: View {
             }
         }
         .padding(.vertical, 7)
+        .onChange(of: model) { _, _ in message = nil }
+        .onChange(of: baseURL) { _, _ in message = nil }
     }
 
     private func run() {
@@ -144,7 +154,7 @@ struct ProviderTestRow: View {
             case .chat:
                 result = await ProviderTester.testChat(spec: spec, baseURL: baseURL, model: model)
             case .transcription:
-                result = await ProviderTester.testTranscription(spec: spec, model: model)
+                result = await ProviderTester.testTranscription(spec: spec, baseURL: baseURL, model: model)
             }
 
             switch result {

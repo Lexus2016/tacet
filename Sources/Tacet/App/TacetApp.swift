@@ -11,7 +11,7 @@ struct TacetApp: App {
             MenuBarView()
                 .environmentObject(controller)
         } label: {
-            Image(systemName: controller.menuBarSymbol)
+            Image(nsImage: controller.menuBarMark.image)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -21,6 +21,7 @@ struct TacetApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.applyActivationPolicy()
+        TacetIcon.applyToDock()
         if CLIHarness.runIfRequested() { return }
 
         _ = DictationController.shared
@@ -48,6 +49,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func applyActivationPolicy() {
         NSApp.setActivationPolicy(.accessory)
+    }
+}
+
+@MainActor
+enum TacetIcon {
+    static let image: NSImage = {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
+            return icon
+        }
+        return NSApp.applicationIconImage
+    }()
+
+    static func applyToDock() {
+        NSApp.applicationIconImage = image
     }
 }
 

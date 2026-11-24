@@ -25,14 +25,22 @@ final class CustomProviderStore: ObservableObject {
         providers = decoded
     }
 
-    func add(name: String, baseURL: String, requiresKey: Bool) -> String {
-        let id = "custom-" + UUID().uuidString.prefix(8).lowercased()
+    func add(name: String, baseURL: String, key: String) -> String? {
+        let id = "custom-" + UUID().uuidString.lowercased()
+        if !key.isEmpty, !Keychain.set(key, account: id) { return nil }
         providers.append(CustomProvider(id: id,
                                         name: name,
                                         baseURL: baseURL,
-                                        requiresKey: requiresKey))
+                                        requiresKey: !key.isEmpty))
         save()
         return id
+    }
+
+    func update(id: String, name: String, baseURL: String) {
+        guard let index = providers.firstIndex(where: { $0.id == id }) else { return }
+        providers[index].name = name
+        providers[index].baseURL = baseURL
+        save()
     }
 
     func remove(id: String) {

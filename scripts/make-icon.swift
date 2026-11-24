@@ -1,98 +1,70 @@
 #!/usr/bin/env swift
-// Builds Assets.xcassets/AppIcon.appiconset from Assets/icon-source.png.
-// The macOS icon grid wants the artwork inset to 824/1024 of the canvas with a
-// 185/824 corner radius; the generated source is nearly full-bleed, so the
-// corners are masked away instead of left white.
-
 import AppKit
 import Foundation
 
-let root = FileManager.default.currentDirectoryPath
-let sourcePath = "\(root)/Assets/icon-source.png"
-let outDirectory = "\(root)/Sources/Tacet/Resources/Assets.xcassets/AppIcon.appiconset"
+let sourceURL = URL(fileURLWithPath: "Assets/icon-source.png")
+let iconset = URL(fileURLWithPath: "Sources/Tacet/Resources/Assets.xcassets/AppIcon.appiconset")
+guard let source = NSImage(contentsOf: sourceURL) else { fatalError("Invalid icon source") }
 
-guard let source = NSImage(contentsOfFile: sourcePath) else {
-    fatalError("Missing \(sourcePath)")
-}
-try? FileManager.default.createDirectory(atPath: outDirectory, withIntermediateDirectories: true)
-
-/// Apple's macOS grid ratios.
-let insetRatio = 100.0 / 1024.0
-let cornerRatio = 185.0 / 824.0
-
-func render(size: Int) -> Data? {
-    guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: size,
-        pixelsHigh: size,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ) else { return nil }
-
+// Keep the bevel and alpha in the source art, with optical room at AppKit sizes.
+// Зберігаємо скляну грань і прозорість, залишаючи поля для розмірів AppKit.
+func render(size: Int) -> Data {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
+                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let context = NSGraphicsContext(bitmapImageRep: rep)!
     NSGraphicsContext.saveGraphicsState()
     defer { NSGraphicsContext.restoreGraphicsState() }
-    guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
     NSGraphicsContext.current = context
 
-    let cg = context.cgContext
-    cg.clear(CGRect(x: 0, y: 0, width: size, height: size))
-    cg.interpolationQuality = .high
-
-    let inset = CGFloat(size) * insetRatio
-    let side = CGFloat(size) - inset * 2
-    let rect = CGRect(x: inset, y: inset, width: side, height: side)
-    let radius = side * cornerRatio
-    let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
-    cg.addPath(path)
-    cg.clip()
-
-    source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: [.interpolation: NSImageInterpolation.high.rawValue])
-
-    return rep.representation(using: .png, properties: [:])
-}
-
-let variants: [(String, Int)] = [
-    ("icon_16x16.png", 16),
-    ("icon_16x16@2x.png", 32),
-    ("icon_32x32.png", 32),
-    ("icon_32x32@2x.png", 64),
-    ("icon_128x128.png", 128),
-    ("icon_128x128@2x.png", 256),
-    ("icon_256x256.png", 256),
-    ("icon_256x256@2x.png", 512),
-    ("icon_512x512.png", 512),
-    ("icon_512x512@2x.png", 1024),
-]
-
-for (name, size) in variants {
-    guard let data = render(size: size) else {
-        fatalError("Could not render \(name)")
+    let bounds = CGRect(x: 0, y: 0, width: size, height: size)
+    let graphics = context.cgContext
+    graphics.clear(bounds)
+    let inset = CGFloat(size) * (size <= 32 ? 0.035 : 0.073)
+    let artwork = bounds.insetBy(dx: inset, dy: inset)
+    if size == 16 {
+        drawSmallIcon(in: artwork, graphics: graphics)
+    } else {
+        let edge = artwork.insetBy(dx: artwork.width * 0.028, dy: artwork.height * 0.038)
+        let radius = edge.width * 0.249
+        graphics.addPath(CGPath(roundedRect: edge, cornerWidth: radius, cornerHeight: radius, transform: nil))
+        graphics.clip()
+        source.draw(in: artwork, from: .zero, operation: .sourceOver,
+                    fraction: 1, respectFlipped: false, hints: [.interpolation: NSImageInterpolation.high.rawValue])
     }
-    try data.write(to: URL(fileURLWithPath: "\(outDirectory)/\(name)"))
+    return rep.representation(using: .png, properties: [:])!
 }
 
-let contents = """
-{
-  "images" : [
-    { "filename" : "icon_16x16.png", "idiom" : "mac", "scale" : "1x", "size" : "16x16" },
-    { "filename" : "icon_16x16@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "16x16" },
-    { "filename" : "icon_32x32.png", "idiom" : "mac", "scale" : "1x", "size" : "32x32" },
-    { "filename" : "icon_32x32@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "32x32" },
-    { "filename" : "icon_128x128.png", "idiom" : "mac", "scale" : "1x", "size" : "128x128" },
-    { "filename" : "icon_128x128@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "128x128" },
-    { "filename" : "icon_256x256.png", "idiom" : "mac", "scale" : "1x", "size" : "256x256" },
-    { "filename" : "icon_256x256@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "256x256" },
-    { "filename" : "icon_512x512.png", "idiom" : "mac", "scale" : "1x", "size" : "512x512" },
-    { "filename" : "icon_512x512@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "512x512" }
-  ],
-  "info" : { "author" : "xcode", "version" : 1 }
-}
-"""
+// At 16 pixels, the waveform needs three clearly separated strokes.
+// На 16 пікселях для хвилі потрібні три чітко розділені штрихи.
+func drawSmallIcon(in bounds: CGRect, graphics: CGContext) {
+    let tile = bounds.insetBy(dx: 0.55, dy: 0.55)
+    graphics.setFillColor(CGColor(red: 0.12, green: 0.18, blue: 0.27, alpha: 1))
+    graphics.addPath(CGPath(roundedRect: tile, cornerWidth: 3.4, cornerHeight: 3.4, transform: nil))
+    graphics.fillPath()
 
-try contents.write(toFile: "\(outDirectory)/Contents.json", atomically: true, encoding: .utf8)
-print("Wrote \(variants.count) icon variants to \(outDirectory)")
+    let capsule = CGRect(x: 2.3, y: 4.95, width: 11.4, height: 6.1)
+    graphics.setStrokeColor(CGColor(red: 0.66, green: 0.76, blue: 0.88, alpha: 0.85))
+    graphics.setLineWidth(0.6)
+    graphics.addPath(CGPath(roundedRect: capsule, cornerWidth: 3, cornerHeight: 3, transform: nil))
+    graphics.strokePath()
+
+    graphics.setFillColor(CGColor(red: 0.35, green: 0.69, blue: 1, alpha: 1))
+    graphics.fillEllipse(in: CGRect(x: 3.6, y: 6.3, width: 3.2, height: 3.4))
+    graphics.setStrokeColor(CGColor(red: 0.84, green: 0.90, blue: 0.95, alpha: 1))
+    graphics.setLineWidth(1)
+    graphics.setLineCap(.round)
+    for (x, height) in [(8.5, 1.4), (10.5, 3.1), (12.1, 1.4)] {
+        graphics.move(to: CGPoint(x: x, y: 8 - height / 2))
+        graphics.addLine(to: CGPoint(x: x, y: 8 + height / 2))
+    }
+    graphics.strokePath()
+}
+
+for size in [16, 32, 128, 256, 512] {
+    for scale in 1...2 {
+        let suffix = scale == 1 ? "" : "@2x"
+        let name = "icon_\(size)x\(size)\(suffix).png"
+        try render(size: size * scale).write(to: iconset.appendingPathComponent(name), options: .atomic)
+    }
+}

@@ -5,9 +5,9 @@ import SwiftUI
 /// source at the top, shadows that fall down. Nothing here is decorative for its
 /// own sake — depth is used to group controls and to show state.
 enum Theme {
-    static let accentStart = Color(red: 0.50, green: 0.57, blue: 1.00)
-    static let accentEnd = Color(red: 0.34, green: 0.40, blue: 0.97)
-    static let accent = Color(red: 0.42, green: 0.48, blue: 0.98)
+    static let accentStart = Color(red: 0.17, green: 0.55, blue: 0.81)
+    static let accentEnd = Color(red: 0.08, green: 0.33, blue: 0.67)
+    static let accent = Color(red: 0.20, green: 0.48, blue: 0.82)
 
     static let dangerStart = Color(red: 1.00, green: 0.45, blue: 0.47)
     static let dangerEnd = Color(red: 0.95, green: 0.24, blue: 0.36)
@@ -16,8 +16,8 @@ enum Theme {
     static let success = Color(red: 0.30, green: 0.82, blue: 0.55)
     static let warning = Color(red: 0.98, green: 0.72, blue: 0.30)
 
-    static let cardRadius: CGFloat = 18
-    static let controlRadius: CGFloat = 10
+    static let cardRadius: CGFloat = 14
+    static let controlRadius: CGFloat = 8
 
     // MARK: Surfaces
 
@@ -70,18 +70,7 @@ enum Theme {
         scheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.055)
     }
 
-    static func selectionFill(_ scheme: ColorScheme) -> LinearGradient {
-        if scheme == .dark {
-            return LinearGradient(
-                colors: [Color.white.opacity(0.22), Color.white.opacity(0.10)],
-                startPoint: .top, endPoint: .bottom
-            )
-        }
-        return LinearGradient(
-            colors: [Color.white, Color.white.opacity(0.85)],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
+
 }
 
 // MARK: - Window
@@ -90,54 +79,8 @@ struct SoftWindowBackground: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        ZStack {
-            Theme.windowBackground(scheme)
-
-            Circle()
-                .fill(Theme.accent.opacity(scheme == .dark ? 0.16 : 0.10))
-                .frame(width: 420, height: 420)
-                .blur(radius: 140)
-                .offset(x: -200, y: -240)
-
-            Circle()
-                .fill(Color(red: 0.62, green: 0.36, blue: 1.0).opacity(scheme == .dark ? 0.12 : 0.07))
-                .frame(width: 380, height: 380)
-                .blur(radius: 140)
-                .offset(x: 220, y: 260)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-/// Makes the host window translucent so the material surfaces read as glass.
-/// Applied once per window.
-struct WindowGlass: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        GlassReaderView()
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-private final class GlassReaderView: NSView {
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard let window else { return }
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
-        window.styleMask.remove(.fullSizeContentView)
-        window.isMovableByWindowBackground = true
-    }
-}
-
-extension View {
-    /// Full-height content with the traffic lights floating over it.
-    func glassWindow() -> some View {
-        self
-            .background(WindowGlass())
-            .background(SoftWindowBackground())
+        Theme.windowBackground(scheme)
+            .ignoresSafeArea()
     }
 }
 
@@ -168,10 +111,8 @@ struct SoftCard<Content: View>: View {
                             .foregroundStyle(Theme.accent)
                     }
                     Text(LocalizedStringKey(title))
-                        .textCase(.uppercase)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .tracking(0.9)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
                 }
                 .padding(.leading, 4)
             }
@@ -186,8 +127,7 @@ struct SoftCard<Content: View>: View {
                 shape
                     .fill(Theme.cardFill(scheme))
                     .overlay(shape.stroke(Theme.cardStroke(scheme), lineWidth: 1))
-                    .shadow(color: Theme.shadow(scheme), radius: 16, x: 0, y: 8)
-                    .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.05), radius: 2, x: 0, y: 1)
+                    .shadow(color: .black.opacity(scheme == .dark ? 0.18 : 0.06), radius: 5, x: 0, y: 2)
             }
         }
     }
@@ -242,54 +182,6 @@ struct SoftDivider: View {
         Rectangle()
             .fill(Color.primary.opacity(0.07))
             .frame(height: 1)
-            .padding(.leading, 30)
-    }
-}
-
-// MARK: - Segmented control
-
-struct SoftSegmented<Item: Hashable>: View {
-    let items: [Item]
-    @Binding var selection: Item
-    let title: (Item) -> String
-
-    @Namespace private var namespace
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(items, id: \.self) { item in
-                Button {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
-                        selection = item
-                    }
-                } label: {
-                    Text(LocalizedStringKey(title(item)))
-                        .font(.system(size: 12, weight: selection == item ? .semibold : .medium))
-                        .foregroundStyle(selection == item ? Color.primary : Color.secondary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .background {
-                            if selection == item {
-                                Capsule(style: .continuous)
-                                    .fill(Theme.selectionFill(scheme))
-                                    .overlay(Capsule().stroke(Color.white.opacity(scheme == .dark ? 0.14 : 0.9), lineWidth: 0.8))
-                                    .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.12), radius: 4, x: 0, y: 2)
-                                    .matchedGeometryEffect(id: "segment", in: namespace)
-                            }
-                        }
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .focusEffectDisabled()
-            }
-        }
-        .padding(4)
-        .background {
-            Capsule()
-                .fill(Theme.trackFill(scheme))
-                .overlay(Capsule().stroke(Color.white.opacity(scheme == .dark ? 0.06 : 0.5), lineWidth: 0.8))
-        }
     }
 }
 

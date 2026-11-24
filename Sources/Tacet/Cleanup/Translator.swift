@@ -28,7 +28,7 @@ final class Translator {
         if spec.requiresKey, key == nil { return original }
 
         let base = configuration.provider == "openai" ? configuration.baseURL : spec.baseURL
-        guard let url = URL(string: base)?.appendingPathComponent("chat/completions") else {
+        guard let url = spec.endpoint("chat/completions", baseURL: base) else {
             return original
         }
 
@@ -36,9 +36,7 @@ final class Translator {
         request.httpMethod = "POST"
         request.timeoutInterval = max(4, configuration.timeout + 2)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let key {
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        }
+        spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
             "model": configuration.model,
@@ -51,8 +49,9 @@ final class Translator {
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
+        let preparedRequest = request
         guard let answer = try? await withTimeout(max(4, configuration.timeout + 2), operation: {
-            try await Self.send(request, session: self.session)
+            try await Self.send(preparedRequest, session: self.session)
         }) else { return original }
 
         let normalized = answer.trimmingCharacters(in: .whitespacesAndNewlines)

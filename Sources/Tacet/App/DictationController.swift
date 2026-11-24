@@ -31,22 +31,18 @@ final class DictationController: ObservableObject {
     private let languageMemory = LanguageMemory()
 
     private var isStarting = false
-    private var hotkeyIsDown = false
     private var noteTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
     private var idleUnloadTask: Task<Void, Never>?
-    /// The text that was selected when the recording started.
-    private var capturedSelection: String?
+    private var capturedSelection: SelectionReader.Selection = .none
     /// The key was released while the microphone was still starting.
     private var stopRequested = false
     private var didOpenMicrophoneSettings = false
     /// The combination actually registered, which may differ from the stored
     /// one when another app owns it. Formatted for display.
     private(set) var activeHotkey: String = ""
-    /// The app that was frontmost when the recording started. The text belongs
-    /// there even if the user switches windows while it is being transcribed.
-    private var targetApplication: NSRunningApplication?
+    private var targetFocus: SelectionReader.Focus?
 
     private init() {
         capture.levelHandler = { [weak self] level in
@@ -75,8 +71,9 @@ final class DictationController: ObservableObject {
     /// Load the local fallback while the app is idle, so the first dictation
     /// does not pay for it. Released again after ten quiet minutes.
     private func prewarmLocalEngine() {
-        CloudWarmup.warm()
-        guard ParakeetRecognizer.shared.isConfigured() else { return }
+        if settings.activeEngineOrder.contains(EngineID.groq) { CloudWarmup.warm() }
+        guard settings.activeEngineOrder.contains(EngineID.parakeet),
+              ParakeetRecognizer.shared.isConfigured() else { return }
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard phase == .idle else { return }
@@ -158,9 +155,10 @@ final class DictationController: ObservableObject {
         hotkey.onPress = { [weak self] in self?.hotkeyPressed() }
         hotkey.onRelease = { [weak self] in self?.hotkeyReleased() }
         hotkey.onCancel = { [weak self] in self?.cancelModifierPress() }
+        hotkey.togglesOnModifierRelease = { [weak self] in self?.settings.hotkeyMode == "toggle" }
 
-        // A single modifier cannot be a Carbon hotkey; it is monitored through
-        // flagsChanged and always behaves as push-to-talk.
+        // A single modifier is monitored through flagsChanged.
+        // Окрему клавішу-модифікатор відстежуємо через flagsChanged.
         if isModifierOnlyHotkey {
             let flags = HotkeyFormat.eventFlags(from: settings.hotkeyModifiers)
             if hotkey.registerModifierOnly(flags, keyCode: settings.hotkeyKeyCode) {
@@ -168,7 +166,7 @@ final class DictationController: ObservableObject {
                                                   modifiers: settings.hotkeyModifiers,
                                                   label: "")
                 hotkeyConflict = false
-                status("Hold \(activeHotkey) to dictate")
+                status(hotkeyHint)
             } else {
                 activeHotkey = ""
                 hotkeyConflict = true
@@ -207,13 +205,7 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyPressed() {
-        hotkeyIsDown = true
-        guard phase == .idle || phase == .recording else { return }
-
-        if isModifierOnlyHotkey {
-            if phase == .idle { startRecording() }
-            return
-        }
+        guard phase != .processing else { return }
 
         if settings.hotkeyMode == "hold" {
             if phase == .idle { startRecording() }
@@ -223,10 +215,7 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyReleased() {
-        hotkeyIsDown = false
 
-        // In toggle mode releasing the key is not a stop signal, including for
-        // a modifier-only hotkey.
         guard settings.hotkeyMode == "hold" else { return }
 
         if phase == .preparing {
@@ -267,6 +256,9 @@ final class DictationController: ObservableObject {
         guard phase == .idle, !isStarting else { return }
         isStarting = true
         stopRequested = false
+        let startingApp = NSWorkspace.shared.frontmostApplication
+        targetFocus = nil
+        capturedSelection = .none
 
         // The indicator appears immediately; the engine is still starting.
         phase = .preparing
@@ -276,6 +268,8 @@ final class DictationController: ObservableObject {
         // housekeeping.
         recoveryTask?.cancel()
         recoveryTask = nil
+        retryTask?.cancel()
+        retryTask = nil
         idleUnloadTask?.cancel()
         idleUnloadTask = nil
 
@@ -295,29 +289,25 @@ final class DictationController: ObservableObject {
             }
 
             do {
-                targetApplication = NSWorkspace.shared.frontmostApplication
-                capturedSelection = settings.selectionEditing ? SelectionReader.selectedTextOrCopy() : nil
-                try capture.start()
+                targetFocus = startingApp.flatMap { SelectionReader.Focus(for: $0) }
+                if settings.selectionEditing, TextInserter.isAccessibilityTrusted(), let targetFocus {
+                    capturedSelection = await SelectionReader.read(in: targetFocus)
+                }
 
                 if stopRequested {
                     stopRequested = false
-                    capture.cancel()
                     phase = .idle
                     HUDController.shared.hide()
                     return
                 }
 
+                try capture.start()
                 phase = .recording
                 lastFailure = nil
                 status("Recording…")
                 if settings.playSounds { SoundService.shared.play(.start, style: settings.soundStyle) }
                 if settings.showHUD { HUDController.shared.showRecording() }
 
-                // The key may have been released while the microphone
-                // permission prompt was on screen.
-                if settings.hotkeyMode == "hold", !hotkeyIsDown {
-                    stopRecording()
-                }
             } catch {
                 phase = .idle
                 lastFailure = error.localizedDescription
@@ -379,7 +369,9 @@ final class DictationController: ObservableObject {
                              existingEntryID: nil,
                              allowPaste: true,
                              allowClipboard: true,
-                             autoRetry: true) }
+                             autoRetry: true,
+                             focus: targetFocus,
+                             selection: capturedSelection) }
     }
 
     func cancelRecording() {
@@ -396,26 +388,19 @@ final class DictationController: ObservableObject {
                          existingEntryID: String?,
                          allowPaste: Bool,
                          allowClipboard: Bool,
-                         autoRetry: Bool) async {
+                         autoRetry: Bool,
+                         focus: SelectionReader.Focus? = nil,
+                         selection: SelectionReader.Selection = .none) async {
         let started = Date()
-        let appName = TextInserter.frontmostAppName
+        let appName = focus?.application.localizedName
 
-        let engineConfiguration = EngineConfiguration(
-            groqModel: settings.asrModel(for: EngineID.groq),
-            openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.asrModel(for: EngineID.openAI),
-            cloudTimeout: settings.cloudTimeout,
-            asrModels: Dictionary(uniqueKeysWithValues: ProviderCatalog.all.map {
-                ($0.id, settings.asrModel(for: $0.id))
-            })
-        )
-        let expectedLanguage: String? = targetApplication
-            .flatMap { $0.bundleIdentifier }
+        let engineConfiguration = settings.engineConfiguration
+        let expectedLanguage: String? = focus?.application.bundleIdentifier
             .flatMap { languageMemory.language(for: $0) }
 
         let pipelineSettings = PipelineSettings(
             languageOverride: settings.languageOverride,
-            engineOrder: settings.engineOrder,
+            engineOrder: settings.activeEngineOrder,
             dualLanguageCheck: settings.dualLanguageCheck,
             cloudTimeout: settings.cloudTimeout,
             expectedLanguage: expectedLanguage,
@@ -425,6 +410,7 @@ final class DictationController: ObservableObject {
         )
 
         let result = await pipeline.transcribe(clip, settings: pipelineSettings, engines: engineConfiguration)
+        guard !Task.isCancelled else { return }
 
         switch result {
         case .success(let output):
@@ -436,19 +422,15 @@ final class DictationController: ObservableObject {
                 notes.append("Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts")
             }
 
-            let secondary = settings.cleanupProvider == KeychainAccount.groq
-                ? (Keychain.secret(KeychainAccount.openAI, environment: "OPENAI_API_KEY") != nil ? KeychainAccount.openAI : nil)
-                : (Keychain.secret(KeychainAccount.groq, environment: "GROQ_API_KEY") != nil ? KeychainAccount.groq : nil)
-
             let configuration = CleanupConfiguration(
                 provider: settings.cleanupProvider,
-                baseURL: settings.cleanupBaseURL,
+                baseURL: settings.openAIChatBaseURL,
                 model: settings.chatModel(for: settings.cleanupProvider),
-                timeout: settings.cleanupTimeout,
-                secondaryProvider: secondary
+                timeout: settings.cleanupTimeout
             )
 
-            if settings.isCleanupConfigured,
+            let editingSelection = allowPaste && settings.selectionEditing && selection != .none
+            if !editingSelection, settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
                 let cleaned = await cleanupPipeline.clean(text, configuration: configuration)
                 if cleaned.changed {
@@ -459,7 +441,7 @@ final class DictationController: ObservableObject {
 
             // Translation runs after cleanup: the model gets clean text and the
             // transcript keeps its original wording in History.
-            if settings.outputLanguage != "auto" {
+            if !editingSelection, settings.outputLanguage != "auto" {
                 let spoken = LanguagePolicy.normalize(output.transcript.language)
                 if spoken != settings.outputLanguage {
                     let outcome = await translator.translate(text,
@@ -473,73 +455,47 @@ final class DictationController: ObservableObject {
                 }
             }
 
-            // A selection we cannot read must not be overwritten by the
-            // spoken words: copy the transcript instead.
-            if settings.selectionEditing,
-               capturedSelection == nil,
-               SelectionReader.hasUnreadableSelection() {
-                TextInserter.copy(text)
-                notes.append("Selection could not be read — text copied, selection untouched")
-                deliver(text: text,
-                        raw: output.transcript.text,
-                        transcript: output.transcript,
-                        clip: clip,
-                        latency: Date().timeIntervalSince(started),
-                        appName: appName,
-                        cleanupEngine: cleanupEngine,
-                        existingEntryID: existingEntryID,
-                        allowPaste: false,
-                        allowClipboard: true,
-                        note: notes.joined(separator: "; "))
-                return
-            }
+            guard !Task.isCancelled else { return }
 
-            // A selection turns the dictation into an edit of that selection.
-            if let selection = capturedSelection, settings.selectionEditing {
-                let outcome = await selectionEditor.edit(selection: selection,
-                                                         instruction: text,
-                                                         configuration: configuration)
-                if let outcome {
-                    applySelectionEdit(outcome.text,
-                                       instruction: text,
-                                       selection: selection,
-                                       transcript: output.transcript,
-                                       clip: clip,
-                                       latency: Date().timeIntervalSince(started),
-                                       appName: appName,
-                                       cleanupEngine: cleanupEngine,
-                                       note: notes.isEmpty ? nil : notes.joined(separator: "; "))
-                } else {
-                    // Never destroy the selection on a failed edit: keep it and
-                    // put the transcript on the clipboard.
-                    TextInserter.copy(text)
-                    notes.append("Selection edit failed — text copied, selection untouched")
-                    deliver(text: text,
-                            raw: output.transcript.text,
-                            transcript: output.transcript,
-                            clip: clip,
-                            latency: Date().timeIntervalSince(started),
-                            appName: appName,
-                            cleanupEngine: cleanupEngine,
-                            existingEntryID: existingEntryID,
-                            allowPaste: false,
-                            allowClipboard: true,
-                            note: notes.joined(separator: "; "))
+            if allowPaste, settings.selectionEditing {
+                switch selection {
+                case .text(let selectedText, _):
+                    if let outcome = await selectionEditor.edit(selection: selectedText,
+                                                                instruction: text,
+                                                                configuration: configuration) {
+                        await applySelectionEdit(outcome.text,
+                                                 instruction: text,
+                                                 selection: selection,
+                                                 focus: focus,
+                                                 transcript: output.transcript,
+                                                 clip: clip,
+                                                 latency: Date().timeIntervalSince(started),
+                                                 appName: appName,
+                                                 cleanupEngine: cleanupEngine,
+                                                 note: notes.isEmpty ? nil : notes.joined(separator: "; "))
+                        return
+                    }
+                    notes.append(String(localized: "Selection edit failed. The instruction is in History."))
+                case .unreadable:
+                    notes.append(String(localized: "Selection could not be read. Text saved in History."))
+                case .none:
+                    break
                 }
-                return
             }
 
-            deliver(text: text,
-                    raw: output.transcript.text,
-                    transcript: output.transcript,
-                    clip: clip,
-                    latency: Date().timeIntervalSince(started),
-                    appName: appName,
-                    cleanupEngine: cleanupEngine,
-                    existingEntryID: existingEntryID,
-                    allowPaste: allowPaste,
-                    allowClipboard: allowClipboard,
-                    note: notes.isEmpty ? nil : notes.joined(separator: "; "))
+            let selectionAllowsPaste = !settings.selectionEditing || selection == .none
+            await deliver(text: text,
+                          raw: output.transcript.text,
+                          transcript: output.transcript,
+                          clip: clip,
+                          latency: Date().timeIntervalSince(started),
+                          appName: appName,
+                          cleanupEngine: cleanupEngine,
+                          existingEntryID: existingEntryID,
+                          allowPaste: allowPaste && selectionAllowsPaste,
+                          allowClipboard: allowClipboard && selectionAllowsPaste,
+                          focus: focus,
+                          note: notes.isEmpty ? nil : notes.joined(separator: "; "))
 
         case .failure(let failure):
             recordFailure(failure,
@@ -555,36 +511,33 @@ final class DictationController: ObservableObject {
     /// empty result removes the selection.
     private func applySelectionEdit(_ replacement: String,
                                     instruction: String,
-                                    selection: String,
+                                    selection: SelectionReader.Selection,
+                                    focus: SelectionReader.Focus?,
                                     transcript: Transcript,
                                     clip: AudioClip,
                                     latency: TimeInterval,
                                     appName: String?,
                                     cleanupEngine: String?,
-                                    note: String?) {
-        let targetReady = restoreTargetApplication()
-        let selectionStillThere = SelectionReader.hasSelection()
-
+                                    note: String?) async {
         var pasted = false
-        var finalNote = note
-
-        if targetReady, selectionStillThere, settings.pasteAutomatically {
-            if replacement.isEmpty {
-                pasted = TextInserter.deleteSelection()
-            } else {
-                TextInserter.copy(replacement)
-                pasted = TextInserter.paste()
+        var copied = false
+        if settings.pasteAutomatically {
+            if let focus, await SelectionReader.read(in: focus) == selection, focus.isCurrent {
+                if replacement.isEmpty {
+                    pasted = TextInserter.sendKey(0x33, to: focus.application)
+                } else {
+                    pasted = await TextInserter.paste(replacement, in: focus)
+                }
             }
         } else if !replacement.isEmpty {
-            TextInserter.copy(replacement)
-            if !selectionStillThere {
-                finalNote = [finalNote, "Selection changed — result copied instead of replacing"]
-                    .compactMap { $0 }
-                    .joined(separator: "; ")
-            }
+            copied = TextInserter.copy(replacement)
         }
 
-        let displayed = replacement.isEmpty ? "(selection removed)" : replacement
+        let finalNote = pasted || copied ? note : [
+            note,
+            String(localized: "Selection left unchanged. Result kept in History.")
+        ].compactMap { $0 }.joined(separator: "; ")
+        let displayed = replacement.isEmpty && pasted ? "(selection removed)" : replacement
         let entry = store.insert(text: displayed,
                                  rawText: instruction,
                                  engine: transcript.engine,
@@ -597,19 +550,17 @@ final class DictationController: ObservableObject {
                                  cleanupEngine: cleanupEngine,
                                  error: finalNote)
 
+        let message: String
         if pasted {
             store.markInserted(id: entry.id)
-            status(replacement.isEmpty ? "Selection removed" : "Selection replaced")
-            if settings.showHUD {
-                HUDController.shared.showMessage(replacement.isEmpty ? "Selection removed" : "Selection replaced",
-                                                 isError: false)
-            }
+            message = replacement.isEmpty ? String(localized: "Selection removed") : String(localized: "Selection replaced")
+        } else if copied {
+            message = String(localized: "Copied, selection untouched")
         } else {
-            status("Copied — selection not changed")
-            if settings.showHUD {
-                HUDController.shared.showMessage("Copied, selection untouched", isError: false)
-            }
+            message = String(localized: "Selection left unchanged. Result kept in History.")
         }
+        status(message)
+        if settings.showHUD { HUDController.shared.showMessage(message, isError: !pasted && !copied) }
 
         if settings.playSounds {
             SoundService.shared.play(pasted ? .success : .error, style: settings.soundStyle)
@@ -631,21 +582,36 @@ final class DictationController: ObservableObject {
                          existingEntryID: String?,
                          allowPaste: Bool,
                          allowClipboard: Bool,
-                         note: String?) {
-        // The entry may have been deleted while this transcribe was in flight.
+                         focus: SelectionReader.Focus?,
+                         note: String?) async {
+        // A background attempt must not revive a deleted history entry.
+        // Фоновий повтор не має відновлювати видалений запис історії.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
             phase = .idle
             return
         }
 
-        let canPaste = allowPaste && allowClipboard && restoreTargetApplication()
-        if allowClipboard {
-            TextInserter.copy(text)
+        var pasted = false
+        var copied = false
+        var deliveryNote = note
+        if allowClipboard, !allowPaste || !settings.pasteAutomatically {
+            copied = TextInserter.copy(text)
+        } else if allowPaste, let focus, focus.application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+                  focus.isCurrent, TextInserter.isAccessibilityTrusted() {
+            let currentSelection = settings.selectionEditing ? await SelectionReader.read(in: focus) : .none
+            if currentSelection == .none {
+                pasted = await TextInserter.paste(text, in: focus)
+            }
         }
-        let pasted = canPaste && settings.pasteAutomatically && TextInserter.paste()
 
-        if let bundleID = targetApplication?.bundleIdentifier,
-           let language = transcript.language {
+        if allowPaste, settings.pasteAutomatically, !pasted {
+            deliveryNote = [
+                note,
+                String(localized: "Could not insert safely. Text saved in History.")
+            ].compactMap { $0 }.joined(separator: "; ")
+        }
+
+        if let bundleID = focus?.application.bundleIdentifier, let language = transcript.language {
             languageMemory.remember(language, for: bundleID)
         }
 
@@ -661,7 +627,7 @@ final class DictationController: ObservableObject {
                          latency: latency,
                          status: .ok,
                          cleanupEngine: cleanupEngine,
-                         error: note)
+                         error: deliveryNote)
         } else {
             let entry = store.insert(text: text,
                                      rawText: raw,
@@ -673,20 +639,24 @@ final class DictationController: ObservableObject {
                                      audioPath: clip.url.path,
                                      status: .ok,
                                      cleanupEngine: cleanupEngine,
-                                     error: note)
+                                     error: deliveryNote)
             entryID = entry.id
         }
 
+        let message: String
         if pasted {
             store.markInserted(id: entryID)
-            status("Inserted")
-            if settings.showHUD { HUDController.shared.showMessage("Inserted", isError: false) }
-        } else if allowClipboard {
-            status("Copied to clipboard, press ⌘V")
-            if settings.showHUD { HUDController.shared.showMessage("Copied, press ⌘V", isError: false) }
+            message = String(localized: "Inserted")
+        } else if copied {
+            message = String(localized: "Copied to clipboard, press ⌘V")
+        } else if let deliveryNote {
+            message = deliveryNote
         } else {
-            status("Recovered — open History to copy")
-            if settings.showHUD { HUDController.shared.showMessage("Recovered — in History", isError: false) }
+            message = String(localized: "Recovered — open History to copy")
+        }
+        status(message)
+        if settings.showHUD {
+            HUDController.shared.showMessage(message, isError: !pasted && !copied && focus != nil)
         }
 
         phase = .idle
@@ -864,28 +834,6 @@ final class DictationController: ObservableObject {
         }
     }
 
-    /// Brings back the app that had focus when the recording started, so the
-    /// text lands where the user was typing even if they switched windows
-    /// during transcription.
-    private func restoreTargetApplication() -> Bool {
-        guard let target = targetApplication, !target.isTerminated else { return false }
-
-        let current = NSWorkspace.shared.frontmostApplication
-        if current?.processIdentifier == target.processIdentifier { return true }
-
-        guard target.activate() else { return false }
-
-        // Activation is asynchronous; give it a moment and verify instead of
-        // trusting a fixed delay.
-        for _ in 0..<12 {
-            usleep(30_000)
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
-                return true
-            }
-        }
-        return false
-    }
-
     /// The microphone is silent at the system level: say so and open the pane
     /// that fixes it, instead of reporting "no speech".
     private func handleBlockedMicrophone() {
@@ -916,12 +864,12 @@ final class DictationController: ObservableObject {
         }
     }
 
-    var menuBarSymbol: String {
+    var menuBarMark: MenuBarMark {
         switch phase {
-        case .preparing: return "mic.circle"
-        case .recording: return "waveform.circle.fill"
-        case .processing: return "ellipsis.circle"
-        case .idle: return lastFailure == nil ? "mic.circle" : "exclamationmark.circle"
+        case .preparing: return .preparing
+        case .recording: return .recording
+        case .processing: return .processing
+        case .idle: return lastFailure == nil ? .ready : .attention
         }
     }
 

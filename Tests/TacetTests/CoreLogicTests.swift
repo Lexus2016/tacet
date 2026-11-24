@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import Tacet
 
 final class LanguagePolicyTests: XCTestCase {
@@ -136,6 +137,14 @@ final class SelectionEditorTests: XCTestCase {
         XCTAssertNil(SelectionEditor.normalize("   ", selection: "text"))
     }
 
+    func testModelCanDeleteOnlyWithACompleteDeletionInstruction() {
+        XCTAssertEqual(SelectionEditor.validatedAnswer("DELETE", selection: "some text", instruction: "Видали це.")?.text, "")
+        XCTAssertEqual(SelectionEditor.validatedAnswer("DELETE", selection: "some text", instruction: "Delete it.")?.text, "")
+        XCTAssertNil(SelectionEditor.validatedAnswer("DELETE", selection: "some text", instruction: "fix the spelling"))
+        XCTAssertNil(SelectionEditor.validatedAnswer("DELETE", selection: "some text", instruction: "delete the final word"))
+        XCTAssertNil(SelectionEditor.validatedAnswer("Fix this", selection: "some text", instruction: "fix this"))
+    }
+
     func testWrappingQuotesAreStripped() {
         XCTAssertEqual(SelectionEditor.normalize("\"Hello\"", selection: "Привет")?.text, "Hello")
     }
@@ -152,6 +161,45 @@ final class TranslatorTests: XCTestCase {
         XCTAssertEqual(Translator.languageName("en"), "English")
         XCTAssertEqual(Translator.languageName("ru"), "Russian")
         XCTAssertEqual(Translator.languageName("pl"), "Polish")
+    }
+}
+
+@MainActor
+final class AppPresentationTests: XCTestCase {
+    func testDockAndAboutShowThePackagedIcon() throws {
+        let file = try XCTUnwrap(Bundle.main.url(forResource: "AppIcon", withExtension: "icns"))
+        let bundled = try XCTUnwrap(NSImage(contentsOf: file))
+        XCTAssertEqual(TacetIcon.image.tiffRepresentation, bundled.tiffRepresentation)
+
+        let reference = try iconPixels(bundled)
+        let dock = try iconPixels(NSApp.applicationIconImage)
+        let meanDifference = zip(reference, dock).reduce(0.0) { sum, pixels in
+            sum + Double(abs(Int(pixels.0) - Int(pixels.1)))
+        } / Double(reference.count)
+        XCTAssertLessThan(meanDifference, 3, "Dock generated a visibly different icon")
+    }
+
+    func testMenuBarMarksUseSystemTint() {
+        for mark in MenuBarMark.allCases {
+            XCTAssertTrue(mark.image.isTemplate)
+            XCTAssertEqual(mark.image.size, NSSize(width: 21, height: 15))
+        }
+    }
+
+    private func iconPixels(_ image: NSImage) throws -> [UInt8] {
+        let side = 48
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: side * 4, bitsPerPixel: 32))
+        let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        let rect = NSRect(x: 0, y: 0, width: side, height: side)
+        context.cgContext.clear(rect)
+        image.draw(in: rect)
+        let data = try XCTUnwrap(bitmap.bitmapData)
+        return Array(UnsafeBufferPointer(start: data, count: side * side * 4))
     }
 }
 

@@ -11,72 +11,118 @@ struct ProvidersSettingsView: View {
     @State private var newName = ""
     @State private var newURL = ""
     @State private var newKey = ""
+    @State private var editingProvider: CustomProvider?
+    @State private var keyError: String?
+    @State private var selectedProvider = EngineID.groq
 
     var body: some View {
-        VStack(spacing: 14) {
-            Text("Configure a provider once. Engines and Cleanup only offer the providers configured here.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
-
-            ForEach(ProviderCatalog.all) { spec in
-                if spec.id == "openai" {
-                    ProviderConfigCard(spec: spec, showsBaseURL: true)
-                } else {
-                    ProviderConfigCard(spec: spec)
+        VStack(alignment: .leading, spacing: 18) {
+            SoftCard(title: "Provider connections", systemImage: "server.rack") {
+                SoftRow("Provider") {
+                    Picker("Provider", selection: $selectedProvider) {
+                        ForEach(ProviderCatalog.all) { spec in
+                            Text(spec.name).tag(spec.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 204)
                 }
+                SoftDivider()
+                HStack(spacing: 8) {
+                    Spacer()
+                    if let provider = custom.providers.first(where: { $0.id == selectedProvider }) {
+                        Button("Edit connection…") { openForm(provider) }
+                            .buttonStyle(SoftButtonStyle())
+                    }
+                    Button {
+                        openForm(nil)
+                    } label: {
+                        Label("Add provider…", systemImage: "plus")
+                    }
+                    .buttonStyle(SoftButtonStyle())
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let spec = ProviderCatalog.spec(selectedProvider) {
+                ProviderConfigCard(spec: spec)
+                    .id(spec.id)
             }
 
             ParakeetCard()
-
-            Button {
-                showingAdd = true
-            } label: {
-                Label("Add provider…", systemImage: "plus.circle")
-            }
-            .buttonStyle(SoftProminentButtonStyle())
-            .padding(.top, 4)
+        }
+        .onChange(of: custom.providers) { _, _ in
+            if ProviderCatalog.spec(selectedProvider) == nil { selectedProvider = EngineID.groq }
         }
         .sheet(isPresented: $showingAdd) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("New provider").font(.system(size: 15, weight: .semibold))
+                Text(editingProvider == nil ? "New provider" : "Edit connection")
+                    .font(.headline)
 
                 TextField("Name", text: $newName).textFieldStyle(.roundedBorder)
                 TextField("Base URL (https://…/v1)", text: $newURL).textFieldStyle(.roundedBorder)
-                SecureField("API key (optional)", text: $newKey).textFieldStyle(.roundedBorder)
+                if editingProvider == nil {
+                    SecureField("API key (optional)", text: $newKey).textFieldStyle(.roundedBorder)
+                }
+
+                if let keyError {
+                    Text(keyError).foregroundStyle(Theme.warning)
+                }
 
                 HStack {
                     Spacer()
                     Button("Cancel") { showingAdd = false }
-                        .buttonStyle(SoftButtonStyle())
-                    Button("Add") {
-                        let id = CustomProviderStore.shared.add(name: newName.isEmpty ? "Custom" : newName,
-                                                                baseURL: newURL,
-                                                                requiresKey: !newKey.isEmpty)
-                        if !newKey.isEmpty {
-                            Keychain.set(newKey, account: id)
-                        }
-                        newName = ""; newURL = ""; newKey = ""
-                        showingAdd = false
-                    }
-                    .buttonStyle(SoftProminentButtonStyle())
-                    .disabled(newURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .keyboardShortcut(.cancelAction)
+                    Button(editingProvider == nil ? "Add" : "Save") { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(ProviderSpec.validBaseURL(newURL) == nil ||
+                                  newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .padding(20)
-            .frame(width: 420)
+            .padding(22)
+            .frame(width: 410)
         }
+    }
+
+    private func openForm(_ provider: CustomProvider?) {
+        editingProvider = provider
+        newName = provider?.name ?? ""
+        newURL = provider?.baseURL ?? ""
+        newKey = ""
+        keyError = nil
+        showingAdd = true
+    }
+
+    private func save() {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = ProviderSpec.validBaseURL(newURL), !name.isEmpty else { return }
+        if let provider = editingProvider {
+            custom.update(id: provider.id, name: name, baseURL: url.absoluteString)
+        } else {
+            let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let id = custom.add(name: name, baseURL: url.absoluteString, key: key) else {
+                keyError = String(localized: "The API key could not be saved.")
+                return
+            }
+            selectedProvider = id
+        }
+        newKey = ""
+        showingAdd = false
     }
 }
 
 private struct ProviderConfigCard: View {
     let spec: ProviderSpec
-    var showsBaseURL = false
 
     @ObservedObject private var settings = AppSettings.shared
     @State private var showingChatModels = false
     @State private var showingASRModels = false
+    @State private var showingRemove = false
+    @State private var removeError = false
+
+    private var transcriptionURL: String? { spec.id == EngineID.openAI ? settings.openAIBaseURL : nil }
+    private var chatURL: String? { spec.id == EngineID.openAI ? settings.openAIChatBaseURL : nil }
+    private var isCustom: Bool { ProviderCatalog.isCustom(spec.id) }
 
     private var chatBinding: Binding<String> {
         Binding(
@@ -94,33 +140,50 @@ private struct ProviderConfigCard: View {
 
     var body: some View {
         SoftCard(title: spec.name, systemImage: "server.rack") {
-            if spec.requiresKey {
+            if spec.requiresKey || isCustom {
                 APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey)
             }
 
-            if showsBaseURL {
+            if spec.id == EngineID.openAI {
                 SoftDivider()
                 SoftRow("Base URL") {
-                    TextField("", text: $settings.openAIBaseURL)
+                    TextField("Base URL", text: $settings.openAIBaseURL)
+                        .labelsHidden()
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 250)
+                        .frame(width: 232)
+                }
+                SoftDivider()
+                SoftRow("Chat base URL", subtitle: "Optional. Uses the base URL above when empty.") {
+                    TextField("Chat base URL", text: $settings.cleanupBaseURL)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 232)
+                }
+            } else if isCustom {
+                SoftDivider()
+                SoftRow("Base URL") {
+                    Text(spec.baseURL)
+                        .font(.caption.monospaced())
+                        .lineLimit(2)
+                        .textSelection(.enabled)
                 }
             }
 
             SoftDivider()
 
-            SoftRow("Model", subtitle: "Used for cleanup, translation and editing") {
+            SoftRow("Chat model", subtitle: "Used for cleanup, translation and editing") {
                 HStack(spacing: 8) {
-                    TextField("", text: chatBinding)
+                    TextField("Chat model", text: chatBinding).labelsHidden()
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 210)
+                        .frame(width: 192)
                     Button {
                         showingChatModels = true
                     } label: {
                         Image(systemName: "list.bullet")
+                            .frame(width: 13)
                     }
                     .buttonStyle(SoftButtonStyle())
-                    .help(Text("Browse"))
+                    .help(Text("Browse")).accessibilityLabel(Text("Browse models"))
                 }
             }
 
@@ -128,7 +191,7 @@ private struct ProviderConfigCard: View {
                 SoftDivider()
 
                 SoftRow("Supports transcription", subtitle: "Off hides this provider from the engine chain") {
-                    Toggle("", isOn: Binding(
+                    Toggle("Supports transcription", isOn: Binding(
                         get: { settings.isASREnabled(for: spec.id) },
                         set: { settings.setASREnabled($0, for: spec.id) }
                     ))
@@ -143,52 +206,62 @@ private struct ProviderConfigCard: View {
 
                 SoftRow("Transcription model", subtitle: "Used when this provider is in the engine chain") {
                     HStack(spacing: 8) {
-                        TextField("", text: asrBinding)
+                        TextField("Transcription model", text: asrBinding).labelsHidden()
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 210)
+                            .frame(width: 192)
                         Button {
                             showingASRModels = true
                         } label: {
                             Image(systemName: "list.bullet")
+                            .frame(width: 13)
                         }
                         .buttonStyle(SoftButtonStyle())
-                        .help(Text("Browse"))
+                        .help(Text("Browse")).accessibilityLabel(Text("Browse models"))
                     }
                 }
             }
 
             SoftDivider()
-
-            if ProviderCatalog.isCustom(spec.id) {
-                SoftDivider()
-                Button("Remove provider") {
-                    CustomProviderStore.shared.remove(id: spec.id)
-                    Keychain.set(nil, account: spec.id)
-                }
-                .buttonStyle(SoftButtonStyle(destructive: true))
-            }
-
-            SoftDivider()
-
-            ProviderTestRow(spec: spec, model: settings.chatModel(for: spec.id), title: "Test chat")
+            ProviderTestRow(spec: spec, baseURL: chatURL, model: settings.chatModel(for: spec.id), title: "Test chat")
 
             if spec.supportsTranscription, settings.isASREnabled(for: spec.id) {
                 SoftDivider()
                 ProviderTestRow(spec: spec,
+                                baseURL: transcriptionURL,
                                 model: settings.asrModel(for: spec.id),
                                 kind: .transcription,
                                 title: "Test transcription")
             }
+
+            if isCustom {
+                SoftDivider()
+                HStack {
+                    Spacer()
+                    Button("Remove provider…") { showingRemove = true }
+                        .buttonStyle(SoftButtonStyle(destructive: true))
+                }
+                .padding(.vertical, 5)
+                if removeError {
+                    Text("The API key could not be removed.").foregroundStyle(Theme.warning)
+                }
+            }
+        }
+        .confirmationDialog("Remove this provider?", isPresented: $showingRemove, titleVisibility: .visible) {
+            Button("Remove provider", role: .destructive) {
+                guard Keychain.set(nil, account: spec.id) else {
+                    removeError = true
+                    return
+                }
+                settings.engineOrder.removeAll { $0 == spec.id }
+                if settings.cleanupProvider == spec.id { settings.cleanupProvider = EngineID.groq }
+                CustomProviderStore.shared.remove(id: spec.id)
+            }
         }
         .sheet(isPresented: $showingChatModels) {
-            ModelChooser(spec: spec,
-                         baseURL: spec.id == "openai" ? settings.openAIBaseURL : nil,
-                         selection: chatBinding)
+            ModelChooser(spec: spec, baseURL: chatURL, selection: chatBinding)
         }
         .sheet(isPresented: $showingASRModels) {
-            ModelChooser(spec: spec,
-                         baseURL: spec.id == "openai" ? settings.openAIBaseURL : nil,
-                         selection: asrBinding)
+            ModelChooser(spec: spec, baseURL: transcriptionURL, transcription: true, selection: asrBinding)
         }
     }
 }
@@ -231,9 +304,7 @@ private struct ParakeetCard: View {
             }
         }
         .onAppear {
-            status = ParakeetRecognizer.shared.isConfigured()
-                ? "Loaded from the previous download."
-                : "Dictation falls back to the cloud until this is downloaded."
+            status = ""
         }
     }
 
@@ -267,10 +338,14 @@ struct ChainSettingsView: View {
         }
     }
 
+    private var canAddLocal: Bool {
+        ParakeetRecognizer.shared.isConfigured() && !settings.engineOrder.contains(EngineID.parakeet)
+    }
+
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
             SoftCard(title: "Chain", systemImage: "point.3.connected.trianglepath.dotted") {
-                Text("These are the speech-recognition engines used for voice transcription, tried in this order. Only configured providers are listed; failed ones are skipped.")
+                Text("Tacet tries engines in this order and uses the first successful transcript.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -288,12 +363,11 @@ struct ChainSettingsView: View {
                                                                      startPoint: .top, endPoint: .bottom)))
 
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(EngineID.displayName(engine)).font(.system(size: 13))
-                            if !ProviderCatalog.isConfigured(ProviderCatalog.spec(engine) ?? ProviderCatalog.all[0])
-                                && engine != EngineID.parakeet {
-                                Text("Not configured — will be skipped")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Theme.warning)
+                            Text(ProviderCatalog.spec(engine)?.name ?? EngineID.displayName(engine)).font(.system(size: 13))
+                            if let issue = issue(for: engine) {
+                                Text(issue)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
 
@@ -302,24 +376,30 @@ struct ChainSettingsView: View {
                         Button { move(index, by: -1) } label: { Image(systemName: "chevron.up") }
                             .buttonStyle(SoftButtonStyle())
                             .disabled(index == 0)
+                            .accessibilityLabel(Text("Move up"))
 
                         Button { move(index, by: 1) } label: { Image(systemName: "chevron.down") }
                             .buttonStyle(SoftButtonStyle())
                             .disabled(index == settings.engineOrder.count - 1)
+                            .accessibilityLabel(Text("Move down"))
 
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                settings.engineOrder.remove(at: index)
+                                _ = settings.engineOrder.remove(at: index)
                             }
                         } label: { Image(systemName: "trash") }
                             .buttonStyle(SoftButtonStyle(destructive: true))
+                            .accessibilityLabel(Text("Remove from chain"))
                     }
                     .padding(.vertical, 5)
                 }
 
-                if !available.isEmpty {
+                if canAddLocal || !available.isEmpty {
                     SoftDivider()
-                    Menu("Add provider…") {
+                    Menu("Add engine…") {
+                        if canAddLocal {
+                            Button("Parakeet (local)") { settings.engineOrder.append(EngineID.parakeet) }
+                        }
                         ForEach(available) { provider in
                             Button(provider.name) {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -330,9 +410,32 @@ struct ChainSettingsView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .padding(.vertical, 6)
+                } else if settings.engineOrder.isEmpty {
+                    Text("Set up a provider or download Parakeet to add an engine.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                }
+            }
+
+            SoftCard(title: "Network", systemImage: "clock") {
+                SoftRow("Request timeout", subtitle: "Cloud engines only") {
+                    Stepper("\(Int(settings.cloudTimeout)) s",
+                            value: $settings.cloudTimeout, in: 5...60, step: 5)
+                        .frame(width: 100)
                 }
             }
         }
+    }
+
+    private func issue(for engine: String) -> String? {
+        if engine == EngineID.parakeet {
+            return ParakeetRecognizer.shared.isConfigured() ? nil : String(localized: "Model not downloaded")
+        }
+        guard let spec = ProviderCatalog.spec(engine), ProviderCatalog.isConfigured(spec) else {
+            return String(localized: "Not configured — will be skipped")
+        }
+        return settings.isASREnabled(for: engine) ? nil : String(localized: "Transcription turned off in Providers")
     }
 
     private func move(_ index: Int, by offset: Int) {

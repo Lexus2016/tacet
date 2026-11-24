@@ -10,6 +10,27 @@ struct ProviderSpec: Identifiable, Sendable {
     let environmentKey: String?
 
     var keychainAccount: String { id }
+
+    func endpoint(_ path: String, baseURL override: String? = nil) -> URL? {
+        Self.validBaseURL(override ?? baseURL)?.appendingPathComponent(path)
+    }
+
+    static func validBaseURL(_ value: String) -> URL? {
+        guard let parts = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["http", "https"].contains(parts.scheme?.lowercased() ?? ""),
+              let host = parts.host, !host.isEmpty,
+              parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil
+        else { return nil }
+        return parts.url
+    }
+
+    func setHeaders(on request: inout URLRequest, key: String?) {
+        if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        if id == "openrouter" {
+            request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")
+            request.setValue("Tacet", forHTTPHeaderField: "X-Title")
+        }
+    }
 }
 
 /// Everything the app knows about an endpoint: where it lives, whether it needs
@@ -101,29 +122,34 @@ enum ProviderCatalog {
 enum ModelCatalog {
     enum Failure: LocalizedError {
         case noBaseURL
+        case noModel
+        case unexpectedResponse
         case http(Int, String)
         case empty
 
         var errorDescription: String? {
             switch self {
-            case .noBaseURL: return "Invalid base URL."
+            case .noBaseURL: return String(localized: "Invalid base URL.")
+            case .noModel: return String(localized: "Choose a model first.")
+            case .unexpectedResponse: return String(localized: "The provider returned an unexpected response.")
             case .http(let status, let message): return "HTTP \(status): \(message)"
             case .empty: return "The provider returned no models."
             }
         }
     }
 
-    static func fetch(spec: ProviderSpec, baseURL: String?) async throws -> [String] {
-        let base = (baseURL ?? spec.baseURL).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: base)?.appendingPathComponent("models") else {
+    static func fetch(spec: ProviderSpec, baseURL: String?, transcription: Bool = false) async throws -> [String] {
+        guard let url = spec.endpoint("models", baseURL: baseURL) else {
             throw Failure.noBaseURL
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 15
-        if let key = ProviderCatalog.key(for: spec) {
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if spec.id == "openrouter" {
+            components?.queryItems = [.init(name: "output_modalities", value: transcription ? "transcription" : "text")]
         }
+        var request = URLRequest(url: components?.url ?? url)
+        request.timeoutInterval = 15
+        spec.setHeaders(on: &request, key: ProviderCatalog.key(for: spec))
 
         let (data, response) = try await SharedSession.cloud.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -143,17 +169,6 @@ enum ModelCatalog {
             ids = dataArray.compactMap { $0["id"] as? String }
         } else if let models = object["models"] as? [[String: Any]] {
             ids = models.compactMap { ($0["id"] as? String) ?? ($0["name"] as? String) }
-        }
-
-        // OpenRouter does not list audio models in /models, but they exist.
-        if spec.id == "openrouter" {
-            ids.append(contentsOf: [
-                "openai/whisper-large-v3",
-                "openai/whisper-large-v3-turbo",
-                "openai/whisper-1",
-                "openai/gpt-4o-transcribe",
-                "openai/gpt-4o-mini-transcribe",
-            ])
         }
 
         let unique = Array(Set(ids)).sorted()

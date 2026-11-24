@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
-// Renders the DMG background: dark indigo glass, a soft arrow between the app
-// and the Applications drop link, and the Tacet mark.
+// Draws architecture-specific installer backgrounds.
+// Малює тло інсталятора для відповідної архітектури.
 
 import AppKit
 
@@ -27,8 +27,8 @@ let bounds = CGRect(x: 0, y: 0, width: width, height: height)
 
 // Background gradient.
 let colors = [
-    NSColor(red: 0.075, green: 0.078, blue: 0.105, alpha: 1).cgColor,
-    NSColor(red: 0.035, green: 0.037, blue: 0.055, alpha: 1).cgColor,
+    NSColor(red: 0.065, green: 0.15, blue: 0.23, alpha: 1).cgColor,
+    NSColor(red: 0.03, green: 0.07, blue: 0.14, alpha: 1).cgColor,
 ]
 let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
                           colors: colors as CFArray,
@@ -45,13 +45,13 @@ func glow(center: CGPoint, radius: CGFloat, color: NSColor) {
                                options: [])
     }
 }
-glow(center: CGPoint(x: 220, y: 640), radius: 420, color: NSColor(red: 0.42, green: 0.48, blue: 0.98, alpha: 0.30))
-glow(center: CGPoint(x: 1120, y: 140), radius: 420, color: NSColor(red: 0.62, green: 0.36, blue: 1.0, alpha: 0.22))
+glow(center: CGPoint(x: 220, y: 640), radius: 420, color: NSColor(red: 0.12, green: 0.49, blue: 0.73, alpha: 0.24))
+glow(center: CGPoint(x: 1120, y: 140), radius: 420, color: NSColor(red: 0.12, green: 0.64, blue: 0.68, alpha: 0.15))
 
 // Arrow between the icons.
-let arrowY = CGFloat(400)
-let startX = CGFloat(330)
-let endX = CGFloat(990)
+let arrowY = CGFloat(397)
+let startX = CGFloat(519)
+let endX = CGFloat(798)
 ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.22).cgColor)
 ctx.setLineWidth(6)
 ctx.setLineCap(.round)
@@ -88,7 +88,7 @@ NSGraphicsContext.restoreGraphicsState()
 
 let output = CommandLine.arguments.count > 1
     ? CommandLine.arguments[1]
-    : "assets/dmg-background.png"
+    : "Assets/dmg-background-arm64.png"
 let subtitle = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : ""
 
 guard let data = rep.representation(using: .png, properties: [:]) else { fatalError("png") }

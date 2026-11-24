@@ -8,6 +8,16 @@ struct SettingsView: View {
 
         var id: String { rawValue }
 
+        var symbol: String {
+            switch self {
+            case .general: return "slider.horizontal.3"
+            case .providers: return "server.rack"
+            case .engines: return "waveform"
+            case .cleanup: return "text.badge.checkmark"
+            case .about: return "info.circle"
+            }
+        }
+
         var title: String {
             switch self {
             case .general: return "General"
@@ -26,11 +36,15 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(LocalizedStringKey(tab.title))
+                        .font(.system(size: 25, weight: .semibold))
+                        .accessibilityAddTraits(.isHeader)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 14) {
                     switch tab {
                     case .general: GeneralSettingsView()
                     case .providers: ProvidersSettingsView()
@@ -39,33 +53,37 @@ struct SettingsView: View {
                     case .about: AboutView()
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 2)
-                .padding(.bottom, 22)
+                .frame(maxWidth: 710, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.955),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .id(tab)
+            .accessibilityIdentifier("settings-content")
         }
-        .frame(width: 700, height: 700)
-        .glassWindow()
+        .background(SoftWindowBackground())
         .tint(Theme.accent)
     }
 
-    private var header: some View {
-        SoftSegmented(items: Tab.allCases, selection: $tab) { $0.title }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
+    private var sidebar: some View {
+        List(selection: Binding<Tab?>(
+            get: { tab },
+            set: { if let selection = $0 { tab = selection } }
+        )) {
+            ForEach(Tab.allCases) { item in
+                Label(LocalizedStringKey(item.title), systemImage: item.symbol)
+                    .font(.system(size: 13, weight: tab == item ? .semibold : .regular))
+                    .lineLimit(1)
+                    .frame(minHeight: 34, alignment: .leading)
+                    .tag(item)
+            }
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .padding(.top, 10)
+        .frame(width: 174)
+        .background(.quaternary.opacity(0.12))
     }
+
 }
 
 // MARK: - General
@@ -82,7 +100,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         VStack(spacing: 18) {
             SoftCard(title: "Dictation", systemImage: "command") {
-                SoftRow("Hotkey", subtitle: "Click, then press the combination you want. A single ⌘, ⌥, ⌃ or ⇧ works too, in push-to-talk mode.") {
+                SoftRow("Hotkey", subtitle: "Click, then press the combination you want. You can also use a single ⌘, ⌥, ⌃ or ⇧.") {
                     HotkeyRecorder(keyCode: $settings.hotkeyKeyCode,
                                    modifiers: $settings.hotkeyModifiers,
                                    label: $settings.hotkeyLabel,
@@ -94,7 +112,7 @@ struct GeneralSettingsView: View {
                 SoftRow("Mode", subtitle: settings.hotkeyMode == "hold"
                         ? "Hold the key while you speak"
                         : "Press once to start, once to stop") {
-                    Picker("", selection: $settings.hotkeyMode) {
+                    Picker("Mode", selection: $settings.hotkeyMode) {
                         Text("Push to talk").tag("hold")
                         Text("Toggle").tag("toggle")
                     }
@@ -133,7 +151,7 @@ struct GeneralSettingsView: View {
 
             SoftCard(title: "Language", systemImage: "globe") {
                 SoftRow("Language") {
-                    Picker("", selection: $settings.languageMode) {
+                    Picker("Language", selection: $settings.languageMode) {
                         ForEach(LanguageOption.allCases) { option in
                             Text(option.title).tag(option.rawValue)
                         }
@@ -146,7 +164,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Output language",
                         subtitle: "Dictate in any language; the inserted text is in this one") {
-                    Picker("", selection: $settings.outputLanguage) {
+                    Picker("Output language", selection: $settings.outputLanguage) {
                         Text("Same as spoken").tag("auto")
                         ForEach(LanguageOption.allCases.filter { $0 != .auto }) { option in
                             Text(option.title).tag(option.rawValue)
@@ -160,7 +178,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Second language check",
                         subtitle: "When the script is ambiguous, try the likely alternative: Ukrainian/Russian, Belarusian/Russian, Polish/Ukrainian and similar pairs") {
-                    Toggle("", isOn: $settings.dualLanguageCheck)
+                    Toggle("Second language check", isOn: $settings.dualLanguageCheck)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -170,7 +188,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Voice language check",
                         subtitle: "Listens to the clip with Gemini Decision, so Ukrainian speech decoded as Russian is caught. Needs an OpenRouter key.") {
-                    Toggle("", isOn: $settings.voiceLanguageCheck)
+                    Toggle("Voice language check", isOn: $settings.voiceLanguageCheck)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -186,8 +204,8 @@ struct GeneralSettingsView: View {
             }
 
             SoftCard(title: "Behaviour", systemImage: "slider.horizontal.3") {
-                SoftRow("Paste automatically", subtitle: "Otherwise the text is copied and waits for ⌘V") {
-                    Toggle("", isOn: $settings.pasteAutomatically)
+                SoftRow("Paste automatically", subtitle: "Keeps your existing clipboard. Turn off to copy dictations for manual pasting.") {
+                    Toggle("Paste automatically", isOn: $settings.pasteAutomatically)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -197,7 +215,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Edit selected text",
                         subtitle: "With text selected, the dictation rewrites, translates or removes it instead of inserting after it") {
-                    Toggle("", isOn: $settings.selectionEditing)
+                    Toggle("Edit selected text", isOn: $settings.selectionEditing)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -206,7 +224,7 @@ struct GeneralSettingsView: View {
                 SoftDivider()
 
                 SoftRow("Floating indicator") {
-                    Toggle("", isOn: $settings.showHUD)
+                    Toggle("Floating indicator", isOn: $settings.showHUD)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -215,7 +233,7 @@ struct GeneralSettingsView: View {
                 SoftDivider()
 
                 SoftRow("Sounds", subtitle: "Short Tacet cues for start, success and errors") {
-                    Toggle("", isOn: $settings.playSounds)
+                    Toggle("Sounds", isOn: $settings.playSounds)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -224,7 +242,7 @@ struct GeneralSettingsView: View {
                 SoftDivider()
 
                 SoftRow("Launch at login", subtitle: loginHint) {
-                    Toggle("", isOn: launchAtLoginBinding)
+                    Toggle("Launch at login", isOn: launchAtLoginBinding)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -234,7 +252,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Interface language", subtitle: "Restart Tacet to apply") {
                     HStack(spacing: 8) {
-                        Picker("", selection: $settings.uiLanguage) {
+                        Picker("Interface language", selection: $settings.uiLanguage) {
                             Text("System").tag("system")
                             Text("English").tag("en")
                             Text("Українська").tag("uk")
@@ -269,7 +287,7 @@ struct GeneralSettingsView: View {
 
             SoftCard(title: "Floating indicator", systemImage: "sparkles") {
                 SoftRow("Theme") {
-                    Picker("", selection: $settings.indicatorTheme) {
+                    Picker("Theme", selection: $settings.indicatorTheme) {
                         ForEach(IndicatorTheme.allCases) { theme in
                             Text(LocalizedStringKey(theme.title)).tag(theme.rawValue)
                         }
@@ -281,7 +299,7 @@ struct GeneralSettingsView: View {
                 SoftDivider()
 
                 SoftRow("Position", subtitle: "Where the indicator appears") {
-                    Picker("", selection: $settings.indicatorPosition) {
+                    Picker("Position", selection: $settings.indicatorPosition) {
                         Text("Bottom").tag("bottom")
                         Text("Top").tag("top")
                     }
@@ -293,7 +311,7 @@ struct GeneralSettingsView: View {
 
                 SoftRow("Preview", subtitle: "Shows the selected style for three seconds") {
                     Button("Show") {
-                        HUDController.shared.preview(style: IndicatorStyle(rawValue: settings.indicatorStyle) ?? .island)
+                        HUDController.shared.preview()
                     }
                     .buttonStyle(SoftButtonStyle())
                 }
@@ -306,7 +324,11 @@ struct GeneralSettingsView: View {
                         if !micGranted {
                             Button("Grant") {
                                 Task {
-                                    _ = await AVCaptureDevice.requestAccess(for: .audio)
+                                    if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                                        _ = await AVCaptureDevice.requestAccess(for: .audio)
+                                    } else {
+                                        openPrivacyPane("Microphone")
+                                    }
                                     micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
                                 }
                             }
@@ -323,7 +345,7 @@ struct GeneralSettingsView: View {
                         if !accessibilityGranted {
                             Button("Open") {
                                 TextInserter.requestAccessibility()
-                                openAccessibilityPane()
+                                openPrivacyPane("Accessibility")
                             }
                             .buttonStyle(SoftButtonStyle())
                         }
@@ -333,13 +355,16 @@ struct GeneralSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-            accessibilityGranted = TextInserter.isAccessibilityTrusted()
+            let trusted = TextInserter.isAccessibilityTrusted()
+            if trusted && !accessibilityGranted { controller.configureHotkey() }
+            accessibilityGranted = trusted
         }
     }
 
-    private func openAccessibilityPane() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
+    private func openPrivacyPane(_ category: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_\(category)") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
@@ -361,8 +386,13 @@ struct GeneralSettingsView: View {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         task.arguments = ["-n", Bundle.main.bundlePath]
-        try? task.run()
-        NSApp.terminate(nil)
+        do {
+            try task.run()
+            NSApp.terminate(nil)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
     }
 
     private var loginHint: String {
@@ -373,249 +403,15 @@ struct GeneralSettingsView: View {
         return "Move Tacet to /Applications to enable this"
     }
 
-    private var indicatorDetail: String {
-        (IndicatorStyle(rawValue: settings.indicatorStyle) ?? .island).detail
-    }
-}
 
-// MARK: - Engines
-
-struct EnginesSettingsView: View {
-    @ObservedObject private var settings = AppSettings.shared
-
-    var body: some View {
-        VStack(spacing: 18) {
-            SoftCard(title: "Chain", systemImage: "point.3.connected.trianglepath.dotted") {
-                Text("The first engine that returns text wins. Unconfigured or failing engines are skipped automatically.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 7)
-
-                SoftDivider()
-
-                ForEach(Array(settings.engineOrder.enumerated()), id: \.offset) { index, engine in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle().fill(
-                                    LinearGradient(colors: [Theme.accentStart, Theme.accentEnd],
-                                                   startPoint: .top, endPoint: .bottom)
-                                )
-                            )
-
-                        Text(EngineID.displayName(engine))
-                            .font(.system(size: 13))
-
-                        Spacer()
-
-                        Button {
-                            move(index, by: -1)
-                        } label: {
-                            Image(systemName: "chevron.up")
-                        }
-                        .buttonStyle(SoftButtonStyle())
-                        .disabled(index == 0)
-
-                        Button {
-                            move(index, by: 1)
-                        } label: {
-                            Image(systemName: "chevron.down")
-                        }
-                        .buttonStyle(SoftButtonStyle())
-                        .disabled(index == settings.engineOrder.count - 1)
-
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                settings.engineOrder.remove(at: index)
-                            }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(SoftButtonStyle(destructive: true))
-                    }
-                    .padding(.vertical, 6)
-                }
-
-                if !availableProviders.isEmpty {
-                    SoftDivider()
-                    Menu("Add provider…") {
-                        ForEach(availableProviders) { provider in
-                            Button(provider.name) {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    settings.engineOrder.append(provider.id)
-                                }
-                            }
-                        }
-                    }
-                    .menuStyle(.borderlessButton)
-                    .padding(.vertical, 6)
-                }
-            }
-
-            SoftCard(title: "Groq", systemImage: "bolt.fill") {
-                APIKeyRow(account: KeychainAccount.groq, environmentKey: "GROQ_API_KEY")
-                SoftDivider()
-                SoftRow("Model") {
-                    TextField("", text: $settings.groqModel)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 230)
-                }
-                Text("whisper-large-v3-turbo is fast and strong on Ukrainian, Russian and English.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 7)
-            }
-
-            SoftCard(title: "OpenAI-compatible", systemImage: "server.rack") {
-                SoftRow("Base URL") {
-                    TextField("", text: $settings.openAIBaseURL)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 250)
-                }
-                SoftDivider()
-                SoftRow("Model") {
-                    TextField("", text: $settings.openAIModel)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 250)
-                }
-                SoftDivider()
-                APIKeyRow(account: KeychainAccount.openAI, environmentKey: "OPENAI_API_KEY")
-            }
-
-            SoftCard(title: "Parakeet (local)", systemImage: "cpu") {
-                ParakeetRow()
-            }
-
-            SoftCard(title: "OpenRouter (voice language check)", systemImage: "ear") {
-                APIKeyRow(account: KeychainAccount.openRouter, environmentKey: "OPENROUTER_API_KEY")
-                SoftDivider()
-                SoftRow("Model") {
-                    TextField("", text: $settings.openRouterModel)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 250)
-                }
-                Text("google/gemini-decision-1 accepts the audio itself and returns the spoken language with a calibrated probability. Used only when the voice language check is on.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 7)
-            }
-
-            SoftCard(title: "Network", systemImage: "clock") {
-                SoftRow("Request timeout", subtitle: "Cloud engines only") {
-                    Stepper("\(Int(settings.cloudTimeout)) s",
-                            value: $settings.cloudTimeout, in: 5...60, step: 5)
-                        .frame(width: 90)
-                }
-            }
-
-            Text("Audio is uploaded only to the cloud engines enabled here. The local engine keeps it on this Mac.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-        }
-    }
-
-    private var availableProviders: [ProviderSpec] {
-        ProviderCatalog.transcriptionProviders.filter {
-            $0.id != EngineID.parakeet
-                && !settings.engineOrder.contains($0.id)
-                && ProviderCatalog.isConfigured($0)
-        }
-    }
-
-    private func move(_ index: Int, by offset: Int) {
-        let destination = index + offset
-        guard settings.engineOrder.indices.contains(index),
-              settings.engineOrder.indices.contains(destination) else { return }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            settings.engineOrder.swapAt(index, destination)
-        }
-    }
-}
-
-private struct ParakeetRow: View {
-    @State private var busy = false
-    @State private var status = ""
-    @State private var error: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                StatusDot(ok: ParakeetRecognizer.shared.isConfigured())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(ParakeetRecognizer.shared.isConfigured() ? "Model ready" : "Model not downloaded")
-                        .font(.system(size: 13))
-                    Text("Offline fallback, 25 European languages, no key needed")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if busy {
-                    ProgressView().controlSize(.small)
-                }
-
-                Button(ParakeetRecognizer.shared.isConfigured() ? "Reload" : "Download") {
-                    download()
-                }
-                .buttonStyle(SoftProminentButtonStyle())
-                .disabled(busy)
-            }
-            .padding(.vertical, 7)
-
-            if !status.isEmpty {
-                Text(status).font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            if let error {
-                Text(error).font(.system(size: 11)).foregroundStyle(Theme.warning)
-            }
-        }
-        .onAppear(perform: refreshStatus)
-    }
-
-    private func refreshStatus() {
-        status = ParakeetRecognizer.shared.isConfigured()
-            ? "Loaded from the previous download."
-            : "Dictation falls back to the cloud until this is downloaded."
-    }
-
-    private func download() {
-        busy = true
-        error = nil
-        status = "Downloading… the app stays usable meanwhile."
-
-        Task {
-            do {
-                try await ParakeetRecognizer.shared.downloadIfNeeded()
-                status = "Model ready"
-            } catch {
-                self.error = error.localizedDescription
-                status = "Download failed"
-            }
-            busy = false
-        }
-    }
 }
 
 // MARK: - Cleanup
 
 struct CleanupSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    @State private var showingModels = false
-
-    private var modelBinding: Binding<String> {
-        Binding(
-            get: { settings.chatModel(for: settings.cleanupProvider) },
-            set: { settings.setChatModel($0, for: settings.cleanupProvider) }
-        )
+    private var providers: [ProviderSpec] {
+        ProviderCatalog.chatProviders.filter { ProviderCatalog.isConfigured($0) }
     }
 
     var body: some View {
@@ -623,7 +419,7 @@ struct CleanupSettingsView: View {
             SoftCard(title: "Cleanup", systemImage: "wand.and.stars") {
                 SoftRow("Clean up after recognition",
                         subtitle: "Fix punctuation, casing and obvious recognition errors") {
-                    Toggle("", isOn: $settings.cleanupEnabled)
+                    Toggle("Clean up after recognition", isOn: $settings.cleanupEnabled)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -639,51 +435,30 @@ struct CleanupSettingsView: View {
             }
 
             SoftCard(title: "Model", systemImage: "brain") {
-                SoftRow("Provider") {
-                    Picker("", selection: $settings.cleanupProvider) {
-                        ForEach(ProviderCatalog.chatProviders.filter { ProviderCatalog.isConfigured($0) }) { provider in
+                SoftRow("Provider", subtitle: "Set the model and credentials in Providers.") {
+                    Picker("Provider", selection: $settings.cleanupProvider) {
+                        if !providers.contains(where: { $0.id == settings.cleanupProvider }) {
+                            Text("Choose a provider").tag(settings.cleanupProvider)
+                        }
+                        ForEach(providers) { provider in
                             Text(provider.name).tag(provider.id)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 190)
+                    .frame(width: 204)
                 }
 
-                if let spec = ProviderCatalog.spec(settings.cleanupProvider) {
-                    if spec.id == "openai" {
-                        SoftDivider()
-                        SoftRow("Base URL") {
-                            TextField("", text: $settings.cleanupBaseURL)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 230)
-                        }
+                if providers.contains(where: { $0.id == settings.cleanupProvider }) {
+                    SoftDivider()
+                    SoftRow("Chat model") {
+                        let model = settings.chatModel(for: settings.cleanupProvider)
+                        Text(model.isEmpty ? String(localized: "Choose a model first.") : model)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
 
                     SoftDivider()
-
-                    SoftRow("Model") {
-                        HStack(spacing: 8) {
-                            TextField("", text: modelBinding)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 200)
-                            Button {
-                                showingModels = true
-                            } label: {
-                                Image(systemName: "list.bullet")
-                            }
-                            .buttonStyle(SoftButtonStyle())
-                            .help(Text("Browse"))
-                        }
-                    }
-
-                    SoftDivider()
-
-                    ProviderTestRow(spec: spec,
-                                    baseURL: spec.id == "openai" ? settings.cleanupBaseURL : nil,
-                                    model: settings.chatModel(for: spec.id))
-
-                    SoftDivider()
-
                     SoftRow("Timeout", subtitle: "On timeout the raw transcript is inserted") {
                         Stepper(String(format: "%.1f s", settings.cleanupTimeout),
                                 value: $settings.cleanupTimeout, in: 1...10, step: 0.5)
@@ -691,16 +466,8 @@ struct CleanupSettingsView: View {
                     }
 
                     SoftDivider()
-
                     CleanupTestRow()
                 }
-            }
-        }
-        .sheet(isPresented: $showingModels) {
-            if let spec = ProviderCatalog.spec(settings.cleanupProvider) {
-                ModelChooser(spec: spec,
-                             baseURL: spec.id == "openai" ? settings.cleanupBaseURL : nil,
-                             selection: modelBinding)
             }
         }
     }
@@ -739,15 +506,11 @@ private struct CleanupTestRow: View {
         busy = true
         message = nil
 
-        let secondary: String? = settings.cleanupProvider == KeychainAccount.groq
-            ? KeychainAccount.openAI
-            : KeychainAccount.groq
         let configuration = CleanupConfiguration(
             provider: settings.cleanupProvider,
-            baseURL: settings.cleanupBaseURL,
+            baseURL: settings.openAIChatBaseURL,
             model: settings.chatModel(for: settings.cleanupProvider),
-            timeout: settings.cleanupTimeout,
-            secondaryProvider: secondary
+            timeout: settings.cleanupTimeout
         )
 
         Task {
@@ -766,36 +529,39 @@ private struct CleanupTestRow: View {
 
 struct AboutView: View {
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 14) {
-                Image(nsImage: NSApp.applicationIconImage)
+        SoftCard {
+            HStack(alignment: .top, spacing: 17) {
+                Image(nsImage: TacetIcon.image)
                     .resizable()
-                    .frame(width: 96, height: 96)
-                    .shadow(color: Theme.accent.opacity(0.45), radius: 20, y: 10)
-                    .padding(.top, 12)
+                    .interpolation(.high)
+                    .frame(width: 76, height: 76)
+                    .accessibilityHidden(true)
 
-                Text("Tacet")
-                    .font(.system(size: 22, weight: .semibold))
-                    .tracking(0.2)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Tacet")
+                        .font(.title2.weight(.semibold))
+                    Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text("Dictate into your editor with a keyboard shortcut. Use on-device recognition or connect a cloud provider. Tacet keeps your clipboard intact when it inserts text automatically.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-
-                Text("Minimal dictation for macOS.\nGPL-3.0, based on TypeWhisper.")
-                    .font(.system(size: 12))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
-            .padding(24)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                shape
-                    .fill(Theme.cardFill(.dark))
-                    .overlay(shape.stroke(Theme.cardStroke(.dark), lineWidth: 1))
-                    .shadow(color: Theme.shadow(.dark), radius: 18, y: 9)
+            .padding(.vertical, 14)
+
+            SoftDivider()
+            HStack {
+                Link("Source code", destination: URL(string: "https://github.com/Lexus2016/tacet")!)
+                Text("GPL-3.0 · Based on TypeWhisper")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Check for Updates…") { Updater.shared.checkForUpdates() }
+                    .buttonStyle(SoftButtonStyle())
             }
+            .padding(.vertical, 8)
         }
     }
 }
@@ -808,6 +574,7 @@ struct APIKeyRow: View {
 
     @State private var value = ""
     @State private var configured = false
+    @State private var keyError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -821,11 +588,11 @@ struct APIKeyRow: View {
 
                 Button("Save") { save() }
                     .buttonStyle(SoftProminentButtonStyle())
-                    .disabled(value.isEmpty && !configured)
+                    .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button("Clear") { clear() }
                     .buttonStyle(SoftButtonStyle())
-                    .disabled(!configured && value.isEmpty)
+                    .disabled(!configured)
             }
 
             SecureField("Paste the key", text: $value)
@@ -845,24 +612,36 @@ struct APIKeyRow: View {
                 }
             }
             .padding(.leading, 18)
+
+            if let keyError {
+                Text(keyError).font(.caption).foregroundStyle(Theme.warning)
+            }
         }
         .padding(.vertical, 8)
         .onAppear(perform: load)
     }
 
     private func load() {
-        value = Keychain.string(account) ?? ""
-        configured = !value.isEmpty
-    }
-
-    private func save() {
-        Keychain.set(value, account: account)
         configured = Keychain.string(account) != nil
     }
 
-    private func clear() {
-        Keychain.set(nil, account: account)
+    private func save() {
+        guard Keychain.set(value, account: account) else {
+            keyError = String(localized: "The API key could not be saved.")
+            return
+        }
         value = ""
-        configured = false
+        keyError = nil
+        load()
+    }
+
+    private func clear() {
+        guard Keychain.set(nil, account: account) else {
+            keyError = String(localized: "The API key could not be removed.")
+            return
+        }
+        value = ""
+        keyError = nil
+        load()
     }
 }

@@ -1,33 +1,6 @@
 import AppKit
 import SwiftUI
 
-enum IndicatorStyle: String, CaseIterable, Identifiable {
-    case island
-    case notch
-    case overlay
-    case minimal
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .island: return "Tacet island"
-        case .notch: return "Notch"
-        case .overlay: return "Overlay"
-        case .minimal: return "Minimal"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .island: return "Glass pill above the Dock"
-        case .notch: return "Black shape hugging the top edge"
-        case .overlay: return "Floating pill under the menu bar"
-        case .minimal: return "Small dot with a waveform, top right"
-        }
-    }
-}
-
 enum IndicatorTheme: String, CaseIterable, Identifiable {
     case classic
     case glass
@@ -52,8 +25,7 @@ final class HUDModel: ObservableObject {
     @Published var showsLevel: Bool = false
     @Published var showsSpinner: Bool = false
     @Published var isError: Bool = false
-    @Published var tint: Color = Theme.danger
-    @Published var style: IndicatorStyle = .island
+    @Published var tint: Color = Theme.accent
     @Published var theme: IndicatorTheme = .classic
 }
 
@@ -161,36 +133,7 @@ struct IndicatorWaveform: View {
 
 // MARK: - Shapes
 
-/// Straight top edge and rounded bottom ears, like the MacBook notch.
-struct NotchShape: Shape {
-    var bottomCornerRadius: CGFloat = 14
-
-    var animatableData: CGFloat {
-        get { bottomCornerRadius }
-        set { bottomCornerRadius = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomCornerRadius))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX - bottomCornerRadius, y: rect.maxY),
-                          control: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + bottomCornerRadius, y: rect.maxY))
-        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - bottomCornerRadius),
-                          control: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-// MARK: - Styles
-
-/// One surface for every indicator style: dark glass, a light top edge and a
-/// tinted glow. The shapes differ, the design language does not.
-private struct GlassSurface<S: Shape>: View {
+struct GlassSurface<S: InsettableShape>: View {
     let shape: S
     let tint: Color
     let theme: IndicatorTheme
@@ -202,7 +145,7 @@ private struct GlassSurface<S: Shape>: View {
                 .fill(LinearGradient(colors: [Color(white: 0.18).opacity(0.96),
                                               Color(white: 0.08).opacity(0.97)],
                                      startPoint: .top, endPoint: .bottom))
-                .overlay(shape.stroke(LinearGradient(colors: [Color.white.opacity(0.28), Color.white.opacity(0.04)],
+                .overlay(shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.28), Color.white.opacity(0.04)],
                                                      startPoint: .top, endPoint: .bottom), lineWidth: 0.9))
                 .shadow(color: tint.opacity(0.32), radius: 16, x: 0, y: 6)
                 .shadow(color: .black.opacity(0.42), radius: 10, x: 0, y: 4)
@@ -210,15 +153,21 @@ private struct GlassSurface<S: Shape>: View {
         case .glass:
             shape
                 .fill(.ultraThinMaterial)
-                .overlay(shape.stroke(Color.white.opacity(0.25), lineWidth: 0.9))
-                .shadow(color: tint.opacity(0.28), radius: 16, x: 0, y: 6)
-                .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 4)
+                .overlay(shape.fill(LinearGradient(colors: [Color(red: 0.30, green: 0.39, blue: 0.51).opacity(0.46),
+                                                           Color(red: 0.07, green: 0.11, blue: 0.19).opacity(0.80)],
+                                                   startPoint: .top, endPoint: .bottom)))
+                .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.68), .white.opacity(0.20),
+                                                                Color(red: 0.59, green: 0.75, blue: 0.91).opacity(0.48)],
+                                                      startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .overlay(shape.inset(by: 2).strokeBorder(Color.white.opacity(0.11), lineWidth: 0.8))
+                .shadow(color: tint.opacity(0.22), radius: 12, x: 0, y: 3)
+                .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 4)
 
         case .light:
             shape
                 .fill(LinearGradient(colors: [Color.white.opacity(0.97), Color.white.opacity(0.86)],
                                      startPoint: .top, endPoint: .bottom))
-                .overlay(shape.stroke(Color.black.opacity(0.10), lineWidth: 0.9))
+                .overlay(shape.strokeBorder(Color.black.opacity(0.10), lineWidth: 0.9))
                 .shadow(color: tint.opacity(0.22), radius: 16, x: 0, y: 6)
                 .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
         }
@@ -229,18 +178,7 @@ struct IndicatorView: View {
     @ObservedObject var model: HUDModel
 
     var body: some View {
-        content
-            .preferredColorScheme(model.theme == .light ? .light : .dark)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch model.style {
-        case .island: IslandIndicator(model: model)
-        case .notch: NotchIndicator(model: model)
-        case .overlay: OverlayIndicator(model: model)
-        case .minimal: MinimalIndicator(model: model)
-        }
+        IslandIndicator(model: model)
     }
 }
 
@@ -255,10 +193,11 @@ private struct IslandIndicator: View {
                 Text(model.title)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .frame(maxWidth: 310, alignment: .leading)
                 if let subtitle = model.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -269,17 +208,24 @@ private struct IslandIndicator: View {
                     .tint(model.tint)
                     .padding(.leading, 2)
             } else if model.showsLevel {
-                IndicatorWaveform(level: model.level, tint: model.tint)
+                IndicatorWaveform(level: model.level, tint: model.theme == .glass
+                                  ? Color(red: 0.84, green: 0.89, blue: 0.94)
+                                  : model.tint)
                     .padding(.leading, 2)
             }
         }
-        .padding(.horizontal, 13)
+        .padding(.leading, 14)
+        .padding(.trailing, 19)
         .padding(.vertical, 9)
+        .frame(minWidth: model.showsSpinner || model.showsLevel ? 174 : 150)
         .background {
             GlassSurface(shape: Capsule(style: .continuous), tint: model.tint, theme: model.theme)
         }
+        // The panel boundary surrounds the entire glass surface and its border.
+        // Межа вікна охоплює всю скляну поверхню разом з обводкою.
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .fixedSize()
-        .preferredColorScheme(.dark)
     }
 
     private var badge: some View {
@@ -297,109 +243,6 @@ private struct IslandIndicator: View {
     }
 }
 
-private struct NotchIndicator: View {
-    @ObservedObject var model: HUDModel
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: model.symbol)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(model.tint)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(model.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.primary)
-                if let subtitle = model.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-            }
-
-            Spacer(minLength: 6)
-
-            if model.showsSpinner {
-                ProgressView().controlSize(.small).tint(model.tint)
-            } else if model.showsLevel {
-                IndicatorWaveform(level: model.level, barCount: 6, tint: model.tint)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 9)
-        .padding(.top, 2)
-        .frame(width: 260, height: 42, alignment: .bottom)
-        .background {
-            GlassSurface(shape: NotchShape(bottomCornerRadius: 14), tint: model.tint, theme: model.theme)
-        }
-        .clipShape(NotchShape(bottomCornerRadius: 14))
-        .preferredColorScheme(.dark)
-    }
-}
-
-private struct OverlayIndicator: View {
-    @ObservedObject var model: HUDModel
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: model.symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(model.tint)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(model.title)
-                    .font(.system(size: 12.5, weight: .semibold))
-                if let subtitle = model.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if model.showsSpinner {
-                ProgressView().controlSize(.small).tint(model.tint)
-                    .padding(.leading, 2)
-            } else if model.showsLevel {
-                IndicatorWaveform(level: model.level, barCount: 6, tint: model.tint)
-                    .padding(.leading, 2)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background {
-            GlassSurface(shape: RoundedRectangle(cornerRadius: 18, style: .continuous), tint: model.tint, theme: model.theme)
-        }
-        .fixedSize()
-        .preferredColorScheme(.dark)
-    }
-}
-
-private struct MinimalIndicator: View {
-    @ObservedObject var model: HUDModel
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(model.tint)
-                .frame(width: 6, height: 6)
-                .shadow(color: model.tint.opacity(0.9), radius: 4)
-                .overlay(Circle().stroke(Color.white.opacity(0.4), lineWidth: 0.6))
-
-            if model.showsSpinner {
-                ProgressView().controlSize(.mini).tint(model.tint)
-            } else if model.showsLevel {
-                IndicatorWaveform(level: model.level, barCount: 4, height: 12, tint: .white, barWidth: 2.5)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background {
-            GlassSurface(shape: Capsule(style: .continuous), tint: model.tint, theme: model.theme)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
 // MARK: - Controller
 
 @MainActor
@@ -411,12 +254,9 @@ final class HUDController {
     private var hideTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var startedAt: Date?
+    private var presentation = 0
 
     private init() {}
-
-    private var style: IndicatorStyle {
-        IndicatorStyle(rawValue: AppSettings.shared.indicatorStyle) ?? .island
-    }
 
     func showPreparing() {
         stopTicking()
@@ -426,20 +266,23 @@ final class HUDController {
              level: false, error: false, autoHide: nil, spinner: true)
     }
 
-    func showRecording() {
+    func showRecording(theme: IndicatorTheme? = nil) {
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Recording", symbol: "mic.fill", tint: Theme.danger,
-             level: true, error: false, autoHide: nil)
+        show(title: "Recording", symbol: "mic.fill", tint: Theme.accent,
+             level: true, error: false, autoHide: nil, theme: theme)
         startTicking()
     }
 
-    func showProcessing() {
+    func showProcessing(theme: IndicatorTheme? = nil) {
         stopTicking()
         startedAt = nil
         model.subtitle = nil
-        show(title: "Transcribing…", symbol: "waveform", tint: Theme.accent, level: false, error: false, autoHide: nil)
+        show(title: "Transcribing…", symbol: "waveform", tint: Theme.accent,
+             level: false, error: false, autoHide: nil, spinner: true, theme: theme)
     }
+
+    var previewWindow: NSWindow? { panel }
 
     func showMessage(_ text: String, isError: Bool) {
         stopTicking()
@@ -455,11 +298,10 @@ final class HUDController {
 
     /// Shows the current style for a couple of seconds, so the picker in
     /// Settings is not a blind choice.
-    func preview(style: IndicatorStyle) {
-        AppSettings.shared.indicatorStyle = style.rawValue
+    func preview() {
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Preview", symbol: "mic.fill", tint: Theme.danger, level: true, error: false, autoHide: 3.0)
+        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, error: false, autoHide: 3.0)
         startTicking()
     }
 
@@ -469,6 +311,7 @@ final class HUDController {
     }
 
     func hide() {
+        presentation += 1
         hideTask?.cancel()
         hideTask = nil
         stopTicking()
@@ -482,10 +325,12 @@ final class HUDController {
                       level: Bool,
                       error: Bool,
                       autoHide: TimeInterval?,
-                      spinner: Bool = false) {
+                      spinner: Bool = false,
+                      theme: IndicatorTheme? = nil) {
+        presentation += 1
         hideTask?.cancel()
 
-        let desiredTheme = IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
+        let desiredTheme = theme ?? IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
         if model.theme != desiredTheme {
             model.theme = desiredTheme
             closePanel()
@@ -512,6 +357,7 @@ final class HUDController {
                 panel.animator().alphaValue = 1
             }
         } else {
+            panel.animator().alphaValue = 1
             panel.orderFrontRegardless()
         }
 
@@ -526,13 +372,17 @@ final class HUDController {
 
     private func fadeOut() {
         guard let panel, panel.isVisible else { return }
+        let current = presentation
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
-        } completionHandler: {
-            panel.orderOut(nil)
-            panel.alphaValue = 1
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard self?.presentation == current else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
         }
     }
 
@@ -555,13 +405,7 @@ final class HUDController {
     }
 
     private func ensurePanel() -> NSPanel {
-        let desired = style
-        if let panel, model.style == desired { return panel }
-
-        closePanel()
-        model.style = .island
-        model.theme = IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
-
+        if let panel { return panel }
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -576,7 +420,7 @@ final class HUDController {
         panel.isMovable = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = NSAppearance(named: model.theme == .light ? .aqua : .darkAqua)
         panel.contentView = NSHostingView(rootView: IndicatorView(model: model))
 
         self.panel = panel
@@ -593,63 +437,17 @@ final class HUDController {
         hosting.layoutSubtreeIfNeeded()
         let fitting = hosting.fittingSize
 
-        let size: NSSize
-        switch model.style {
-        case .notch:
-            size = NSSize(width: 260, height: 42)
-        case .minimal:
-            size = NSSize(width: max(52, fitting.width), height: max(26, fitting.height))
-        case .island, .overlay:
-            size = NSSize(width: max(160, fitting.width + 48), height: max(38, fitting.height))
-        }
-        panel.setContentSize(size)
+        panel.setContentSize(NSSize(width: ceil(fitting.width), height: ceil(fitting.height)))
+        hosting.layoutSubtreeIfNeeded()
     }
 
     private func position(_ panel: NSPanel) {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
-        let frame = screen.frame
         let size = panel.frame.size
-        let atTop = AppSettings.shared.indicatorPosition == "top"
-
-        func topOrigin(inset: CGFloat = 10) -> NSPoint {
-            NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - inset)
-        }
-
-        func bottomOrigin(inset: CGFloat = 10) -> NSPoint {
-            NSPoint(x: visible.midX - size.width / 2, y: visible.minY + inset)
-        }
-
-        switch model.style {
-        case .island:
-            panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
-
-        case .notch:
-            if atTop {
-                // On a notched MacBook the panel must start below the notch, or
-                // the shape is hidden behind it.
-                let notch = screen.safeAreaInsets.top
-                if notch > 0 {
-                    panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
-                                                 y: frame.maxY - size.height - notch))
-                } else {
-                    panel.setFrameOrigin(topOrigin(inset: 6))
-                }
-            } else {
-                panel.setFrameOrigin(bottomOrigin())
-            }
-
-        case .overlay:
-            panel.setFrameOrigin(atTop ? topOrigin() : bottomOrigin())
-
-        case .minimal:
-            if atTop {
-                panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,
-                                             y: visible.maxY - size.height - 8))
-            } else {
-                panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 12,
-                                             y: visible.minY + 10))
-            }
-        }
+        let y = AppSettings.shared.indicatorPosition == "top"
+            ? visible.maxY - size.height - 10
+            : visible.minY + 10
+        panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: y))
     }
 }

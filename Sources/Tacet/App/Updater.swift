@@ -8,7 +8,7 @@ import Sparkle
 /// windows. The delegate brings the app forward while the update UI is on
 /// screen and returns it to the background afterwards.
 @MainActor
-final class Updater: NSObject, SPUStandardUserDriverDelegate {
+final class Updater: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
     static let shared = Updater()
 
     private var controller: SPUStandardUpdaterController?
