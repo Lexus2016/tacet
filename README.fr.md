@@ -16,7 +16,7 @@ Maintenez un raccourci et dictez dans l’application que vous utilisez déjà. 
 
 Découvrez l’indicateur d’enregistrement, la détection automatique de la langue et un exemple de traduction.
 
-[![Parcours illustratif avec les vrais indicateurs d’enregistrement et de transcription de Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=fr#demo)
+[![Parcours illustratif avec les vrais indicateurs d’enregistrement et de transcription de Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=fr#demo)
 
 | Réglages | Historique |
 | --- | --- |

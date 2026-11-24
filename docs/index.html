@@ -69,6 +69,10 @@ h3{font-size:1.22rem;letter-spacing:-.025em}
 .option{min-height:44px;padding:5px 12px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .option[aria-pressed="true"]{border-color:var(--rail);font-weight:750}
 .option[aria-pressed="true"]::before{content:"✓ ";margin-inline-end:3px}
+.video-languages{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.video-languages a{display:inline-flex;align-items:center;text-decoration:none}
+.video-languages a[aria-current="true"]{border-color:var(--rail);font-weight:750}
+.video-languages a[aria-current="true"]::before{content:"✓ ";margin-inline-end:6px}
 .section{padding-block:clamp(61px,9vw,113px);border-bottom:1px solid var(--line)}
 .section-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.55fr);gap:26px;align-items:end;margin-bottom:35px}
 .section-head p,.desc{color:var(--muted);max-width:43ch}
@@ -111,7 +115,7 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   .primary:active,.secondary:active{transform:none}
 }
 </style>
-<script src="languages.js" defer></script>
+<script src="languages.js?v=demo-en-es" defer></script>
 </head>
 <body id="top">
 <a class="skip" href="#main" data-i="skip">Skip to content</a>
@@ -178,13 +182,17 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
         <p data-i="demoLead">See the recording indicator, automatic language detection and an example of optional translation.</p>
       </div>
       <figure>
+        <nav id="videoLanguages" class="video-languages" aria-label="Video language">
+          <a class="option" href="media/tacet-demo-en.mp4" data-video-language="en" lang="en" aria-current="true">English</a>
+          <a class="option" href="media/tacet-demo-es.mp4" data-video-language="es" lang="es">Español</a>
+        </nav>
         <div class="video">
-          <video controls playsinline preload="none" poster="media/demo-poster.webp" aria-label="Tacet dictation demo">
-            <source src="media/tacet-demo.mp4" type="video/mp4">
-            <a href="media/tacet-demo.mp4" data-i="videoLink">Open the demo video</a>
+          <video id="demoVideo" controls playsinline preload="none" lang="en" aria-label="Tacet demo in English" poster="media/tacet-demo-en-poster.webp">
+            <source src="media/tacet-demo-en.mp4" type="video/mp4">
+            <a id="demoVideoLink" href="media/tacet-demo-en.mp4" data-i="videoLink">Open the demo video</a>
           </video>
         </div>
-        <figcaption data-i="demoCaption">Illustrative walkthrough using Tacet’s actual recording and transcription indicators.</figcaption>
+        <figcaption data-i="demoCaption">A dictation and translation example with Tacet’s recording indicator.</figcaption>
       </figure>
       <div class="gallery">
         <figure>

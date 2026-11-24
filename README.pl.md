@@ -16,7 +16,7 @@ Przytrzymaj skrót i dyktuj w aplikacji, z której już korzystasz. Tacet rozpoz
 
 Zobacz wskaźnik nagrywania, automatyczne wykrywanie języka i przykład tłumaczenia.
 
-[![Przykładowy scenariusz wykorzystujący rzeczywiste wskaźniki nagrywania i transkrypcji Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=pl#demo)
+[![Przykładowy scenariusz wykorzystujący rzeczywiste wskaźniki nagrywania i transkrypcji Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=pl#demo)
 
 | Ustawienia | Historia |
 | --- | --- |

@@ -16,7 +16,7 @@ Mantén pulsado un atajo y dicta en la aplicación que ya estás usando. Tacet d
 
 Mira el indicador de grabación, la detección automática del idioma y un ejemplo de traducción opcional.
 
-[![Recorrido ilustrativo con los indicadores reales de grabación y transcripción de Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=es#demo)
+[![Tacet dicta en español y traduce al inglés.](docs/media/tacet-demo-es.gif)](https://lexus2016.github.io/tacet/?lang=es#demo)
 
 | Ajustes | Historial |
 | --- | --- |

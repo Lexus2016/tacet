@@ -17,7 +17,7 @@ const translations = {
     "demoTitle": "Від голосу до готового речення",
     "demoLead": "Подивіться на індикатор запису, автоматичне визначення мови й приклад перекладу.",
     "videoLink": "Відкрити відеодемонстрацію",
-    "demoCaption": "Демонстраційний сценарій зі справжніми індикаторами запису та розпізнавання Tacet.",
+    "demoCaption": "Приклад диктування й перекладу з індикатором запису Tacet.",
     "settingsCaption": "Загальні налаштування клавіш, дозволів і мови результату.",
     "historyCaption": "Історія з демонстраційними текстами та керуванням первинним записом.",
     "featureTitle": "Маленький застосунок для щоденного письма",
@@ -41,7 +41,8 @@ const translations = {
     "output": "Переклад · English",
     "menu": "Приклад результату",
     "theme": "Перемкнути тему",
-    "language": "Мова"
+    "language": "Мова",
+    "videoLanguage": "Мова відео"
   },
   "de": {
     "skip": "Zum Inhalt springen",
@@ -61,7 +62,7 @@ const translations = {
     "demoTitle": "Von der Stimme zum Satz",
     "demoLead": "Sieh dir den Aufnahmeindikator, die automatische Spracherkennung und ein Übersetzungsbeispiel an.",
     "videoLink": "Demovideo öffnen",
-    "demoCaption": "Beispielablauf mit den echten Aufnahme- und Transkriptionsanzeigen von Tacet.",
+    "demoCaption": "Diktat und Übersetzung mit der Aufnahme-Anzeige von Tacet.",
     "settingsCaption": "Allgemeine Einstellungen für Kürzel, Berechtigungen und Ausgabe.",
     "historyCaption": "Verlauf mit Beispieltranskripten und Bedienelementen für die Aufnahme.",
     "featureTitle": "Eine kleine App fürs tägliche Schreiben",
@@ -85,7 +86,8 @@ const translations = {
     "output": "Übersetzung · English",
     "menu": "Beispielausgabe",
     "theme": "Darstellung wechseln",
-    "language": "Sprache"
+    "language": "Sprache",
+    "videoLanguage": "Videosprache"
   },
   "es": {
     "skip": "Ir al contenido",
@@ -105,7 +107,7 @@ const translations = {
     "demoTitle": "De la voz a una frase",
     "demoLead": "Mira el indicador de grabación, la detección automática del idioma y un ejemplo de traducción opcional.",
     "videoLink": "Abrir el vídeo",
-    "demoCaption": "Recorrido ilustrativo con los indicadores reales de grabación y transcripción de Tacet.",
+    "demoCaption": "Un ejemplo de dictado y traducción con el indicador de grabación de Tacet.",
     "settingsCaption": "Ajustes generales de atajos, permisos e idioma de salida.",
     "historyCaption": "Historial con transcripciones de ejemplo y controles de la grabación.",
     "featureTitle": "Una aplicación pequeña para escribir cada día",
@@ -129,7 +131,8 @@ const translations = {
     "output": "Traducción · English",
     "menu": "Resultado de ejemplo",
     "theme": "Cambiar tema",
-    "language": "Idioma"
+    "language": "Idioma",
+    "videoLanguage": "Idioma del vídeo"
   },
   "fr": {
     "skip": "Aller au contenu",
@@ -149,7 +152,7 @@ const translations = {
     "demoTitle": "De la voix à la phrase",
     "demoLead": "Découvrez l’indicateur d’enregistrement, la détection automatique de la langue et un exemple de traduction.",
     "videoLink": "Ouvrir la vidéo",
-    "demoCaption": "Parcours illustratif avec les vrais indicateurs d’enregistrement et de transcription de Tacet.",
+    "demoCaption": "Un exemple de dictée et de traduction avec l’indicateur d’enregistrement de Tacet.",
     "settingsCaption": "Réglages des raccourcis, des autorisations et de la sortie.",
     "historyCaption": "Historique avec des transcriptions d’exemple et les commandes d’enregistrement.",
     "featureTitle": "Une petite application pour écrire au quotidien",
@@ -173,7 +176,8 @@ const translations = {
     "output": "Traduction · English",
     "menu": "Résultat d’exemple",
     "theme": "Changer de thème",
-    "language": "Langue"
+    "language": "Langue",
+    "videoLanguage": "Langue de la vidéo"
   },
   "it": {
     "skip": "Vai al contenuto",
@@ -193,7 +197,7 @@ const translations = {
     "demoTitle": "Dalla voce a una frase",
     "demoLead": "Guarda l’indicatore di registrazione, il rilevamento automatico della lingua e un esempio di traduzione.",
     "videoLink": "Apri il video",
-    "demoCaption": "Esempio illustrativo con i veri indicatori di registrazione e trascrizione di Tacet.",
+    "demoCaption": "Un esempio di dettatura e traduzione con l’indicatore di registrazione di Tacet.",
     "settingsCaption": "Impostazioni generali per scorciatoie, permessi e lingua di uscita.",
     "historyCaption": "Cronologia con trascrizioni di esempio e comandi per la registrazione.",
     "featureTitle": "Una piccola app per scrivere ogni giorno",
@@ -217,7 +221,8 @@ const translations = {
     "output": "Traduzione · English",
     "menu": "Risultato di esempio",
     "theme": "Cambia tema",
-    "language": "Lingua"
+    "language": "Lingua",
+    "videoLanguage": "Lingua del video"
   },
   "pl": {
     "skip": "Przejdź do treści",
@@ -237,7 +242,7 @@ const translations = {
     "demoTitle": "Od głosu do gotowego zdania",
     "demoLead": "Zobacz wskaźnik nagrywania, automatyczne wykrywanie języka i przykład tłumaczenia.",
     "videoLink": "Otwórz film",
-    "demoCaption": "Przykładowy scenariusz wykorzystujący rzeczywiste wskaźniki nagrywania i transkrypcji Tacet.",
+    "demoCaption": "Przykład dyktowania i tłumaczenia ze wskaźnikiem nagrywania Tacet.",
     "settingsCaption": "Ogólne ustawienia skrótów, uprawnień i języka wyjściowego.",
     "historyCaption": "Historia z przykładowymi transkrypcjami i sterowaniem nagraniami.",
     "featureTitle": "Mała aplikacja do codziennego pisania",
@@ -261,7 +266,8 @@ const translations = {
     "output": "Tłumaczenie · English",
     "menu": "Przykładowy wynik",
     "theme": "Zmień motyw",
-    "language": "Język"
+    "language": "Język",
+    "videoLanguage": "Język filmu"
   },
   "pt": {
     "skip": "Saltar para o conteúdo",
@@ -281,7 +287,7 @@ const translations = {
     "demoTitle": "Da voz à frase",
     "demoLead": "Veja o indicador de gravação, a deteção automática da língua e um exemplo de tradução.",
     "videoLink": "Abrir o vídeo",
-    "demoCaption": "Percurso ilustrativo com os indicadores reais de gravação e transcrição do Tacet.",
+    "demoCaption": "Um exemplo de ditado e tradução com o indicador de gravação do Tacet.",
     "settingsCaption": "Definições gerais de atalhos, permissões e língua de saída.",
     "historyCaption": "Histórico com transcrições de exemplo e controlos da gravação.",
     "featureTitle": "Uma pequena aplicação para escrever no dia a dia",
@@ -305,7 +311,8 @@ const translations = {
     "output": "Tradução · English",
     "menu": "Resultado de exemplo",
     "theme": "Mudar tema",
-    "language": "Idioma"
+    "language": "Idioma",
+    "videoLanguage": "Idioma do vídeo"
   },
   "ru": {
     "skip": "К содержанию",
@@ -325,7 +332,7 @@ const translations = {
     "demoTitle": "От голоса к готовой фразе",
     "demoLead": "Посмотрите на индикатор записи, автоматическое определение языка и пример перевода.",
     "videoLink": "Открыть видео",
-    "demoCaption": "Иллюстративный сценарий с настоящими индикаторами записи и распознавания Tacet.",
+    "demoCaption": "Пример диктовки и перевода с индикатором записи Tacet.",
     "settingsCaption": "Общие настройки сочетаний, разрешений и языка результата.",
     "historyCaption": "История с примерами текста и элементами управления записью.",
     "featureTitle": "Небольшое приложение для повседневной работы с текстом",
@@ -349,14 +356,15 @@ const translations = {
     "output": "Перевод · English",
     "menu": "Пример результата",
     "theme": "Переключить тему",
-    "language": "Язык"
+    "language": "Язык",
+    "videoLanguage": "Язык видео"
   }
 };
 const textNodes = [...document.querySelectorAll("[data-i]")];
 const defaults = Object.fromEntries(textNodes.map(node => [node.dataset.i, node.textContent]));
 Object.assign(defaults, {
   detected: "Detected · Українська", output: "Translation · English",
-  menu: "Sample output", theme: "Switch theme", language: "Language"
+  menu: "Sample output", videoLanguage: "Video language", theme: "Switch theme", language: "Language"
 });
 
 const root = document.documentElement;
@@ -368,6 +376,11 @@ const translated = document.querySelector("#sampleEnglish");
 const output = document.querySelector("#sampleText");
 const state = document.querySelector("#sampleState");
 const hud = document.querySelector("#sampleHud");
+const video = document.querySelector("#demoVideo");
+const videoLanguages = document.querySelector("#videoLanguages");
+const videoLinks = [...videoLanguages.querySelectorAll("[data-video-language]")];
+const videoSource = video.querySelector("source");
+const videoFallback = document.querySelector("#demoVideoLink");
 let activeStrings = defaults;
 let showTranslation = false;
 
@@ -385,7 +398,21 @@ function updateSample() {
   state.textContent = activeStrings[showTranslation ? "output" : "detected"];
   hud.src = showTranslation ? "media/processing.webp" : "media/recording.webp";
 }
-function applyLanguage(language) {
+function updateVideo(language) {
+  const selected = language === "es" ? "es" : "en";
+  const file = "media/tacet-demo-" + selected;
+  videoLinks.forEach(link => {
+    if (link.dataset.videoLanguage === selected) link.setAttribute("aria-current", "true");
+    else link.removeAttribute("aria-current");
+  });
+  if (video.lang === selected) return;
+  video.lang = selected;
+  video.setAttribute("aria-label", selected === "es" ? "Demostración de Tacet en español" : "Tacet demo in English");
+  video.poster = file + "-poster.webp";
+  videoSource.src = videoFallback.href = file + ".mp4";
+  video.load();
+}
+function applyLanguage(language, videoLanguage) {
   const locale = Object.hasOwn(translations, language) ? language : "en";
   root.lang = picker.value = locale;
   activeStrings = { ...defaults, ...translations[locale] };
@@ -394,6 +421,7 @@ function applyLanguage(language) {
   picker.setAttribute("aria-label", activeStrings.language);
   theme.setAttribute("aria-label", activeStrings.theme);
   document.querySelector(".options").setAttribute("aria-label", activeStrings.menu);
+  videoLanguages.setAttribute("aria-label", activeStrings.videoLanguage);
   for (const kind of ["settings", "history"]) {
     const image = document.querySelector("#" + kind + "Shot");
     image.src = "media/" + kind + (locale === "uk" ? "-uk" : "") + ".webp";
@@ -401,6 +429,7 @@ function applyLanguage(language) {
     document.querySelector("#" + kind + "Link").href = image.src;
   }
   updateSample();
+  updateVideo(videoLanguage === "en" || videoLanguage === "es" ? videoLanguage : locale);
 }
 function applyTheme(mode) {
   const appearance = mode === "light" ? "light" : "dark";
@@ -409,7 +438,8 @@ function applyTheme(mode) {
 }
 function replaceParam(key, value) {
   const address = new URL(location.href);
-  address.searchParams.set(key, value);
+  if (value === null) address.searchParams.delete(key);
+  else address.searchParams.set(key, value);
   history.replaceState(null, "", address);
 }
 
@@ -417,6 +447,7 @@ picker.addEventListener("change", () => {
   applyLanguage(picker.value);
   setPreference("tacet-language", root.lang);
   replaceParam("lang", root.lang);
+  replaceParam("demo", null);
 });
 theme.addEventListener("click", () => {
   applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
@@ -425,5 +456,11 @@ theme.addEventListener("click", () => {
 });
 original.addEventListener("click", () => { showTranslation = false; updateSample(); });
 translated.addEventListener("click", () => { showTranslation = true; updateSample(); });
-applyLanguage(initial.get("lang") || getPreference("tacet-language") || navigator.language.split("-")[0]);
+videoLinks.forEach(link => link.addEventListener("click", event => {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  updateVideo(link.dataset.videoLanguage);
+  replaceParam("demo", link.dataset.videoLanguage);
+}));
+applyLanguage(initial.get("lang") || getPreference("tacet-language") || navigator.language.split("-")[0], initial.get("demo"));
 applyTheme(initial.get("theme") || getPreference("tacet-theme") || "dark");

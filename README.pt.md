@@ -16,7 +16,7 @@ Mantenha um atalho pressionado e dite na aplicação que já está a usar. O Tac
 
 Veja o indicador de gravação, a deteção automática da língua e um exemplo de tradução.
 
-[![Percurso ilustrativo com os indicadores reais de gravação e transcrição do Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=pt#demo)
+[![Percurso ilustrativo com os indicadores reais de gravação e transcrição do Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=pt#demo)
 
 | Definições | Histórico |
 | --- | --- |

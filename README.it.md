@@ -16,7 +16,7 @@ Tieni premuta una scorciatoia e detta nell’app che stai già usando. Tacet ril
 
 Guarda l’indicatore di registrazione, il rilevamento automatico della lingua e un esempio di traduzione.
 
-[![Esempio illustrativo con i veri indicatori di registrazione e trascrizione di Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=it#demo)
+[![Esempio illustrativo con i veri indicatori di registrazione e trascrizione di Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=it#demo)
 
 | Impostazioni | Cronologia |
 | --- | --- |

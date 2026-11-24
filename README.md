@@ -21,7 +21,7 @@ Speak one of the supported languages and let Tacet detect it for each dictation.
 
 See the recording indicator, automatic language detection and an example of optional translation.
 
-[![Illustrative walkthrough using Tacet’s actual recording and transcription indicators.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=en#demo)
+[![Dictating in English and translating to Spanish with Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=en#demo)
 
 | Settings | History |
 | --- | --- |

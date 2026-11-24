@@ -16,7 +16,7 @@ Halte ein Tastenkürzel gedrückt und diktiere in der App, die du gerade nutzt. 
 
 Sieh dir den Aufnahmeindikator, die automatische Spracherkennung und ein Übersetzungsbeispiel an.
 
-[![Beispielablauf mit den echten Aufnahme- und Transkriptionsanzeigen von Tacet.](docs/media/tacet-demo.gif)](https://lexus2016.github.io/tacet/?lang=de#demo)
+[![Beispielablauf mit den echten Aufnahme- und Transkriptionsanzeigen von Tacet.](docs/media/tacet-demo-en.gif)](https://lexus2016.github.io/tacet/?lang=de#demo)
 
 | Einstellungen | Verlauf |
 | --- | --- |
