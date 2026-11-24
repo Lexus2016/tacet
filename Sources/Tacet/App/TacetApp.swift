@@ -25,7 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CLIHarness.runIfRequested() { return }
 
         _ = DictationController.shared
+#if !DEBUG
         _ = Updater.shared
+#endif
 
         // A menu bar app with no engine looks broken: every dictation fails with
         // "not configured". Open the one window that fixes it.
