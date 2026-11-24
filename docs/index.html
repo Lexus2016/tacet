@@ -3,14 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Tacet is a compact macOS dictation app. Speak into the editor you’re already using, recognize the language, and translate into the language you choose.">
+<title>Tacet — Voice dictation and editing for Mac</title>
+<meta name="description" content="Dictate chats, emails and documents on your Mac. Tacet detects your language and can rewrite or translate selected text when you tell it what to change.">
 <meta name="theme-color" content="#0a121d">
-<meta property="og:title" content="Tacet — Voice in. Text out.">
-<meta property="og:description" content="Dictation and optional translation from your Mac’s menu bar.">
-<meta property="og:image" content="https://lexus2016.github.io/tacet/media/app-icon.png">
 <link rel="canonical" href="https://lexus2016.github.io/tacet/">
 <link rel="icon" href="media/app-icon.png" type="image/png">
-<title>Tacet — Dictation for macOS</title>
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="Tacet">
+<meta property="og:url" content="https://lexus2016.github.io/tacet/">
+<meta property="og:title" content="Tacet — Voice dictation and editing for Mac">
+<meta property="og:description" content="Dictate chats, emails and documents on your Mac. Tacet detects your language and can rewrite or translate selected text when you tell it what to change.">
+<meta property="og:image" content="https://lexus2016.github.io/tacet/media/tacet-social-en.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Tacet for Mac. A selected sentence becomes shorter after the spoken command “Make this shorter.”">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tacet — Voice dictation and editing for Mac">
+<meta name="twitter:description" content="Dictate chats, emails and documents on your Mac. Tacet detects your language and can rewrite or translate selected text when you tell it what to change.">
+<meta name="twitter:image" content="https://lexus2016.github.io/tacet/media/tacet-social-en.png">
+<meta name="twitter:image:alt" content="Tacet for Mac. A selected sentence becomes shorter after the spoken command “Make this shorter.”">
 <style>
 @font-face{font-family:Manrope;src:url("fonts/manrope.woff2") format("woff2");font-weight:200 800;font-display:swap}
 @font-face{font-family:Source;src:url("fonts/source-sans.woff2") format("woff2");font-weight:200 900;font-display:swap}
@@ -26,7 +38,7 @@ button,select{font:inherit;color:inherit}
 button{cursor:pointer}
 h1,h2,h3,p,figure{margin:0}
 h1,h2,h3,.brand{font-family:Manrope,"Arial",sans-serif;line-height:1.1}
-h1{font-size:clamp(2.9rem,6.6vw,6.35rem);letter-spacing:-.075em;font-weight:800;max-width:9.5ch}
+h1{font-size:clamp(2.6rem,5.5vw,5.3rem);letter-spacing:-.065em;font-weight:800;max-width:12ch;overflow-wrap:anywhere}
 h2{font-size:clamp(2.1rem,4.5vw,4rem);letter-spacing:-.06em;font-weight:800}
 h3{font-size:1.22rem;letter-spacing:-.025em}
 .wrap{width:min(100% - 56px,1192px);margin-inline:auto}
@@ -60,15 +72,24 @@ h3{font-size:1.22rem;letter-spacing:-.025em}
 .stage{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:17px;padding:16px;box-shadow:0 15px 0 -8px var(--raised),0 15px 0 -7px var(--line)}
 .stage-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 3px 12px;color:var(--muted);flex-wrap:wrap}
 .stage-header kbd{border:1px solid var(--line);border-radius:5px;padding:2px 7px;color:var(--ink);font:inherit}
-.stage-view{min-height:299px;border:1px solid var(--line);border-radius:11px;padding:clamp(14px,3vw,25px);display:flex;flex-direction:column;justify-content:space-between;gap:22px;background:var(--raised)}
-.stage-view img{width:190px;max-width:100%;height:auto;align-self:flex-start}
-.stage-result{padding-block:11px;border-block:1px solid var(--line)}
-.stage-result span{display:block;color:var(--muted);margin-bottom:5px}
-.stage-result p{font-family:Manrope,Arial,sans-serif;font-size:clamp(1.2rem,2.8vw,1.75rem);font-weight:750;letter-spacing:-.04em;line-height:1.3}
-.options{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}
-.option{min-height:44px;padding:5px 12px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
-.option[aria-pressed="true"]{border-color:var(--rail);font-weight:750}
-.option[aria-pressed="true"]::before{content:"✓ ";margin-inline-end:3px}
+.stage-view{min-height:296px;border:1px solid var(--line);border-radius:11px;padding:clamp(13px,2.5vw,23px);display:grid;align-content:start;gap:13px;background:var(--raised)}
+.stage-view img{width:169px;max-width:100%;height:auto}
+.options{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 12px}
+.options[hidden]{display:none}
+.option{min-height:44px;padding:5px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.option[aria-pressed="true"]{border-color:var(--rail);font-weight:750;background:var(--raised)}
+.option[aria-pressed="true"]::before{content:"✓ ";margin-inline-end:2px}
+#sampleSteps{display:grid;gap:7px}
+.sample-step{padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+.sample-step[data-kind="said"]{border-style:dashed}
+.sample-step[data-kind="inserted"]{border-inline-start:3px solid var(--rail)}
+.sample-step[data-kind="chatEnglish"]{margin-inline-end:9%;border-end-start-radius:2px}
+.sample-step[data-kind="emailSpanish"]{margin-inline-start:9%;border-start-start-radius:2px}
+.sample-step span{display:block;color:var(--muted);margin-bottom:3px}
+.sample-step p{overflow-wrap:anywhere}
+.sample-step[data-kind="inserted"] p,.sample-step[data-kind="emailSpanish"] p{font-weight:650}
+.sample-step mark{color:var(--on-accent);background:var(--accent);border-radius:3px;padding:0 3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.sample-note{margin-top:10px;color:var(--muted);font-size:.9rem}
 .video-languages{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .video-languages a{display:inline-flex;align-items:center;text-decoration:none}
 .video-languages a[aria-current="true"]{border-color:var(--rail);font-weight:750}
@@ -99,7 +120,7 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   .nav{display:none}
   .hero .wrap,.section-head,.install-wrap{grid-template-columns:minmax(0,1fr);gap:24px}
   .hero .wrap{padding-block:51px;min-height:0}
-  h1{max-width:13ch}
+  h1{max-width:16ch}
   .feature{grid-template-columns:minmax(0,1fr);gap:6px;padding-block:18px}
 }
 @media(max-width:460px){
@@ -107,7 +128,11 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   .nav,.tools{gap:8px}
   .header .wrap{gap:9px}
   .stage{padding:10px}
-  .stage-view{min-height:246px}
+  .stage-view{min-height:0}
+  .hero .wrap{padding-block:31px 37px}
+  .lead{margin-top:12px}
+  .actions{margin-top:17px}
+  .compat{margin-top:8px}
   select.control{max-width:128px}
 }
 @media(prefers-reduced-motion:reduce){
@@ -115,7 +140,10 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   .primary:active,.secondary:active{transform:none}
 }
 </style>
-<script src="languages.js?v=demo-en-es" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Tacet","url":"https://lexus2016.github.io/tacet/","operatingSystem":"macOS 14 or later","applicationCategory":"ProductivityApplication","description":"Dictate chats, emails and documents on your Mac. Tacet detects your language and can rewrite or translate selected text when you tell it what to change.","downloadUrl":"https://github.com/Lexus2016/tacet/releases/latest","license":"https://github.com/Lexus2016/tacet/blob/lite/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+<script src="languages.js?v=voice-examples" defer></script>
 </head>
 <body id="top">
 <a class="skip" href="#main" data-i="skip">Skip to content</a>
@@ -127,7 +155,7 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
       <a href="#features" data-i="featuresLink">Features</a>
       <a href="#install" data-i="installLink">Install</a>
     </nav>
-    <div class="tools">
+    <div class="tools" data-nosnippet>
       <select id="language" class="control" aria-label="Language">
         <option value="en" lang="en">English</option>
         <option value="uk" lang="uk">Українська</option>
@@ -147,39 +175,42 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   <section class="hero">
     <div class="wrap">
       <div class="hero-copy">
-        <p class="kicker" data-i="kicker">Menu bar dictation for macOS</p>
-        <h1 data-i="headline">Voice in. Text out.</h1>
-        <p class="lead" data-i="lead">Hold a shortcut and speak into the app you’re already using. Tacet detects your language and can translate into the one you choose.</p>
+        <p class="kicker" data-i="kicker">Voice dictation for Mac</p>
+        <h1 data-i="headline">Dictate where you type.</h1>
+        <p class="lead" data-i="lead">Hold the right Command key, speak, then let go. Tacet puts your words into the chat, email or document you already have open.</p>
         <div class="actions">
           <a class="primary" href="https://github.com/Lexus2016/tacet/releases/latest"><span data-i="download">Download for Mac</span><span aria-hidden="true">↗</span></a>
           <a class="secondary" href="#demo" data-i="watch">Watch the demo</a>
         </div>
-        <p class="compat" data-i="compat">macOS 14+ · Apple Silicon and Intel · Apple-notarized</p>
+        <p class="compat" data-i="compat">Free download · 16–17 MB · macOS 14+ · Apple silicon and Intel</p>
       </div>
-      <div class="stage" aria-describedby="sampleLabel">
+      <div class="stage" aria-describedby="sampleNote" data-nosnippet>
         <div class="stage-header">
-          <span id="sampleLabel" class="mono" data-i="sample">Illustrative dictation</span>
+          <span class="mono" data-i="sample">Try an example</span>
           <kbd data-i="shortcut">Right ⌘</kbd>
         </div>
+        <div class="options" role="group" aria-label="Voice examples" hidden>
+          <button type="button" class="option" data-sample="dictate" aria-pressed="true" data-i="sampleDictate">Dictate</button>
+          <button type="button" class="option" data-sample="switch" aria-pressed="false" data-i="sampleSwitch">Two languages</button>
+          <button type="button" class="option" data-sample="rewrite" aria-pressed="false" data-i="sampleRewrite">Rewrite</button>
+          <button type="button" class="option" data-sample="translate" aria-pressed="false" data-i="sampleTranslate">Translate</button>
+        </div>
         <div class="stage-view">
-          <img src="media/recording.webp" width="380" height="114" alt="" id="sampleHud">
-          <div class="stage-result" aria-live="polite" aria-atomic="true">
-            <span class="mono" id="sampleState">Detected · Українська</span>
-            <p id="sampleText" lang="uk">Надішлю підсумок завтра.</p>
-          </div>
-          <div class="options" role="group" aria-label="Sample output">
-            <button id="sampleOriginal" type="button" class="option" aria-pressed="true" data-i="original">Original</button>
-            <button id="sampleEnglish" type="button" class="option" aria-pressed="false" data-i="translated">English translation</button>
+          <img src="media/recording.webp" width="380" height="114" alt="">
+          <div id="sampleSteps" aria-live="polite" aria-atomic="true">
+            <div class="sample-step" data-kind="said"><span class="mono" data-i="said">You say</span><p>I’ll send the summary tomorrow</p></div>
+            <div class="sample-step" data-kind="inserted"><span class="mono" data-i="inserted">Tacet inserts</span><p>I’ll send the summary tomorrow.</p></div>
           </div>
         </div>
+        <p id="sampleNote" class="sample-note" data-i="sampleNote">These are ready-made examples. The Mac app uses your microphone when you dictate.</p>
       </div>
     </div>
   </section>
   <section id="demo" class="section">
     <div class="wrap">
       <div class="section-head">
-        <h2 data-i="demoTitle">From voice to a sentence</h2>
-        <p data-i="demoLead">See the recording indicator, automatic language detection and an example of optional translation.</p>
+        <h2 data-i="demoTitle">Watch Tacet in action</h2>
+        <p data-i="demoLead">See how a spoken sentence becomes text in the app you have open.</p>
       </div>
       <figure>
         <nav id="videoLanguages" class="video-languages" aria-label="Video language">
@@ -209,27 +240,28 @@ figcaption{padding-top:11px;color:var(--muted);font-size:.94rem}
   <section id="features" class="section">
     <div class="wrap">
       <div class="section-head">
-        <h2 data-i="featureTitle">A small app for everyday writing</h2>
-        <p data-i="featureLead">The menu bar keeps Tacet one shortcut away while you stay in your editor, document or chat.</p>
+        <h2 data-i="featureTitle">Write and edit with your voice</h2>
+        <p data-i="featureLead">Answer a chat, write an email or get a first draft down without leaving the app you’re using.</p>
       </div>
-      <div class="feature"><h3 data-i="languageTitle">Switch languages mid-day</h3><p data-i="languageBody">Let Tacet detect the language for each dictation or lock it to a language you choose.</p></div>
-      <div class="feature"><h3 data-i="translateTitle">Speak one language. Type another.</h3><p data-i="translateBody">Choose an output language and connect a text provider. Tacet can insert the translation into the same app.</p></div>
-      <div class="feature"><h3 data-i="localTitle">Choose where speech is recognized</h3><p data-i="localBody">Download Parakeet for recognition on your Mac or configure a cloud provider. Optional cloud features send data to the provider you choose.</p></div>
-      <div class="feature"><h3 data-i="clipboardTitle">Keep your clipboard</h3><p data-i="clipboardBody">Tacet restores your clipboard after automatic insertion and keeps transcripts in History.</p></div>
+      <div class="feature"><h3 data-i="languageTitle">Speak the language you need</h3><p data-i="languageBody">Dictate a chat message in one language and your next email in another. Tacet can detect the language each time, so you can keep going without changing settings.</p></div>
+      <div class="feature"><h3 data-i="editTitle">Tell Tacet what to change</h3><p data-i="editBody">Select a sentence and say “Make this shorter,” “Make it friendlier,” or “Translate this into Spanish.” Set up a text service once to make these changes with your voice.</p></div>
+      <div class="feature"><h3 data-i="translateTitle">Speak in one language, send in another</h3><p data-i="translateBody">Choose a language for your reply and connect a text service. Tacet can translate your dictation before putting it into the app you’re using.</p></div>
+      <div class="feature"><h3 data-i="localTitle">Dictate offline after setup</h3><p data-i="localBody">Download Parakeet in Tacet’s settings to recognize speech on your Mac, or connect an online speech service. Rewriting and translation use the text service you choose.</p></div>
+      <div class="feature"><h3 data-i="clipboardTitle">Find your words again</h3><p data-i="clipboardBody">Look up your dictation in History. Tacet also restores what you had copied before it put the new text into your app.</p></div>
     </div>
   </section>
   <section id="install" class="section">
     <div class="wrap install-wrap">
       <div>
-        <h2 data-i="installTitle">Put Tacet in your menu bar</h2>
-        <p class="desc" data-i="installBody">Open the disk image for your Mac, drag Tacet into Applications and give it microphone access. Enable Accessibility for automatic insertion.</p>
+        <h2 data-i="installTitle">Get started on Mac</h2>
+        <p class="desc" data-i="installBody">Download the file for your Mac and drag Tacet into Applications. Choose how Tacet should recognize your voice, then allow microphone access and let Tacet insert text into other apps using Accessibility settings.</p>
         <div class="actions"><a class="primary" href="https://github.com/Lexus2016/tacet/releases/latest"><span data-i="download">Download for Mac</span><span aria-hidden="true">↗</span></a></div>
       </div>
       <div class="requirements">
         <div><span data-i="system">System</span><strong>macOS 14+</strong></div>
         <div><span>Apple Silicon</span><code>arm64.dmg</code></div>
         <div><span>Intel</span><code>x86_64.dmg</code></div>
-        <div><span data-i="installerSize">Current installer</span><strong data-i="size">About 16 MB</strong></div>
+        <div><span data-i="installerSize">Download size</span><strong data-i="size">16–17 MB</strong></div>
       </div>
     </div>
   </section>

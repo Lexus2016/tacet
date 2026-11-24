@@ -10,7 +10,9 @@
 
 [English](README.md) · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · Français · [Italiano](README.it.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
 
-Maintenez un raccourci et dictez dans l’application que vous utilisez déjà. Tacet détecte la langue et peut traduire vers celle de votre choix.
+Maintenez la touche Commande droite, parlez, puis relâchez-la. Tacet insère vos mots dans la conversation, l’e-mail ou le document déjà ouvert. Dictez un message dans une langue, puis un e-mail dans une autre. Tacet peut détecter la langue à chaque dictée, sans changement de réglage.
+
+Sélectionnez une phrase et dites « Fais plus court », « Rends le ton plus chaleureux » ou « Traduis en espagnol ». Configurez un service de texte pour utiliser ces commandes.
 
 ## De la voix à la phrase
 

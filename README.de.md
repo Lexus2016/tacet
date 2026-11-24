@@ -10,7 +10,9 @@
 
 [English](README.md) · [Українська](README.uk.md) · Deutsch · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
 
-Halte ein Tastenkürzel gedrückt und diktiere in der App, die du gerade nutzt. Tacet erkennt die Sprache und kann in deine Zielsprache übersetzen.
+Halte die rechte Befehlstaste gedrückt, sprich und lass sie los. Tacet fügt deine Worte in den offenen Chat, die E-Mail oder das Dokument ein. Diktiere eine Chatnachricht in einer Sprache und die nächste E-Mail in einer anderen. Tacet kann die Sprache jedes Diktats erkennen. Du musst in den Einstellungen nichts umstellen.
+
+Markiere einen Satz und bitte Tacet, ihn zu kürzen, freundlicher zu formulieren oder ins Spanische zu übersetzen. Richte dafür einmal einen Textdienst ein.
 
 ## Von der Stimme zum Satz
 

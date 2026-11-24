@@ -4,18 +4,18 @@
 
 <h1 align="center">Tacet</h1>
 
-<p align="center"><strong>Dictation for macOS from the menu bar</strong></p>
+<p align="center"><strong>Voice dictation and editing for Mac</strong></p>
 
 <p align="center">
-  <a href="https://lexus2016.github.io/tacet/?lang=en"><strong>Tacet website</strong></a>
+  <a href="https://lexus2016.github.io/tacet/"><strong>Tacet website</strong></a>
   · <a href="https://github.com/Lexus2016/tacet/releases/latest">Download Tacet</a>
 </p>
 
 English · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
 
-Use a keyboard shortcut to dictate into a document, editor, or message. Recognize speech on your Mac with Parakeet or connect a cloud provider. Tacet saves transcripts in History and restores your clipboard after automatic insertion.
+Hold the right Command key, speak, then let go. Tacet puts your words into the chat, email or document you already have open. It can detect the language each time, so you can dictate your next message in a different language without changing settings.
 
-Speak one of the supported languages and let Tacet detect it for each dictation. Choose an output language and connect a text provider to insert a translation directly into the active app.
+Select a sentence and tell Tacet what to do with it: “Make this shorter,” “Make it friendlier,” or “Translate this into Spanish.” Voice edits and translation use a text service you set up. For dictation, you can recognize speech on your Mac with Parakeet or connect an online speech service.
 
 ## From voice to a sentence
 

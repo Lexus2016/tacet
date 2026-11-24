@@ -10,7 +10,9 @@
 
 [English](README.md) · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · Português · [Русский](README.ru.md)
 
-Mantenha um atalho pressionado e dite na aplicação que já está a usar. O Tacet deteta a língua e pode traduzir para a que escolher.
+Mantém premida a tecla Comando direita, fala e solta-a. O Tacet insere as tuas palavras no chat, e-mail ou documento que tens aberto. Dita uma mensagem num idioma e o próximo e-mail noutro. O Tacet pode detetar o idioma de cada vez, sem mudares as definições.
+
+Seleciona uma frase e diz «Encurta isto», «Usa um tom mais simpático» ou «Traduz para espanhol». Para editar por voz, configura um serviço de texto.
 
 ## Da voz à frase
 

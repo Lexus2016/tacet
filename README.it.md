@@ -10,7 +10,9 @@
 
 [English](README.md) · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · Italiano · [Polski](README.pl.md) · [Português](README.pt.md) · [Русский](README.ru.md)
 
-Tieni premuta una scorciatoia e detta nell’app che stai già usando. Tacet rileva la lingua e può tradurre in quella che scegli.
+Tieni premuto il tasto Comando destro, parla e rilascialo. Tacet inserisce le tue parole nella chat, nell’e-mail o nel documento già aperto. Detta un messaggio in una lingua e la prossima e-mail in un’altra. Tacet può riconoscere la lingua ogni volta, senza modificare le impostazioni.
+
+Seleziona una frase e dì «Accorciala», «Usa un tono più amichevole» o «Traduci in spagnolo». Per modificare il testo con la voce, configura prima un servizio di testo.
 
 ## Dalla voce a una frase
 

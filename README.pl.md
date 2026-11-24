@@ -10,7 +10,9 @@
 
 [English](README.md) · [Українська](README.uk.md) · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · Polski · [Português](README.pt.md) · [Русский](README.ru.md)
 
-Przytrzymaj skrót i dyktuj w aplikacji, z której już korzystasz. Tacet rozpoznaje język i może przetłumaczyć tekst na wybrany język.
+Przytrzymaj prawy klawisz Command, powiedz, co chcesz napisać, i puść klawisz. Tacet wstawi Twoje słowa do otwartego czatu, e-maila lub dokumentu. Podyktuj wiadomość w jednym języku, a kolejnego e-maila w innym. Tacet może za każdym razem rozpoznać język bez zmiany ustawień.
+
+Zaznacz zdanie i powiedz „Skróć to”, „Napisz to przyjaźniej” lub „Przetłumacz na hiszpański”. Aby wprowadzać zmiany głosem, skonfiguruj usługę przetwarzania tekstu.
 
 ## Od głosu do gotowego zdania
 
