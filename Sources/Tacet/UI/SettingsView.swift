@@ -558,6 +558,13 @@ struct AboutView: View {
                     .buttonStyle(SoftButtonStyle())
             }
             .padding(.vertical, 8)
+
+            SoftDivider()
+            Link(destination: URL(string: "https://buymeacoffee.com/tiberiy201y")!) {
+                Label("Buy me a coffee", systemImage: "cup.and.saucer")
+            }
+            .buttonStyle(SoftButtonStyle())
+            .padding(.vertical, 8)
         }
     }
 }
