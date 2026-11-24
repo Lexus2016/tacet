@@ -21,6 +21,8 @@ TAG="v$VERSION"
 REPO="Lexus2016/tacet"
 SPARKLE_BIN=".tools/bin"
 ARCHS_LIST=(arm64 x86_64)
+DMG_WIDTH=660
+DMG_HEIGHT=400
 NOTARY_PROFILE=${NOTARY_PROFILE:-murable}
 
 if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
@@ -75,6 +77,15 @@ DIST=$(mktemp -d "$PWD/dist/tacet-$TAG.XXXXXXXX")
 echo "Artifacts: $DIST"
 
 for ARCH in "${ARCHS_LIST[@]}"; do
+  BG="Assets/dmg-background-$ARCH.png"
+  [ -f "$BG" ] || BG="Assets/dmg-background-arm64.png"
+  BG_WIDTH=$(sips -g pixelWidth "$BG" | awk '/pixelWidth:/ {print $2}')
+  BG_HEIGHT=$(sips -g pixelHeight "$BG" | awk '/pixelHeight:/ {print $2}')
+  if [ "$BG_WIDTH" != "$DMG_WIDTH" ] || [ "$BG_HEIGHT" != "$DMG_HEIGHT" ]; then
+    echo "Installer background $BG must be ${DMG_WIDTH}x${DMG_HEIGHT} pixels. Regenerate it with scripts/make-dmg-background.swift." >&2
+    exit 1
+  fi
+
   FEED="https://github.com/$REPO/releases/latest/download/appcast-$ARCH.xml"
   DERIVED=".release-$ARCH"
   APP="$DERIVED/Build/Products/Release/Tacet.app"
@@ -148,15 +159,13 @@ for ARCH in "${ARCHS_LIST[@]}"; do
   DMG_STAGE="$DIST/dmg-stage-$ARCH"
   mkdir -p "$DMG_STAGE"
   ditto "$APP" "$DMG_STAGE/Tacet.app"
-  BG="Assets/dmg-background-$ARCH.png"
-  [ -f "$BG" ] || BG="Assets/dmg-background-arm64.png"
 
   if command -v create-dmg >/dev/null 2>&1; then
     timeout 120 create-dmg \
       --volname "Tacet $VERSION" \
       --background "$BG" \
       --window-pos 200 120 \
-      --window-size 660 400 \
+      --window-size "$DMG_WIDTH" "$DMG_HEIGHT" \
       --icon-size 128 \
       --icon "Tacet.app" 180 200 \
       --hide-extension "Tacet.app" \
