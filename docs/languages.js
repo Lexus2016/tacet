@@ -366,7 +366,7 @@ const translations = {
     "dictateProblem": "Wiesz, co powiedzieć, ale pisanie zajmuje czas?",
     "dictateSolution": "Ustaw kursor na czacie, w e-mailu lub szkicu. Przytrzymaj prawy ⌘ i mów. Po zwolnieniu klawisza Tacet wstawi tekst.",
     "dictateCaption": "Odpowiedź podyktowana bezpośrednio na czacie",
-    "languageProblem": "Czat w jednym języku, następny e-mail w innym?",
+    "languageProblem": "Czat w jednym języku, następny e‑mail w innym?",
     "languageCaption": "Najpierw czat po angielsku, potem e-mail po hiszpańsku",
     "editProblem": "Trzeba szybko przeredagować lub przetłumaczyć zdanie?",
     "editCaption": "Polecenie głosowe zmienia zaznaczony tekst",
