@@ -14,7 +14,13 @@ final class DictationController: ObservableObject {
         case processing
     }
 
-    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var phase: Phase = .idle {
+        didSet {
+            if oldValue == .recording, phase != .recording {
+                backgroundAudio.end()
+            }
+        }
+    }
     @Published private(set) var history: [HistoryEntry] = []
     @Published private(set) var hotkeyConflict = false
     @Published private(set) var pasteHotkeyAvailable = false
@@ -24,6 +30,7 @@ final class DictationController: ObservableObject {
     private let settings = AppSettings.shared
     private let store = HistoryStore.shared
     private let capture = AudioCaptureService()
+    private let backgroundAudio = BackgroundAudioDucker()
     private let pipeline = TranscriptionPipeline()
     private let cleanupPipeline = CleanupPipeline()
     private let translator = Translator()
@@ -245,6 +252,7 @@ final class DictationController: ObservableObject {
             return
         }
         guard phase == .recording else { return }
+        backgroundAudio.end()
         capture.cancel()
         phase = .idle
         status("Ready")
@@ -313,6 +321,7 @@ final class DictationController: ObservableObject {
                 }
 
                 try capture.start()
+                if settings.quietBackgroundAudio { backgroundAudio.begin() }
                 phase = .recording
                 lastFailure = nil
                 status("Recording…")
@@ -330,10 +339,16 @@ final class DictationController: ObservableObject {
 
     func stopRecording() {
         guard phase == .recording else { return }
+        backgroundAudio.end()
 
         let result: AudioCaptureService.Result
         do {
-            guard let captured = try capture.stop() else { return }
+            guard let captured = try capture.stop() else {
+                phase = .idle
+                status("Ready")
+                HUDController.shared.hide()
+                return
+            }
             result = captured
         } catch {
             phase = .idle
@@ -385,10 +400,16 @@ final class DictationController: ObservableObject {
 
     func cancelRecording() {
         guard phase == .recording else { return }
+        backgroundAudio.end()
         capture.cancel()
         phase = .idle
         status("Cancelled")
         HUDController.shared.hide()
+    }
+
+    func interruptRecording() {
+        if phase == .preparing { stopRequested = true }
+        cancelRecording()
     }
 
     // MARK: Processing

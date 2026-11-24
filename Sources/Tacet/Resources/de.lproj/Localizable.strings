@@ -73,3 +73,5 @@
 "Interface language" = "Sprache der Oberfläche";
 "System" = "System";
 "Restart" = "Neu starten";
+"Lower background audio" = "Hintergrundton leiser stellen";
+"Turns down other audio while you dictate and restores it when you stop." = "Leiserer Ton beim Diktieren. Danach wird die ursprüngliche Lautstärke wiederhergestellt.";

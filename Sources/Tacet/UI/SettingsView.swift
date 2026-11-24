@@ -233,6 +233,15 @@ struct GeneralSettingsView: View {
 
                 SoftDivider()
 
+                SoftRow("Lower background audio", subtitle: "Turns down other audio while you dictate and restores it when you stop.") {
+                    Toggle("Lower background audio", isOn: $settings.quietBackgroundAudio)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                SoftDivider()
+
                 SoftRow("Launch at login", subtitle: loginHint) {
                     Toggle("Launch at login", isOn: launchAtLoginBinding)
                         .labelsHidden()

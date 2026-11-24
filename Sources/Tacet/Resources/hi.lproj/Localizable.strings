@@ -73,3 +73,5 @@
 "Interface language" = "इंटरफ़ेस भाषा";
 "System" = "सिस्टम";
 "Restart" = "पुनः आरंभ करें";
+"Lower background audio" = "पृष्ठभूमि की आवाज़ कम करें";
+"Turns down other audio while you dictate and restores it when you stop." = "बोलकर लिखते समय पृष्ठभूमि की आवाज़ कम होती है और रुकने पर पहले जैसी हो जाती है।";

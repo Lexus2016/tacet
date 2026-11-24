@@ -283,3 +283,5 @@
 "Downloading…" = "Завантажуємо…";
 "%lld d" = "%lld дн.";
 "s" = "с";
+"Lower background audio" = "Приглушувати фоновий звук";
+"Turns down other audio while you dictate and restores it when you stop." = "Знижує гучність фону під час диктування й відновлює її після запису.";

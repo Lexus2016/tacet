@@ -255,6 +255,28 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertEqual(hud.previewWindow?.alphaValue, 1)
     }
 
+    func testLiveIndicatorOrdersEveryDisplayAndDoesNotReappearAfterHiding() async throws {
+        let hud = HUDController.shared
+        defer { hud.hide() }
+        hud.showRecording(theme: .glass)
+
+        for screen in NSScreen.screens {
+            let id = try XCTUnwrap(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)
+            let panel = try XCTUnwrap(hud.panels[id.uint32Value])
+            XCTAssertTrue(panel.isVisible)
+            XCTAssertTrue(panel.collectionBehavior.contains([.canJoinAllSpaces, .canJoinAllApplications]))
+            XCTAssertEqual(panel.frame.midX, screen.visibleFrame.midX, accuracy: 1)
+            panel.orderOut(nil)
+        }
+
+        let workspace = NSWorkspace.shared
+        workspace.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: workspace)
+        XCTAssertTrue(hud.panels.values.allSatisfy(\.isVisible))
+        hud.hide()
+        try await Task.sleep(for: .milliseconds(650))
+        XCTAssertFalse(hud.panels.values.contains(where: \.isVisible))
+    }
+
     private func iconPixels(_ image: NSImage) throws -> [UInt8] {
         let side = 48
         let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,

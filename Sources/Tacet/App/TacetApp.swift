@@ -19,12 +19,17 @@ struct TacetApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private weak var dictation: DictationController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.applyActivationPolicy()
         TacetIcon.applyToDock()
         if CLIHarness.runIfRequested() { return }
 
-        _ = DictationController.shared
+        dictation = DictationController.shared
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(workspaceWillSleep(_:)), name: NSWorkspace.willSleepNotification, object: nil
+        )
 #if !DEBUG
         ProviderHealth.shared.start()
         _ = Updater.shared
@@ -48,6 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        dictation?.interruptRecording()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    @objc private func workspaceWillSleep(_ notification: Notification) {
+        dictation?.interruptRecording()
     }
 
     static func applyActivationPolicy() {

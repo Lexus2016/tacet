@@ -233,12 +233,30 @@ final class HUDController {
     static let shared = HUDController()
 
     private let model = HUDModel()
-    private var panel: NSPanel?
+    private(set) var panels: [CGDirectDisplayID: NSPanel] = [:]
+    private var presentation: Presentation?
+    private var spaceRefreshTask: Task<Void, Never>?
     private var hideTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var startedAt: Date?
 
-    private init() {}
+    private enum Presentation {
+        case dictation
+        case preview
+    }
+
+    private init() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.spaceDidChange() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshPanels() }
+        }
+    }
 
     func showPreparing() {
         stopTicking()
@@ -265,7 +283,10 @@ final class HUDController {
              level: false, autoHide: nil, spinner: true, theme: theme)
     }
 
-    var previewWindow: NSWindow? { panel }
+    var previewWindow: NSWindow? {
+        if let id = NSScreen.main.flatMap(displayID), let panel = panels[id] { return panel }
+        return panels.values.first
+    }
 
     func finish(error: String?) {
         guard let error else {
@@ -285,10 +306,11 @@ final class HUDController {
     /// Shows the current style for a couple of seconds, so the picker in
     /// Settings is not a blind choice.
     func preview() {
-        guard panel?.isVisible != true || hideTask != nil else { return }
+        guard presentation != .dictation || hideTask != nil else { return }
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, autoHide: 3.0)
+        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, autoHide: 3.0,
+             presentation: .preview)
         updateLevel(0.4)
         startTicking()
     }
@@ -299,13 +321,16 @@ final class HUDController {
     }
 
     func hide() {
+        presentation = nil
+        spaceRefreshTask?.cancel()
+        spaceRefreshTask = nil
         hideTask?.cancel()
         hideTask = nil
         stopTicking()
         startedAt = nil
         model.showsLevel = false
         model.waveform.stop()
-        panel?.orderOut(nil)
+        for panel in panels.values { panel.orderOut(nil) }
     }
 
     private func show(title: String,
@@ -314,14 +339,16 @@ final class HUDController {
                       level: Bool,
                       autoHide: TimeInterval?,
                       spinner: Bool = false,
-                      theme: IndicatorTheme? = nil) {
+                      theme: IndicatorTheme? = nil,
+                      presentation: Presentation = .dictation) {
         hideTask?.cancel()
         hideTask = nil
 
         let desiredTheme = theme ?? IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
         if model.theme != desiredTheme {
             model.theme = desiredTheme
-            closePanel()
+            for panel in panels.values { panel.orderOut(nil) }
+            panels.removeAll()
         }
         model.title = NSLocalizedString(title, comment: "")
         model.symbol = symbol
@@ -331,11 +358,8 @@ final class HUDController {
         if level { model.waveform.start() }
         else { model.waveform.stop() }
 
-        let panel = ensurePanel()
-        resize(panel)
-        position(panel)
-
-        panel.orderFrontRegardless()
+        self.presentation = presentation
+        refreshPanels()
 
         if let autoHide {
             hideTask = Task { [weak self] in
@@ -356,10 +380,7 @@ final class HUDController {
                 let subtitle = String(format: "%d:%02d", seconds / 60, seconds % 60)
                 guard self.model.subtitle != subtitle else { continue }
                 self.model.subtitle = subtitle
-                if let panel = self.panel {
-                    self.resize(panel)
-                    self.position(panel)
-                }
+                self.refreshPanels(orderFront: false)
             }
         }
     }
@@ -369,13 +390,52 @@ final class HUDController {
         tickTask = nil
     }
 
-    private func ensurePanel() -> NSPanel {
-        if let panel { return panel }
+    private func spaceDidChange() {
+        guard presentation != nil else { return }
+        refreshPanels()
+        spaceRefreshTask?.cancel()
+        spaceRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
+            self?.refreshPanels(recreate: true)
+        }
+    }
+
+    private func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+
+    private func refreshPanels(orderFront: Bool = true, recreate: Bool = false) {
+        guard let presentation else { return }
+        let screens: [NSScreen]
+        switch presentation {
+        case .dictation:
+            screens = NSScreen.screens
+        case .preview:
+            screens = (NSScreen.main ?? NSScreen.screens.first).map { [$0] } ?? []
+        }
+        let destinations = screens.compactMap { screen in displayID(screen).map { ($0, screen) } }
+        let activeIDs = Set(destinations.map { $0.0 })
+        for id in panels.keys.filter({ !activeIDs.contains($0) }) {
+            panels.removeValue(forKey: id)?.orderOut(nil)
+        }
+        for (id, screen) in destinations {
+            let existing = panels[id]
+            let panel = (recreate ? nil : existing) ?? makePanel(on: screen)
+            panels[id] = panel
+            resize(panel)
+            position(panel, on: screen)
+            if orderFront || existing == nil { panel.orderFrontRegardless() }
+            if recreate { existing?.orderOut(nil) }
+        }
+    }
+
+    private func makePanel(on screen: NSScreen) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: screen
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -384,18 +444,12 @@ final class HUDController {
         panel.level = .statusBar
         panel.ignoresMouseEvents = true
         panel.isMovable = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications, .fullScreenAuxiliary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.appearance = NSAppearance(named: model.theme == .light ? .aqua : .darkAqua)
         panel.contentView = NSHostingView(rootView: IndicatorView(model: model))
 
-        self.panel = panel
         return panel
-    }
-
-    private func closePanel() {
-        panel?.orderOut(nil)
-        panel = nil
     }
 
     private func resize(_ panel: NSPanel) {
@@ -407,8 +461,7 @@ final class HUDController {
         hosting.layoutSubtreeIfNeeded()
     }
 
-    private func position(_ panel: NSPanel) {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+    private func position(_ panel: NSPanel, on screen: NSScreen) {
         let visible = screen.visibleFrame
         let size = panel.frame.size
         let y = AppSettings.shared.indicatorPosition == "top"

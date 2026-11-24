@@ -73,3 +73,5 @@
 "Interface language" = "界面语言";
 "System" = "系统";
 "Restart" = "重启";
+"Lower background audio" = "降低背景音量";
+"Turns down other audio while you dictate and restores it when you stop." = "听写时降低背景音量，结束后恢复。";

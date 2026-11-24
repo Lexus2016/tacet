@@ -151,6 +151,10 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(playSounds, forKey: "playSounds") }
     }
 
+    @Published var quietBackgroundAudio: Bool {
+        didSet { defaults.set(quietBackgroundAudio, forKey: "quietBackgroundAudio") }
+    }
+
     /// "bundled" (the TypeWhisper cues) or "system".
     @Published var soundStyle: String {
         didSet { defaults.set(soundStyle, forKey: "soundStyle") }
@@ -293,6 +297,7 @@ final class AppSettings: ObservableObject {
         cleanupTimeout = (storedTimeout == nil || storedTimeout == 1.5) ? 3.0 : (storedTimeout ?? 3.0)
         pasteAutomatically = defaults.object(forKey: "pasteAutomatically") as? Bool ?? true
         playSounds = defaults.object(forKey: "playSounds") as? Bool ?? true
+        quietBackgroundAudio = defaults.object(forKey: "quietBackgroundAudio") as? Bool ?? true
         soundStyle = defaults.string(forKey: "soundStyle") ?? "bundled"
         indicatorPosition = defaults.string(forKey: "indicatorPosition") ?? "bottom"
         indicatorTheme = defaults.string(forKey: "indicatorTheme") ?? "classic"

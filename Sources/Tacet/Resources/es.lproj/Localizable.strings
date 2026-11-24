@@ -73,3 +73,5 @@
 "Interface language" = "Idioma de la interfaz";
 "System" = "Sistema";
 "Restart" = "Reiniciar";
+"Lower background audio" = "Atenuar el sonido de fondo";
+"Turns down other audio while you dictate and restores it when you stop." = "Baja el volumen de fondo mientras dictas y lo restablece al terminar.";
