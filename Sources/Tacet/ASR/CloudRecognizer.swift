@@ -49,7 +49,8 @@ final class CloudRecognizer: SpeechRecognizer {
         )
 
         let started = Date()
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await ProviderHealth.data(for: request, provider: id,
+                model: configuration.model, capability: .transcription, session: session)
         let latency = Date().timeIntervalSince(started)
 
         guard let http = response as? HTTPURLResponse else {

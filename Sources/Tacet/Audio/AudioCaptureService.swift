@@ -275,7 +275,7 @@ final class AudioCaptureService {
             if magnitude > peak { peak = magnitude }
             squares += Double(value * value)
         }
-        levelHandler?(min(1, peak * 1.6))
+        levelHandler?(Self.meterLevel(forPeak: peak))
 
         bufferLock.lock()
         collected.append(contentsOf: chunk)
@@ -289,6 +289,14 @@ final class AudioCaptureService {
         writeQueue.async {
             try? file.write(from: copy)
         }
+    }
+
+    static func meterLevel(forPeak peak: Float) -> Float {
+        guard peak.isFinite, peak > 0 else { return 0 }
+        let floor: Float = -54
+        let ceiling: Float = -6
+        let decibels = 20 * log10(peak)
+        return min(1, max(0, (decibels - floor) / (ceiling - floor)))
     }
 
     private static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {

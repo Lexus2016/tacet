@@ -14,7 +14,6 @@ final class DictationController: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .idle
-    @Published private(set) var level: Float = 0
     @Published private(set) var history: [HistoryEntry] = []
     @Published private(set) var hotkeyConflict = false
     @Published private(set) var statusNote: String = "Ready"
@@ -48,8 +47,7 @@ final class DictationController: ObservableObject {
     private init() {
         capture.levelHandler = { [weak self] level in
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.level = level
+                guard let self, self.phase == .recording, self.settings.showHUD else { return }
                 HUDController.shared.updateLevel(level)
             }
         }
@@ -125,7 +123,8 @@ final class DictationController: ObservableObject {
                               existingEntryID: entry.id,
                               allowPaste: false,
                               allowClipboard: false,
-                              autoRetry: false)
+                              autoRetry: false,
+                              inBackground: true)
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }
@@ -314,9 +313,7 @@ final class DictationController: ObservableObject {
                 phase = .idle
                 lastFailure = error.localizedDescription
                 status(error.localizedDescription)
-                if settings.showHUD {
-                    HUDController.shared.showMessage(error.localizedDescription, isError: true)
-                }
+                HUDController.shared.finish(error: settings.showHUD ? error.localizedDescription : nil)
             }
         }
     }
@@ -391,6 +388,7 @@ final class DictationController: ObservableObject {
                          allowPaste: Bool,
                          allowClipboard: Bool,
                          autoRetry: Bool,
+                         inBackground: Bool = false,
                          focus: SelectionReader.Focus? = nil,
                          selection: SelectionReader.Selection = .none) async {
         updateRestart.activeTranscriptions += 1
@@ -498,6 +496,7 @@ final class DictationController: ObservableObject {
                           existingEntryID: existingEntryID,
                           allowPaste: allowPaste && selectionAllowsPaste,
                           allowClipboard: allowClipboard && selectionAllowsPaste,
+                          inBackground: inBackground,
                           focus: focus,
                           note: notes.isEmpty ? nil : notes.joined(separator: "; "))
 
@@ -507,7 +506,8 @@ final class DictationController: ObservableObject {
                           latency: Date().timeIntervalSince(started),
                           appName: appName,
                           existingEntryID: existingEntryID,
-                          autoRetry: autoRetry)
+                          autoRetry: autoRetry,
+                          inBackground: inBackground)
         }
     }
 
@@ -564,7 +564,7 @@ final class DictationController: ObservableObject {
             message = String(localized: "Selection left unchanged. Result kept in History.")
         }
         status(message)
-        if settings.showHUD { HUDController.shared.showMessage(message, isError: !pasted && !copied) }
+        HUDController.shared.finish(error: settings.showHUD && !pasted && !copied ? message : nil)
 
         if settings.playSounds {
             SoundService.shared.play(pasted ? .success : .error, style: settings.soundStyle)
@@ -586,12 +586,16 @@ final class DictationController: ObservableObject {
                          existingEntryID: String?,
                          allowPaste: Bool,
                          allowClipboard: Bool,
+                         inBackground: Bool,
                          focus: SelectionReader.Focus?,
                          note: String?) async {
         // A background attempt must not revive a deleted history entry.
         // Фоновий повтор не має відновлювати видалений запис історії.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
-            phase = .idle
+            if !inBackground {
+                phase = .idle
+                HUDController.shared.hide()
+            }
             return
         }
 
@@ -647,9 +651,12 @@ final class DictationController: ObservableObject {
             entryID = entry.id
         }
 
+        if pasted { store.markInserted(id: entryID) }
+        refreshHistory()
+        guard !inBackground || (phase == .idle && !Task.isCancelled) else { return }
+
         let message: String
         if pasted {
-            store.markInserted(id: entryID)
             message = String(localized: "Inserted")
         } else if copied {
             message = String(localized: "Copied to clipboard, press ⌘V")
@@ -659,13 +666,11 @@ final class DictationController: ObservableObject {
             message = String(localized: "Recovered — open History to copy")
         }
         status(message)
-        if settings.showHUD {
-            HUDController.shared.showMessage(message, isError: !pasted && !copied && focus != nil)
-        }
+        let failedToDeliver = !pasted && !copied && (allowPaste || focus != nil)
+        HUDController.shared.finish(error: settings.showHUD && failedToDeliver ? message : nil)
 
         phase = .idle
         lastFailure = nil
-        refreshHistory()
         scheduleIdleUnload()
         if settings.playSounds { SoundService.shared.play(.success, style: settings.soundStyle) }
     }
@@ -675,7 +680,8 @@ final class DictationController: ObservableObject {
                                latency: TimeInterval,
                                appName: String?,
                                existingEntryID: String?,
-                               autoRetry: Bool) {
+                               autoRetry: Bool,
+                               inBackground: Bool) {
         let message = failure.localizedDescription
         var failedID: String?
 
@@ -708,13 +714,14 @@ final class DictationController: ObservableObject {
             failedID = entry.id
         }
 
+        refreshHistory()
+        guard !inBackground || (phase == .idle && !Task.isCancelled) else { return }
+
         phase = .idle
         lastFailure = message
         status("Failed: \(message)")
-        if settings.showHUD { HUDController.shared.showMessage("Not transcribed, recording kept", isError: true) }
+        HUDController.shared.finish(error: settings.showHUD ? "Not transcribed, recording kept" : nil)
         if settings.playSounds { SoundService.shared.play(.error, style: settings.soundStyle) }
-        refreshHistory()
-
         if autoRetry, let failedID {
             scheduleRetry(entryID: failedID, clip: clip)
         }
@@ -734,7 +741,8 @@ final class DictationController: ObservableObject {
                                existingEntryID: entryID,
                                allowPaste: false,
                                allowClipboard: false,
-                               autoRetry: false)
+                               autoRetry: false,
+                               inBackground: true)
         }
     }
 
@@ -747,7 +755,6 @@ final class DictationController: ObservableObject {
         }
         TextInserter.copy(last.text)
         status("Last dictation copied")
-        if settings.showHUD { HUDController.shared.showMessage("Copied last dictation", isError: false) }
     }
 
     func copy(_ entry: HistoryEntry) {
@@ -853,9 +860,7 @@ final class DictationController: ObservableObject {
         phase = .idle
         lastFailure = "Microphone is blocked"
         status("Microphone is blocked — allow Tacet in System Settings")
-        if settings.showHUD {
-            HUDController.shared.showMessage("Microphone blocked", isError: true)
-        }
+        HUDController.shared.finish(error: settings.showHUD ? "Microphone blocked" : nil)
         if settings.playSounds {
             SoundService.shared.play(.error, style: settings.soundStyle)
         }

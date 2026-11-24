@@ -71,7 +71,8 @@ final class CleanupPipeline {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await ProviderHealth.data(for: request, provider: spec.id,
+                model: configuration.model, capability: .chat, session: session)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw RecognitionError.failed("Cleanup request failed")
         }

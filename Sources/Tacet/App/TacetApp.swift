@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         _ = DictationController.shared
 #if !DEBUG
+        ProviderHealth.shared.start()
         _ = Updater.shared
 #endif
 

@@ -46,7 +46,7 @@ final class SelectionEditor {
 
         let preparedRequest = request
         guard let answer = try? await withTimeout(max(6, configuration.timeout + 4), operation: {
-            try await Self.send(preparedRequest, session: self.session)
+            try await Self.send(preparedRequest, configuration: configuration, session: self.session)
         }) else { return nil }
 
         return Self.validatedAnswer(answer, selection: selected, instruction: spoken)
@@ -113,8 +113,12 @@ final class SelectionEditor {
         return SelectionEditOutcome(text: text)
     }
 
-    private static func send(_ request: URLRequest, session: URLSession) async throws -> String {
-        let (data, response) = try await session.data(for: request)
+    private static func send(_ request: URLRequest, configuration: CleanupConfiguration,
+                             session: URLSession) async throws -> String {
+        let (data, response) = try await ProviderHealth.data(
+            for: request, provider: configuration.provider, model: configuration.model,
+            capability: .chat, session: session
+        )
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw RecognitionError.failed("Selection edit failed")
         }

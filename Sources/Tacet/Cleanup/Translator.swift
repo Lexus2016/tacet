@@ -51,7 +51,7 @@ final class Translator {
 
         let preparedRequest = request
         guard let answer = try? await withTimeout(max(4, configuration.timeout + 2), operation: {
-            try await Self.send(preparedRequest, session: self.session)
+            try await Self.send(preparedRequest, configuration: configuration, session: self.session)
         }) else { return original }
 
         let normalized = answer.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -69,8 +69,12 @@ final class Translator {
         return TranslationOutcome(text: normalized, translated: true)
     }
 
-    private static func send(_ request: URLRequest, session: URLSession) async throws -> String {
-        let (data, response) = try await session.data(for: request)
+    private static func send(_ request: URLRequest, configuration: CleanupConfiguration,
+                             session: URLSession) async throws -> String {
+        let (data, response) = try await ProviderHealth.data(
+            for: request, provider: configuration.provider, model: configuration.model,
+            capability: .chat, session: session
+        )
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw RecognitionError.failed("Translation request failed")
         }

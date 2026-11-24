@@ -209,6 +209,52 @@ final class AppPresentationTests: XCTestCase {
         }
     }
 
+    func testPreviewDoesNotDismissAnActiveRecording() async throws {
+        let hud = HUDController.shared
+        defer { hud.hide() }
+        hud.showRecording(theme: .glass)
+        let window = try XCTUnwrap(hud.previewWindow)
+        XCTAssertTrue(window.isVisible)
+        XCTAssertEqual(window.alphaValue, 1)
+
+        hud.preview()
+        try await Task.sleep(for: .milliseconds(3_300))
+        XCTAssertTrue(hud.previewWindow?.isVisible == true)
+    }
+
+    func testWaveformShowsQuietSpeechAndResetsWhenStopped() async throws {
+        XCTAssertEqual(AudioCaptureService.meterLevel(forPeak: 0), 0)
+        XCTAssertEqual(AudioCaptureService.meterLevel(forPeak: .nan), 0)
+        XCTAssertEqual(AudioCaptureService.meterLevel(forPeak: 1), 1)
+
+        let waveform = WaveformModel(barCount: 5)
+        defer { waveform.stop() }
+        waveform.start()
+        waveform.setLevel(AudioCaptureService.meterLevel(forPeak: 0.01))
+        XCTAssertGreaterThan(waveform.heights.max() ?? 0, 2.0 / 22.0)
+
+        waveform.setLevel(0)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertLessThan(waveform.heights.max() ?? 1, 2.0 / 22.0)
+        waveform.stop()
+        XCTAssertTrue(waveform.heights.allSatisfy { $0 == 0 })
+    }
+
+    func testProcessingIndicatorClosesImmediatelyOnSuccessAndStaysVisibleOnError() {
+        let hud = HUDController.shared
+        defer { hud.hide() }
+
+        hud.showProcessing(theme: .glass)
+        XCTAssertTrue(hud.previewWindow?.isVisible == true)
+        hud.finish(error: nil)
+        XCTAssertFalse(hud.previewWindow?.isVisible == true)
+
+        hud.showProcessing(theme: .glass)
+        hud.finish(error: "Not transcribed, recording kept")
+        XCTAssertTrue(hud.previewWindow?.isVisible == true)
+        XCTAssertEqual(hud.previewWindow?.alphaValue, 1)
+    }
+
     private func iconPixels(_ image: NSImage) throws -> [UInt8] {
         let side = 48
         let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,

@@ -4,8 +4,12 @@ import SwiftUI
 /// option to remove it from the chains. Engines and Cleanup only ever list what
 /// is configured here.
 struct ProvidersSettingsView: View {
+    static let configurationAnchor = "provider-configuration"
+    let showConfiguration: () -> Void
+
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var custom = CustomProviderStore.shared
+    @ObservedObject private var health = ProviderHealth.shared
 
     @State private var showingAdd = false
     @State private var newName = ""
@@ -17,6 +21,8 @@ struct ProvidersSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            overview
+
             SoftCard(title: "Provider connections", systemImage: "server.rack") {
                 SoftRow("Provider") {
                     Picker("Provider", selection: $selectedProvider) {
@@ -45,12 +51,15 @@ struct ProvidersSettingsView: View {
             }
 
             if let spec = ProviderCatalog.spec(selectedProvider) {
-                ProviderConfigCard(spec: spec)
-                    .id(spec.id)
+                VStack {
+                    ProviderConfigCard(spec: spec).id(spec.id)
+                }
+                .id(Self.configurationAnchor)
             }
 
             ParakeetCard()
         }
+        .onAppear { health.refresh(configurationOnly: true) }
         .onChange(of: custom.providers) { _, _ in
             if ProviderCatalog.spec(selectedProvider) == nil { selectedProvider = EngineID.groq }
         }
@@ -81,6 +90,67 @@ struct ProvidersSettingsView: View {
             }
             .padding(22)
             .frame(width: 410)
+        }
+    }
+
+    private var providerIDs: [String] {
+        var seen = Set<String>()
+        return health.targets.map(\.id.provider).filter { seen.insert($0).inserted }
+    }
+
+    private var overview: some View {
+        SoftCard(title: "Provider overview", systemImage: "network") {
+            if health.targets.isEmpty {
+                Text("No providers are connected or in use.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 10)
+            }
+            ForEach(providerIDs, id: \.self) { provider in
+                let targets = health.targets.filter { $0.id.provider == provider }
+                if let first = targets.first {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(first.name).font(.subheadline.weight(.semibold))
+                            Spacer()
+                            if first.id.capability != .local {
+                                Button("Configure") {
+                                    selectedProvider = provider
+                                    showConfiguration()
+                                }
+                                    .buttonStyle(SoftButtonStyle())
+                            }
+                        }
+                        ForEach(targets) { target in
+                            let condition = health.condition(for: target.id)
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 6)
+                                ProviderStatusLabel(condition: condition)
+                            }
+                            if let reason = condition.reason {
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    SoftDivider()
+                }
+            }
+            HStack {
+                Text("Connections are checked every minute.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Check now") { health.refresh() }
+                    .buttonStyle(SoftButtonStyle())
+            }
+            .padding(.vertical, 6)
         }
     }
 
@@ -316,6 +386,7 @@ private struct ParakeetCard: View {
             do {
                 try await ParakeetRecognizer.shared.downloadIfNeeded()
                 status = "Model ready"
+                ProviderHealth.shared.refresh()
             } catch {
                 self.error = error.localizedDescription
                 status = "Download failed"
@@ -325,9 +396,29 @@ private struct ParakeetCard: View {
     }
 }
 
+private struct ProviderStatusLabel: View {
+    let condition: ProviderCondition
+
+    private var presentation: (symbol: String, color: Color) {
+        switch condition {
+        case .checking: ("clock", .secondary)
+        case .reachable, .localReady: ("checkmark.circle", Theme.success)
+        case .unverified: ("questionmark.circle", .secondary)
+        case .unavailable: ("exclamationmark.circle", Theme.warning)
+        }
+    }
+
+    var body: some View {
+        Label(condition.title, systemImage: presentation.symbol)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(presentation.color)
+    }
+}
+
 /// Chain only: the ordered list of configured transcription providers.
 struct ChainSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var health = ProviderHealth.shared
 
     private var available: [ProviderSpec] {
         ProviderCatalog.transcriptionProviders.filter {
@@ -364,6 +455,9 @@ struct ChainSettingsView: View {
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(ProviderCatalog.spec(engine)?.name ?? EngineID.displayName(engine)).font(.system(size: 13))
+                            if settings.isASREnabled(for: engine) {
+                                ProviderStatusLabel(condition: health.condition(for: targetID(for: engine)))
+                            }
                             if let issue = issue(for: engine) {
                                 Text(issue)
                                     .font(.caption)
@@ -426,16 +520,21 @@ struct ChainSettingsView: View {
                 }
             }
         }
+        .onAppear { health.refresh(configurationOnly: true) }
+    }
+
+    private func targetID(for engine: String) -> ProviderTarget.ID {
+        .init(provider: engine, capability: engine == EngineID.parakeet ? .local : .transcription)
     }
 
     private func issue(for engine: String) -> String? {
-        if engine == EngineID.parakeet {
-            return ParakeetRecognizer.shared.isConfigured() ? nil : String(localized: "Model not downloaded")
-        }
-        guard let spec = ProviderCatalog.spec(engine), ProviderCatalog.isConfigured(spec) else {
+        guard engine == EngineID.parakeet || ProviderCatalog.spec(engine) != nil else {
             return String(localized: "Not configured — will be skipped")
         }
-        return settings.isASREnabled(for: engine) ? nil : String(localized: "Transcription turned off in Providers")
+        guard settings.isASREnabled(for: engine) else {
+            return String(localized: "Transcription turned off in Providers")
+        }
+        return health.condition(for: targetID(for: engine)).reason
     }
 
     private func move(_ index: Int, by offset: Int) {

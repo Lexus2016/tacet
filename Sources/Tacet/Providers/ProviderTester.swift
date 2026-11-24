@@ -33,7 +33,9 @@ enum ProviderTester {
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await ProviderHealth.data(
+                for: request, provider: spec.id, model: model, capability: .chat, session: session
+            )
             guard let http = response as? HTTPURLResponse else {
                 return .failure(ModelCatalog.Failure.http(0, "No response"))
             }
@@ -73,7 +75,9 @@ enum ProviderTester {
         )
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await ProviderHealth.data(
+                for: request, provider: spec.id, model: model, capability: .transcription, session: session
+            )
             guard let http = response as? HTTPURLResponse else {
                 return .failure(ModelCatalog.Failure.http(0, "No response"))
             }

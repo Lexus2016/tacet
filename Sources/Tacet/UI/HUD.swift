@@ -21,12 +21,11 @@ final class HUDModel: ObservableObject {
     @Published var title: String = ""
     @Published var subtitle: String?
     @Published var symbol: String = "mic.fill"
-    @Published var level: Float = 0
     @Published var showsLevel: Bool = false
     @Published var showsSpinner: Bool = false
-    @Published var isError: Bool = false
     @Published var tint: Color = Theme.accent
     @Published var theme: IndicatorTheme = .classic
+    let waveform = WaveformModel(barCount: 5)
 }
 
 // MARK: - Waveform
@@ -39,7 +38,7 @@ final class HUDModel: ObservableObject {
 final class WaveformModel: ObservableObject {
     @Published private(set) var heights: [CGFloat]
 
-    var level: Float = 0
+    private var level: Float = 0
     private let barCount: Int
     private var timer: Timer?
     private var lastTick: TimeInterval = 0
@@ -63,14 +62,23 @@ final class WaveformModel: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        lastTick = 0
+        level = 0
+        heights = Array(repeating: 0, count: barCount)
     }
 
-    private func tick() {
-        let now = Date().timeIntervalSinceReferenceDate
-        let elapsed = lastTick == 0 ? 1.0 / 30.0 : min(0.1, max(0.001, now - lastTick))
+    func setLevel(_ level: Float) {
+        let wasSilent = self.level == 0
+        self.level = level
+        if wasSilent, level > 0 { tick(minimumElapsed: 1.0 / 30.0) }
+    }
+
+    private func tick(minimumElapsed: TimeInterval = 0.001) {
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsed = lastTick == 0 ? 1.0 / 30.0 : min(0.1, max(minimumElapsed, now - lastTick))
         lastTick = now
 
-        let level = CGFloat(min(1, max(0, self.level) * 1.8))
+        let level = CGFloat(min(1, max(0, self.level)))
         var updated = heights
 
         for index in 0..<barCount {
@@ -89,45 +97,20 @@ final class WaveformModel: ObservableObject {
 }
 
 struct IndicatorWaveform: View {
-    let level: Float
-    var barCount: Int = 5
+    @ObservedObject var model: WaveformModel
     var height: CGFloat = 22
     var tint: Color = .white
     var barWidth: CGFloat = 3
 
-    @StateObject private var model: WaveformModel
-
-    init(level: Float,
-         barCount: Int = 5,
-         height: CGFloat = 22,
-         tint: Color = .white,
-         barWidth: CGFloat = 3) {
-        self.level = level
-        self.barCount = barCount
-        self.height = height
-        self.tint = tint
-        self.barWidth = barWidth
-        _model = StateObject(wrappedValue: WaveformModel(barCount: barCount))
-    }
-
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(0..<barCount, id: \.self) { index in
+            ForEach(model.heights.indices, id: \.self) { index in
                 Capsule()
                     .fill(tint)
-                    .frame(width: barWidth,
-                           height: max(2, (model.heights.indices.contains(index) ? model.heights[index] : 0) * height))
+                    .frame(width: barWidth, height: max(2, model.heights[index] * height))
             }
         }
         .frame(height: height)
-        .onAppear {
-            model.level = level
-            model.start()
-        }
-        .onChange(of: level) { _, newValue in
-            model.level = newValue
-        }
-        .onDisappear { model.stop() }
     }
 }
 
@@ -208,7 +191,7 @@ private struct IslandIndicator: View {
                     .tint(model.tint)
                     .padding(.leading, 2)
             } else if model.showsLevel {
-                IndicatorWaveform(level: model.level, tint: model.theme == .glass
+                IndicatorWaveform(model: model.waveform, tint: model.theme == .glass
                                   ? Color(red: 0.84, green: 0.89, blue: 0.94)
                                   : model.tint)
                     .padding(.leading, 2)
@@ -254,7 +237,6 @@ final class HUDController {
     private var hideTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var startedAt: Date?
-    private var presentation = 0
 
     private init() {}
 
@@ -263,14 +245,15 @@ final class HUDController {
         startedAt = nil
         model.subtitle = nil
         show(title: "Preparing microphone…", symbol: "mic.fill", tint: Theme.accent,
-             level: false, error: false, autoHide: nil, spinner: true)
+             level: false, autoHide: nil, spinner: true)
     }
 
     func showRecording(theme: IndicatorTheme? = nil) {
         startedAt = Date()
         model.subtitle = "0:00"
+        model.waveform.setLevel(0)
         show(title: "Recording", symbol: "mic.fill", tint: Theme.accent,
-             level: true, error: false, autoHide: nil, theme: theme)
+             level: true, autoHide: nil, theme: theme)
         startTicking()
     }
 
@@ -279,43 +262,49 @@ final class HUDController {
         startedAt = nil
         model.subtitle = nil
         show(title: "Transcribing…", symbol: "waveform", tint: Theme.accent,
-             level: false, error: false, autoHide: nil, spinner: true, theme: theme)
+             level: false, autoHide: nil, spinner: true, theme: theme)
     }
 
     var previewWindow: NSWindow? { panel }
 
-    func showMessage(_ text: String, isError: Bool) {
+    func finish(error: String?) {
+        guard let error else {
+            hide()
+            return
+        }
         stopTicking()
         startedAt = nil
         model.subtitle = nil
-        show(title: text,
-             symbol: isError ? "exclamationmark.triangle.fill" : "checkmark",
-             tint: isError ? Theme.warning : Theme.success,
+        show(title: error,
+             symbol: "exclamationmark.triangle.fill",
+             tint: Theme.warning,
              level: false,
-             error: isError,
-             autoHide: isError ? 2.8 : 1.5)
+             autoHide: 2.8)
     }
 
     /// Shows the current style for a couple of seconds, so the picker in
     /// Settings is not a blind choice.
     func preview() {
+        guard panel?.isVisible != true || hideTask != nil else { return }
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, error: false, autoHide: 3.0)
+        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, autoHide: 3.0)
+        updateLevel(0.4)
         startTicking()
     }
 
     func updateLevel(_ level: Float) {
         guard model.showsLevel else { return }
-        model.level = level
+        model.waveform.setLevel(level)
     }
 
     func hide() {
-        presentation += 1
         hideTask?.cancel()
         hideTask = nil
         stopTicking()
         startedAt = nil
+        model.showsLevel = false
+        model.waveform.stop()
         panel?.orderOut(nil)
     }
 
@@ -323,12 +312,11 @@ final class HUDController {
                       symbol: String,
                       tint: Color,
                       level: Bool,
-                      error: Bool,
                       autoHide: TimeInterval?,
                       spinner: Bool = false,
                       theme: IndicatorTheme? = nil) {
-        presentation += 1
         hideTask?.cancel()
+        hideTask = nil
 
         let desiredTheme = theme ?? IndicatorTheme(rawValue: AppSettings.shared.indicatorTheme) ?? .classic
         if model.theme != desiredTheme {
@@ -340,48 +328,20 @@ final class HUDController {
         model.tint = tint
         model.showsLevel = level
         model.showsSpinner = spinner
-        model.isError = error
-        if !level { model.level = 0 }
+        if level { model.waveform.start() }
+        else { model.waveform.stop() }
 
         let panel = ensurePanel()
         resize(panel)
         position(panel)
 
-        let wasHidden = !panel.isVisible
-        if wasHidden {
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().alphaValue = 1
-            }
-        } else {
-            panel.animator().alphaValue = 1
-            panel.orderFrontRegardless()
-        }
+        panel.orderFrontRegardless()
 
         if let autoHide {
             hideTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(autoHide * 1_000_000_000))
                 guard !Task.isCancelled else { return }
-                await MainActor.run { self?.fadeOut() }
-            }
-        }
-    }
-
-    private func fadeOut() {
-        guard let panel, panel.isVisible else { return }
-        let current = presentation
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard self?.presentation == current else { return }
-                panel.orderOut(nil)
-                panel.alphaValue = 1
+                self?.hide()
             }
         }
     }
@@ -393,8 +353,13 @@ final class HUDController {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled, let self, let startedAt = self.startedAt else { return }
                 let seconds = Int(Date().timeIntervalSince(startedAt))
-                self.model.subtitle = String(format: "%d:%02d", seconds / 60, seconds % 60)
-                if let panel = self.panel { self.resize(panel) }
+                let subtitle = String(format: "%d:%02d", seconds / 60, seconds % 60)
+                guard self.model.subtitle != subtitle else { continue }
+                self.model.subtitle = subtitle
+                if let panel = self.panel {
+                    self.resize(panel)
+                    self.position(panel)
+                }
             }
         }
     }
@@ -415,6 +380,7 @@ final class HUDController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        panel.animationBehavior = .none
         panel.level = .statusBar
         panel.ignoresMouseEvents = true
         panel.isMovable = false

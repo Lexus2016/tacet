@@ -39,23 +39,28 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             sidebar
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(LocalizedStringKey(tab.title))
-                        .font(.system(size: 25, weight: .semibold))
-                        .accessibilityAddTraits(.isHeader)
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text(LocalizedStringKey(tab.title))
+                            .font(.system(size: 25, weight: .semibold))
+                            .accessibilityAddTraits(.isHeader)
 
-                    switch tab {
-                    case .general: GeneralSettingsView()
-                    case .providers: ProvidersSettingsView()
-                    case .engines: ChainSettingsView()
-                    case .cleanup: CleanupSettingsView()
-                    case .about: AboutView()
+                        switch tab {
+                        case .general: GeneralSettingsView()
+                        case .providers:
+                            ProvidersSettingsView {
+                                scroll.scrollTo(ProvidersSettingsView.configurationAnchor, anchor: .top)
+                            }
+                        case .engines: ChainSettingsView()
+                        case .cleanup: CleanupSettingsView()
+                        case .about: AboutView()
+                        }
                     }
+                    .frame(maxWidth: 710, alignment: .leading)
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .frame(maxWidth: 710, alignment: .leading)
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .center)
             }
             .id(tab)
             .accessibilityIdentifier("settings-content")
@@ -633,6 +638,7 @@ struct APIKeyRow: View {
         value = ""
         keyError = nil
         load()
+        ProviderHealth.shared.credentialChanged(account)
     }
 
     private func clear() {
@@ -643,5 +649,6 @@ struct APIKeyRow: View {
         value = ""
         keyError = nil
         load()
+        ProviderHealth.shared.credentialChanged(account)
     }
 }

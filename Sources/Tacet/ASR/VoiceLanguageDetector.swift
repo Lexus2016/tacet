@@ -41,7 +41,7 @@ final class VoiceLanguageDetector {
               let audio = try? Data(contentsOf: clip.url)
         else { return nil }
 
-        var request = URLRequest(url: URL(string: "https://openrouter.ai/api/alpha/decisions")!)
+        var request = URLRequest(url: ProviderHealth.voiceLanguageURL)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -74,7 +74,8 @@ final class VoiceLanguageDetector {
         request.httpBody = body
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await ProviderHealth.data(for: request, provider: "openrouter",
+                model: configuration.model, capability: .voiceLanguage, session: session)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 return nil
             }
