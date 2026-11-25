@@ -17,6 +17,24 @@ enum CLIHarness {
     static func runIfRequested() -> Bool {
         let arguments = CommandLine.arguments
 
+        if ProviderCatalog.usesPilotGateway, arguments.contains("--provision-pilot-access") {
+            guard let spec = ProviderCatalog.spec(EngineID.hostedGateway),
+                  let key = readLine(), key.utf8.count == 64, key.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                  Keychain.set(key, account: spec.keychainAccount, deviceOnly: true) else { exit(2) }
+            Task {
+                do {
+                    let plan = try await AccountPlansClient.request()
+                    guard plan.deviceAllowed else { exit(3) }
+                    print("Verified saved Tacet pilot access / Перевірено збережений доступ до пілоту Tacet")
+                    exit(0)
+                } catch {
+                    print("Could not verify Tacet pilot access / Не вдалося перевірити доступ до пілоту Tacet")
+                    exit(4)
+                }
+            }
+            return true
+        }
+
         #if DEBUG
         if arguments.contains("--check-ollama-auth") {
             Task {
@@ -50,12 +68,11 @@ enum CLIHarness {
                 let expectedApp = value(after: "--app", in: arguments)
                 let expectedSelection = value(after: "--selection", in: arguments)
                 await checkEditorInput(appID: expectedApp, selection: expectedSelection,
-                                       probeOnly: arguments.contains("--probe-copy"))
+                                       probeOnly: arguments.contains("--probe-copy"),
+                                       insertionAtCaret: arguments.contains("--at-caret"))
             }
             return true
         }
-        #endif
-
         if arguments.contains("--preview-hud") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 HUDController.shared.showRecording()
@@ -159,7 +176,7 @@ enum CLIHarness {
         }
 
         if let index = arguments.firstIndex(of: "--record"), index + 1 < arguments.count,
-           let seconds = Double(arguments[index + 1]) {
+           let seconds = Double(arguments[index + 1]), (0.1...600).contains(seconds) {
             Task {
                 let capture = AudioCaptureService()
                 do {
@@ -198,14 +215,9 @@ enum CLIHarness {
             let instruction = value(after: "--instruction", in: arguments) ?? ""
             Task {
                 let settings = AppSettings.shared
-                let configuration = CleanupConfiguration(
-                    provider: settings.cleanupProvider,
-                    baseURL: settings.openAIChatBaseURL,
-                    model: settings.chatModel(for: settings.cleanupProvider),
-                    timeout: max(6, settings.cleanupTimeout + 4)
-                )
+                let configuration = settings.cleanupConfiguration
                 let started = Date()
-                let outcome = await SelectionEditor().edit(selection: selection,
+                let outcome = try? await SelectionEditor().edit(selection: selection,
                                                            instruction: instruction,
                                                            configuration: configuration)
                 let elapsed = Date().timeIntervalSince(started)
@@ -261,12 +273,13 @@ enum CLIHarness {
             }
             return true
         }
+        #endif
 
         return false
     }
 
     #if DEBUG
-    private static func checkEditorInput(appID: String?, selection: String?, probeOnly: Bool) async {
+    private static func checkEditorInput(appID: String?, selection: String?, probeOnly: Bool, insertionAtCaret: Bool) async {
         guard TextInserter.isAccessibilityTrusted() else {
             print("Accessibility is unavailable for this build.")
             exit(2)
@@ -289,7 +302,15 @@ enum CLIHarness {
             }
             exit(before == pasteboardContent() ? 0 : 5)
         }
-        guard case .text(let text, _) = captured, text == selection else {
+        let matchesFixture: Bool
+        if insertionAtCaret {
+            matchesFixture = captured == .none
+        } else if case .text(let text, _) = captured {
+            matchesFixture = text == selection
+        } else {
+            matchesFixture = false
+        }
+        guard matchesFixture else {
             print("The selected fixture could not be read.")
             exit(4)
         }
@@ -459,12 +480,7 @@ enum CLIHarness {
             cloudTimeout: settings.cloudTimeout
         )
         let engines = settings.engineConfiguration
-        let configuration = CleanupConfiguration(
-            provider: settings.cleanupProvider,
-            baseURL: settings.openAIChatBaseURL,
-            model: settings.chatModel(for: settings.cleanupProvider),
-            timeout: settings.cleanupTimeout
-        )
+        let configuration = settings.cleanupConfiguration
 
         print(String(format: "audio: %.1f s", clip.duration))
 
@@ -484,8 +500,7 @@ enum CLIHarness {
         if settings.isCleanupConfigured {
             let t1 = Date()
             let cleaned = await CleanupPipeline().clean(text, sourceLanguage: output.transcript.language,
-                                                        configuration: configuration,
-                                                        fallback: settings.cleanupFallback)
+                                                        configuration: configuration)
             print(String(format: "cleanup %@ %.2f s, changed %@",
                          cleaned.engine, Date().timeIntervalSince(t1), cleaned.changed ? "yes" : "no"))
             text = cleaned.text

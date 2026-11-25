@@ -3,6 +3,34 @@ import XCTest
 @testable import Tacet
 
 final class ProviderRequestTests: XCTestCase {
+
+    @MainActor
+    func testManagedMacKeepsLegacyPreferencesWithoutSelectingTheirRoutes() throws {
+        let domain = "tacet.gateway.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let oldOrder = [EngineID.parakeet, EngineID.hostedGateway, EngineID.groq]
+        defaults.set(oldOrder, forKey: "engineOrder")
+        defaults.set([EngineID.hostedGateway: true], forKey: "asrEnabled")
+        defaults.set(EngineID.openAI, forKey: "cleanupProvider")
+        defaults.set("https://example.invalid/v1", forKey: "cleanupBaseURL")
+        defaults.set(true, forKey: "cleanupFallbackEnabled")
+
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertFalse(settings.hostedGatewayEnabled)
+        XCTAssertNotNil(settings.gatewayActivationIssue)
+        XCTAssertFalse(settings.isCleanupConfigured)
+        XCTAssertEqual(settings.activeEngineOrder, [EngineID.hostedGateway])
+        XCTAssertEqual(settings.cleanupConfiguration.target?.endpoint.absoluteString,
+                       "https://tacetapi.murable.ai/v1/chat/completions")
+        XCTAssertEqual(defaults.stringArray(forKey: "engineOrder"), oldOrder)
+        XCTAssertEqual(defaults.string(forKey: "cleanupProvider"), EngineID.openAI)
+
+        defaults.set([EngineID.hostedGateway], forKey: "engineOrder")
+        XCTAssertTrue(AppSettings(defaults: defaults).hostedGatewayEnabled)
+        settings.hostedGatewayEnabled = false
+        XCTAssertFalse(AppSettings(defaults: defaults).hostedGatewayEnabled)
+    }
     private let provider = ProviderSpec(id: "fixture-no-key", name: "Fixture",
                                         baseURL: "https://default.invalid/v1", requiresKey: false,
                                         supportsTranscription: true, supportsChat: true, environmentKey: nil)
@@ -51,6 +79,41 @@ final class ProviderRequestTests: XCTestCase {
         let multipart = try XCTUnwrap(String(data: request.httpBody ?? Data(), encoding: .utf8))
         XCTAssertTrue(multipart.contains("response_format\"\r\n\r\njson"))
         XCTAssertTrue(multipart.contains("language\"\r\n\r\nuk"))
+    }
+
+    func testGatewayUsesLocalEndpointsAndKeepsLanguageMetadata() throws {
+        let spec = try XCTUnwrap(ProviderCatalog.spec(EngineID.gateway))
+        let endpoint = try XCTUnwrap(spec.endpoint("audio/transcriptions"))
+        let model = ProviderCatalog.defaultASRModel(for: spec.id)
+        let request = CloudRecognizer.makeRequest(spec: spec, endpoint: endpoint, key: "client-fixture",
+                                                   model: model, timeout: ProviderCatalog.gatewayRequestTimeout,
+                                                   audio: Data([0, 1, 2]), language: "uk")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:8787/v1/audio/transcriptions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer client-fixture")
+        XCTAssertEqual(spec.environmentKey, "TACET_GATEWAY_CLIENT_TOKEN")
+        let multipart = try XCTUnwrap(String(data: request.httpBody ?? Data(), encoding: .utf8))
+        XCTAssertTrue(multipart.contains("model\"\r\n\r\ntacet-transcription"))
+        XCTAssertTrue(multipart.contains("response_format\"\r\n\r\nverbose_json"))
+        XCTAssertTrue(multipart.contains("language\"\r\n\r\nuk"))
+
+        let cleanup = CleanupConfiguration(provider: spec.id, baseURL: "https://unused.invalid/v1",
+                                           model: "ignored", timeout: 1)
+        XCTAssertEqual(cleanup.target?.endpoint.absoluteString, "http://127.0.0.1:8787/v1/chat/completions")
+        XCTAssertEqual(cleanup.target?.model, "tacet-text")
+        XCTAssertGreaterThan(cleanup.requestTimeout(), 20)
+    }
+
+    func testHostedGatewayUsesAnIndependentKeyAndHTTPS() throws {
+        let hosted = try XCTUnwrap(ProviderCatalog.spec(EngineID.hostedGateway))
+        let local = try XCTUnwrap(ProviderCatalog.spec(EngineID.gateway))
+        XCTAssertNotEqual(hosted.keychainAccount, local.keychainAccount)
+        XCTAssertNotEqual(hosted.environmentKey, local.environmentKey)
+        XCTAssertEqual(hosted.endpoint("models")?.absoluteString, "https://tacetapi.murable.ai/v1/models")
+        let cleanup = CleanupConfiguration(provider: hosted.id, baseURL: "http://127.0.0.1:8787/v1",
+                                           model: "", timeout: 1)
+        XCTAssertEqual(cleanup.target?.endpoint.absoluteString, "https://tacetapi.murable.ai/v1/chat/completions")
+        XCTAssertEqual(cleanup.target?.model, "tacet-text")
+        XCTAssertGreaterThan(cleanup.requestTimeout(), 20)
     }
 
     func testHealthUsesReadOnlyCatalogAndRecoversAfterServerFailure() async {

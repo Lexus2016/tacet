@@ -20,13 +20,13 @@ enum ProviderTester {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 20
+        request.timeoutInterval = EngineID.isGateway(spec.id) ? ProviderCatalog.gatewayRequestTimeout : 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
             "model": model,
-            "max_tokens": 8,
+            "max_tokens": EngineID.isGateway(spec.id) ? 256 : 8,
             "temperature": 0,
             "messages": [["role": "user", "content": "Reply with the single word OK."]],
         ]

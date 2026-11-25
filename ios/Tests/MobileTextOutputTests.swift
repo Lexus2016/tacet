@@ -8,7 +8,6 @@ final class MobileTextOutputTests: XCTestCase {
     )
     private let russian = "Пожалуйста, пришлите отчёт о встрече завтра утром."
     private let primary = CleanupConfiguration(provider: "ollama", baseURL: "", model: "primary", timeout: 1)
-    private let fallback = CleanupConfiguration(provider: "ollama", baseURL: "", model: "fallback", timeout: 1)
 
     func testLayoutSurvivesBridgeAndOldCommandStillDecodes() throws {
         let command = DictationBridge.Command(session: UUID(), request: UUID(), action: .start,
@@ -32,60 +31,59 @@ final class MobileTextOutputTests: XCTestCase {
     func testWordInTargetLanguageAndDirectDictationNeedNoTranslation() async {
         let session = fixture([])
         defer { session.invalidateAndCancel() }
-        let output = MobileTextOutput(session: session)
+        let output = MobileTextOutput(session: session, configuration: primary)
         let short = MobileRecognition.Result(text: "Привет", language: "ru")
-        let same = await output.prepare(short, target: "ru", correct: false, primary: primary, fallback: fallback)
-        let direct = await output.prepare(spoken, target: nil, correct: false, primary: primary, fallback: fallback)
+        let same = await output.prepare(short, target: "ru", correct: false)
+        let direct = await output.prepare(spoken, target: nil, correct: false)
         XCTAssertEqual(same, .init(text: "Привет"))
         XCTAssertEqual(direct, .init(text: spoken.text))
         XCTAssertEqual(TranslationFixture.requests, 0)
     }
 
-    func testWrongLanguageUsesBackupAndProducesTargetLanguage() async {
-        let session = fixture([(200, spoken.text), (200, russian)])
+    func testWrongLanguageUsesGatewayAndProducesTargetLanguage() async {
+        let session = fixture([(200, russian)])
         defer { session.invalidateAndCancel() }
-        let result = await MobileTextOutput(session: session).prepare(
-            spoken, target: "ru", correct: true, primary: primary, fallback: fallback
+        let result = await MobileTextOutput(session: session, configuration: primary).prepare(
+            spoken, target: "ru", correct: true
         )
         XCTAssertEqual(result, .init(text: russian))
-        XCTAssertEqual(TranslationFixture.requests, 2)
+        XCTAssertEqual(TranslationFixture.requests, 1)
     }
 
-    func testTwoFailuresPreserveOriginalAndReportWarning() async {
-        let session = fixture([(503, ""), (200, "")])
+    func testGatewayFailurePreservesOriginalAndReportsWarning() async {
+        let session = fixture([(503, "")])
         defer { session.invalidateAndCancel() }
-        let result = await MobileTextOutput(session: session).prepare(
-            spoken, target: "ru", correct: false, primary: primary, fallback: fallback
+        let result = await MobileTextOutput(session: session, configuration: primary).prepare(
+            spoken, target: "ru", correct: false
         )
         XCTAssertEqual(result, .init(text: spoken.text, translationFailed: true))
-        XCTAssertEqual(TranslationFixture.requests, 2)
+        XCTAssertEqual(TranslationFixture.requests, 1)
     }
 
-    func testCorrectionSendsTheSourceLanguageAndPreservationRulesToBothModels() async throws {
+    func testCorrectionSendsTheSourceLanguageAndPreservationRulesToGateway() async throws {
         let raw = "Доброго дня у нас зустріч завтра і слово кринтеб."
         let cleaned = "Доброго дня, у нас зустріч завтра і слово кринтеб."
-        let session = fixture([(503, ""), (200, cleaned)])
+        let session = fixture([(200, cleaned)])
         defer { session.invalidateAndCancel() }
         let transcript = MobileRecognition.Result(text: raw, language: "uk-UA")
-        let result = await MobileTextOutput(session: session).prepare(
-            transcript, target: nil, correct: true, primary: primary, fallback: fallback
+        let result = await MobileTextOutput(session: session, configuration: primary).prepare(
+            transcript, target: nil, correct: true
         )
         XCTAssertEqual(result.text, cleaned)
         let messages = TranslationFixture.messages
-        XCTAssertEqual(messages.count, 2)
+        XCTAssertEqual(messages.count, 1)
         let prompt = try XCTUnwrap(messages.first?.first?["content"])
         XCTAssertTrue(prompt.contains("Likely source language: Ukrainian"))
         XCTAssertTrue(prompt.contains("closest existing word"))
         XCTAssertTrue(prompt.contains("return that word exactly as it appears in the original transcript"))
         XCTAssertEqual(messages.first?.last?["content"], raw)
-        XCTAssertEqual(messages.last, messages.first)
     }
 
     func testTranslationWithCorrectionReceivesTheSourceAndTargetSeparately() async throws {
         let session = fixture([(200, russian)])
         defer { session.invalidateAndCancel() }
-        _ = await MobileTextOutput(session: session).prepare(
-            spoken, target: "ru", correct: true, primary: primary, fallback: nil
+        _ = await MobileTextOutput(session: session, configuration: primary).prepare(
+            spoken, target: "ru", correct: true
         )
         let prompt = try XCTUnwrap(TranslationFixture.messages.first?.first?["content"])
         XCTAssertTrue(prompt.contains("into Russian"))
@@ -94,29 +92,29 @@ final class MobileTextOutputTests: XCTestCase {
         XCTAssertEqual(TranslationFixture.messages.first?.last?["content"], spoken.text)
     }
 
-    func testVoiceCommandReplacesRussianSelectionWithUkrainianAfterPrimaryEcho() async throws {
+    func testVoiceCommandReplacesRussianSelectionWithUkrainian() async throws {
         let command = "Перекласти, переклади на українську мову"
         let ukrainian = "Будь ласка, надішліть звіт про зустріч завтра вранці."
-        let session = fixture([(200, command), (200, ukrainian)])
+        let session = fixture([(200, ukrainian)])
         defer { session.invalidateAndCancel() }
-        let result = try await MobileTextOutput(session: session).editSelection(
-            russian, instruction: command, primary: primary, fallback: fallback
+        let result = try await MobileTextOutput(session: session, configuration: primary).editSelection(
+            russian, instruction: command
         )
         XCTAssertEqual(result, ukrainian)
-        XCTAssertEqual(TranslationFixture.requests, 2)
+        XCTAssertEqual(TranslationFixture.requests, 1)
     }
 
     func testFailedSelectionEditThrowsInsteadOfReturningSpokenInstruction() async {
         let command = "Перекласти на українську мову."
-        let session = fixture([(503, ""), (200, "«Перекласти на українську мову»")])
+        let session = fixture([(200, "«Перекласти на українську мову»")])
         defer { session.invalidateAndCancel() }
         do {
-            _ = try await MobileTextOutput(session: session).editSelection(
-                russian, instruction: command, primary: primary, fallback: fallback
+            _ = try await MobileTextOutput(session: session, configuration: primary).editSelection(
+                russian, instruction: command
             )
             XCTFail("A failed command must never replace the selection.")
         } catch MobileDictationError.selectionEditFailed {
-            XCTAssertEqual(TranslationFixture.requests, 2)
+            XCTAssertEqual(TranslationFixture.requests, 1)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

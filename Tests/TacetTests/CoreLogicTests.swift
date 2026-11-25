@@ -1,6 +1,37 @@
 import XCTest
 import AppKit
+import Carbon.HIToolbox
 @testable import Tacet
+
+final class HotkeyCaptureTests: XCTestCase {
+    func testLonePhysicalModifierIsSavedOnRelease() {
+        var capture = HotkeyCapture()
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_RightCommand, modifiers: cmdKey))
+        XCTAssertEqual(capture.handle(.flagsChanged, keyCode: kVK_RightCommand, modifiers: 0),
+                       .init(keyCode: kVK_RightCommand, modifiers: cmdKey, label: ""))
+    }
+
+    func testModifiersDoNotPreemptTheFullCombination() {
+        var capture = HotkeyCapture()
+        let modifiers = controlKey | optionKey
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_Control, modifiers: controlKey))
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_Option, modifiers: modifiers))
+        XCTAssertNil(capture.handle(.keyDown, keyCode: kVK_Space, modifiers: modifiers, label: "Space"))
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_Option, modifiers: controlKey))
+        XCTAssertEqual(capture.handle(.keyUp, keyCode: kVK_Space, modifiers: controlKey),
+                       .init(keyCode: kVK_Space, modifiers: modifiers, label: "Space"))
+    }
+
+    func testTwoPhysicalModifiersAndUnmodifiedTypingDoNotCreateAShortcut() {
+        var capture = HotkeyCapture()
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_Command, modifiers: cmdKey))
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_RightCommand, modifiers: cmdKey))
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_Command, modifiers: cmdKey))
+        XCTAssertNil(capture.handle(.flagsChanged, keyCode: kVK_RightCommand, modifiers: 0))
+        XCTAssertNil(capture.handle(.keyDown, keyCode: kVK_ANSI_K, modifiers: 0, label: "K"))
+        XCTAssertNil(capture.handle(.keyUp, keyCode: kVK_ANSI_K, modifiers: 0))
+    }
+}
 
 final class UpdateRestartGateTests: XCTestCase {
     func testWaitsForForegroundAndBackgroundDictation() {
@@ -178,12 +209,23 @@ final class PlausibilityTests: XCTestCase {
 }
 
 final class SelectionEditorTests: XCTestCase {
+    func testExpandedBudgetAndMarkdownBoundaries() {
+        let document = String(repeating: "Параграф з текстом.\n", count: 900)
+        XCTAssertTrue(SelectionEditLimits.requiresExpandedBudget(document))
+        XCTAssertLessThan(document.utf8.count, SelectionEditLimits.maximumInputBytes)
+        XCTAssertEqual(SelectionEditLimits.outputTokens(for: SelectionEditLimits.maximumInputBytes), 32_768)
+        XCTAssertEqual(SelectionEditLimits.standardOutputTokens(for: 200), 612)
+        XCTAssertEqual(SelectionEditLimits.standardOutputTokens(for: 8_000), 4_096)
+        let fenced = "```text\n\(document)```"
+        XCTAssertEqual(SelectionEditor.validatedAnswer(fenced, selection: document, instruction: "Translate faithfully",
+                                                       expanded: true)?.text, fenced)
+    }
     func testDeleteKeywordMeansRemoval() {
-        XCTAssertEqual(SelectionEditor.normalize("DELETE", selection: "some long text")?.text, "")
+        XCTAssertEqual(SelectionEditor.normalize("DELETE")?.text, "")
     }
 
     func testEmptyAnswerIsAFailureNotADeletion() {
-        XCTAssertNil(SelectionEditor.normalize("   ", selection: "text"))
+        XCTAssertNil(SelectionEditor.normalize("   "))
     }
 
     func testModelCanDeleteOnlyWithACompleteDeletionInstruction() {
@@ -195,21 +237,71 @@ final class SelectionEditorTests: XCTestCase {
     }
 
     func testWrappingQuotesAreStripped() {
-        XCTAssertEqual(SelectionEditor.normalize("\"Hello\"", selection: "Привет")?.text, "Hello")
+        XCTAssertEqual(SelectionEditor.normalize("\"Hello\"")?.text, "Hello")
     }
 
-    func testImplausibleShorteningIsRejected() {
-        let selection = String(repeating: "word ", count: 60)
-        XCTAssertNil(SelectionEditor.normalize("ok", selection: selection))
+    func testSpokenReplacementCanReduceASelectionToOneWord() {
+        let selection = "Прошу підтвердити, що ви отримали цей лист і прочитали весь текст."
+        let instruction = "Заміни на слово «Окей»."
+        XCTAssertEqual(SelectionEditor.validatedAnswer("Окей", selection: selection, instruction: instruction)?.text, "Окей")
+        XCTAssertNil(SelectionEditor.validatedAnswer(instruction, selection: selection, instruction: instruction))
+        XCTAssertNil(SelectionEditor.validatedAnswer("C", selection: selection, instruction: "Replace with “C++”."))
+        XCTAssertEqual(SelectionEditor.validatedAnswer("DELETE", selection: selection,
+                                                       instruction: "Replace with “DELETE”.")?.text, "DELETE")
+    }
+
+    func testImplausibleShorteningOfExpandedDocumentIsRejected() {
+        let selection = String(repeating: "word ", count: 2_000)
+        XCTAssertNil(SelectionEditor.validatedAnswer("ok", selection: selection, instruction: "Translate everything", expanded: true))
+    }
+
+    func testOrdinarySelectionEditBudgetLeavesRoomForReasoning() {
+        XCTAssertEqual(SelectionEditLimits.standardEditOutputTokens(for: 200), 2_148)
+        XCTAssertEqual(SelectionEditLimits.standardEditOutputTokens(for: 8_000), 4_096)
+    }
+
+    func testGatewayDistinguishesIncompleteOutputFromAccountQuota() {
+        let gatewayLimit = Data(#"{"error":{"code":"output_limit"}}"#.utf8)
+        let accountQuota = Data(#"{"error":{"code":"plan_quota"}}"#.utf8)
+        let truncated = Data(#"{"choices":[{"finish_reason":"length","message":{"content":"Partial"}}]}"#.utf8)
+
+        for (data, status, expected) in [(gatewayLimit, 422, SelectionEditError.outputLimit),
+                                         (accountQuota, 429, .quota), (truncated, 200, .outputLimit)] {
+            XCTAssertThrowsError(try SelectionEditor.parseReply(data, status: status, usesGateway: true, expanded: false)) {
+                XCTAssertEqual($0 as? SelectionEditError, expected)
+            }
+        }
     }
 }
 
 final class TranslatorTests: XCTestCase {
+    func testLengthGuardAllowsChineseAcrossScripts() {
+        let english = "Please confirm the meeting tomorrow."
+        let chinese = "请确认明天的会议。"
+        XCTAssertTrue(Translator.hasPlausibleLength(input: english, output: chinese, sourceLanguage: "en", target: "zh"))
+        XCTAssertTrue(Translator.hasPlausibleLength(input: chinese, output: english, sourceLanguage: "zh", target: "en"))
+        XCTAssertFalse(Translator.hasPlausibleLength(input: english, output: "好", sourceLanguage: "en", target: "zh"))
+        XCTAssertEqual(Translator.languageName("hi"), "Hindi")
+        XCTAssertEqual(Translator.languageName("zh"), "Simplified Chinese")
+    }
     func testLanguageNames() {
         XCTAssertEqual(Translator.languageName("uk"), "Ukrainian")
         XCTAssertEqual(Translator.languageName("en"), "English")
         XCTAssertEqual(Translator.languageName("ru"), "Russian")
         XCTAssertEqual(Translator.languageName("pl"), "Polish")
+    }
+}
+
+final class AccountPlanTests: XCTestCase {
+    func testDailyDictationAndMonthlyTextRenewAtDifferentTimes() throws {
+        let data = Data(#"{"plan":"free","audioPeriod":"day","audioResetsAt":"2026-11-26T00:00:00.000Z","resetsAt":"2026-12-01T00:00:00Z","limits":{"priceCents":0,"audioSeconds":1800,"textTokens":75000,"devices":2},"used":{"audioSeconds":1800,"textTokens":15},"deviceAllowed":true,"canSwitch":false,"available":[]}"#.utf8)
+        let plan = try JSONDecoder().decode(AccountPlan.self, from: data)
+        XCTAssertTrue(plan.isDailyAudio)
+        XCTAssertTrue(plan.hasExhaustedAllowance)
+        XCTAssertEqual(plan.audioRemaining, 0)
+        XCTAssertEqual(plan.textRemaining, 74_985)
+        XCTAssertEqual(plan.audioRenewalDate?.formatted(.iso8601), "2026-11-26T00:00:00Z")
+        XCTAssertEqual(plan.textRenewalDate?.formatted(.iso8601), "2026-12-01T00:00:00Z")
     }
 }
 

@@ -17,10 +17,12 @@ final class TranscriptionPipeline {
     func transcribe(_ clip: AudioClip,
                     settings: PipelineSettings,
                     engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
-        // Cloud endpoints cap uploads at 25 MB, which is about thirteen minutes
-        // of 16 kHz mono PCM. Longer dictations are split near silence.
-        if clip.duration > 600 {
-            return await transcribeChunked(clip, settings: settings, engines: engines)
+        // The gateway accepts 8 MiB, so split its 16 kHz mono WAVs earlier.
+        // Шлюз приймає 8 МіБ, тому ділимо WAV 16 кГц на коротші частини.
+        let usesGateway = settings.engineOrder.contains(where: EngineID.isGateway)
+        let chunkDuration: TimeInterval = usesGateway ? 240 : 480
+        if clip.duration > (usesGateway ? chunkDuration : 600) {
+            return await transcribeChunked(clip, seconds: chunkDuration, settings: settings, engines: engines)
         }
         return await transcribeSingle(clip, settings: settings, engines: engines)
     }
@@ -52,7 +54,7 @@ final class TranscriptionPipeline {
 
             let started = Date()
             do {
-                let timeout = engineID == EngineID.parakeet ? 90 : settings.cloudTimeout
+                let timeout = engineTimeout(engineID, cloudTimeout: settings.cloudTimeout)
                 var transcript = try await withTimeout(timeout) {
                     try await recognizer.transcribe(clip, language: settings.languageOverride)
                 }
@@ -92,9 +94,13 @@ final class TranscriptionPipeline {
                 attempts.append(Attempt(engine: engineID, error: nil, latency: Date().timeIntervalSince(started)))
                 return .success(PipelineResult(transcript: transcript, attempts: attempts))
             } catch {
+                let quotaExhausted: Bool
+                if case .gatewayAudioQuota? = error as? RecognitionError { quotaExhausted = true }
+                else { quotaExhausted = false }
                 attempts.append(Attempt(engine: engineID,
                                         error: Self.describe(error),
-                                        latency: Date().timeIntervalSince(started)))
+                                        latency: Date().timeIntervalSince(started),
+                                        audioQuotaExhausted: quotaExhausted))
             }
         }
 
@@ -104,9 +110,10 @@ final class TranscriptionPipeline {
     // MARK: Long audio
 
     private func transcribeChunked(_ clip: AudioClip,
+                                   seconds: TimeInterval,
                                    settings: PipelineSettings,
                                    engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
-        let chunks = clip.chunked(seconds: 480)
+        let chunks = clip.chunked(seconds: seconds)
         var texts: [String] = []
         var first: Transcript?
         var attempts: [Attempt] = []
@@ -118,7 +125,7 @@ final class TranscriptionPipeline {
             }
         }
 
-        guard chunks.count > 1, chunks.allSatisfy({ $0.duration <= 480 }) else {
+        guard chunks.count > 1, chunks.allSatisfy({ $0.duration <= seconds }) else {
             let message = String(localized: "Could not split the recording. The original audio was kept.")
             return .failure(PipelineFailure(attempts: [Attempt(engine: "audio", error: message, latency: 0)]))
         }
@@ -160,7 +167,8 @@ final class TranscriptionPipeline {
 
     private func startVoiceLanguageCheck(clip: AudioClip,
                                          settings: PipelineSettings) -> Task<LanguageDecision?, Never>? {
-        guard settings.voiceLanguageCheck, settings.languageOverride == nil else { return nil }
+        guard settings.voiceLanguageCheck, settings.languageOverride == nil,
+              settings.engineOrder.first.map(EngineID.isGateway) != true else { return nil }
 
         let detector = VoiceLanguageDetector(configuration: .init(
             model: settings.voiceLanguageModel,
@@ -181,8 +189,16 @@ final class TranscriptionPipeline {
         let model = engines.asrModels[id] ?? ProviderCatalog.defaultASRModel(for: id)
         return CloudRecognizer(configuration: .init(
             id: id, displayName: spec.name, baseURL: endpoint, model: model,
-            spec: spec, timeout: engines.cloudTimeout
+            spec: spec, timeout: engineTimeout(id, cloudTimeout: engines.cloudTimeout)
         ))
+    }
+
+    private func engineTimeout(_ id: String, cloudTimeout: TimeInterval) -> TimeInterval {
+        switch id {
+        case EngineID.parakeet: return 90
+        case EngineID.gateway, EngineID.hostedGateway: return ProviderCatalog.gatewayRequestTimeout
+        default: return cloudTimeout
+        }
     }
 
     private static func describe(_ error: Error) -> String {

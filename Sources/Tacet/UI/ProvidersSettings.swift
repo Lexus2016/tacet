@@ -1,121 +1,73 @@
 import SwiftUI
 
 struct ProvidersSettingsView: View {
-    @ObservedObject private var custom = CustomProviderStore.shared
+    @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var health = ProviderHealth.shared
-    @State private var presentedSheet: ProviderSheet?
-
-    private enum ProviderSheet: Identifiable {
-        case add, configure(String)
-
-        var id: String {
-            switch self {
-            case .add: "add"
-            case .configure(let provider): provider
-            }
-        }
-    }
-
-    private var providerIDs: [String] {
-        var seen = Set<String>()
-        let ordered = health.targets.map(\.id.provider) +
-            ProviderCatalog.all.map(\.id) + [EngineID.parakeet]
-        return ordered.filter { seen.insert($0).inserted }
-    }
+    @State private var hasEmailAccount = EmailAccountClient().storedToken != nil
+    @State private var accountBusy = false
+    @State private var accountRevision = 0
 
     var body: some View {
-        SoftCard(title: "Provider overview", systemImage: "network") {
-            actions
-            ForEach(providerIDs, id: \.self) { provider in
-                SoftDivider()
-                providerRow(provider)
+        VStack(spacing: 18) {
+            SoftCard(title: "Tacet Gateway", systemImage: "network") {
+                if !ProviderCatalog.usesPilotGateway {
+                    SoftRow("Cloud dictation",
+                            subtitle: "Tacet sends recordings and text for processing through its online gateway.") {
+                        Toggle("Cloud dictation", isOn: $settings.hostedGatewayEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+                    SoftDivider()
+                }
+                if let gateway = ProviderCatalog.spec(EngineID.hostedGateway) {
+                    EmailAccountConnection(offersLegacyAccess: ProviderCatalog.usesPilotGateway
+                                            || Keychain.string(gateway.keychainAccount) != nil,
+                                           busy: $accountBusy, onCredentialChanged: updateAccount) {
+                        APIKeyRow(account: gateway.keychainAccount, environmentKey: gateway.environmentKey,
+                                  title: "Tacet access key")
+                    }
+                    .padding(.vertical, 8)
+                }
+                if settings.hostedGatewayEnabled {
+                    ForEach(health.targets) { target in
+                        SoftDivider()
+                        let condition = health.condition(for: target.id)
+                        SoftRow(target.id.capability.title, subtitle: condition.reason) {
+                            ProviderStatusLabel(condition: condition)
+                        }
+                    }
+                    SoftDivider()
+                    HStack {
+                        Spacer()
+                        Button { health.refresh() } label: {
+                            PendingActionLabel(title: "Check now", pendingTitle: "Checking connection…",
+                                               isPending: health.isChecking)
+                        }
+                        .buttonStyle(SoftButtonStyle())
+                        .disabled(health.isChecking || health.targets.isEmpty)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            if hasEmailAccount || ProviderCatalog.usesPilotGateway {
+                SoftCard(title: "Plan and usage", systemImage: "chart.bar") {
+                    AccountPlanView().id(accountRevision)
+                }
             }
         }
         .onAppear { health.refresh(configurationOnly: true) }
-        .sheet(item: $presentedSheet) { sheet in
-            switch sheet {
-            case .add:
-                AddProviderSheet()
-            case .configure(let provider):
-                ProviderConfigurationSheet(providerID: provider)
-            }
-        }
     }
 
-    private var actions: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                Button {
-                    health.refresh()
-                } label: {
-                    PendingActionLabel(title: "Check now", pendingTitle: "Checking providers…",
-                                       isPending: health.isChecking)
-                }
-                .buttonStyle(SoftButtonStyle())
-                .disabled(health.isChecking || health.targets.isEmpty)
-
-                Button {
-                    presentedSheet = .add
-                } label: {
-                    Label("Add provider…", systemImage: "plus")
-                }
-                .buttonStyle(SoftButtonStyle())
-            }
-            if let finished = health.lastCheck {
-                Text("Last checked at \(finished, style: .time)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Connections are checked every minute.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+    private func updateAccount(_ signedIn: Bool) {
+        hasEmailAccount = signedIn
+        if signedIn { settings.hostedGatewayEnabled = true }
+        else if !ProviderCatalog.usesPilotGateway,
+                let gateway = ProviderCatalog.spec(EngineID.hostedGateway), !ProviderCatalog.isConfigured(gateway) {
+            settings.hostedGatewayEnabled = false
         }
-        .padding(.vertical, 8)
-    }
-
-    private func providerRow(_ provider: String) -> some View {
-        let targets = health.targets.filter { $0.id.provider == provider }
-        let isLocal = provider == EngineID.parakeet
-        let name = isLocal ? String(localized: "Parakeet (local)") :
-            (ProviderCatalog.spec(provider)?.name ?? EngineID.displayName(provider))
-
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(verbatim: name)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Button("Configure") { presentedSheet = .configure(provider) }
-                    .buttonStyle(SoftButtonStyle())
-                    .accessibilityLabel(Text("Configure \(name)"))
-            }
-
-            if targets.isEmpty {
-                Text(isLocal ? "Model not downloaded" : "Not configured")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach(targets) { target in
-                let condition = health.condition(for: target.id)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(target.id.isCleanupFallback ? String(localized: "Text correction fallback")
-                         : target.active ? target.id.capability.title : String(localized: "Connected · inactive"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 6)
-                    ProviderStatusLabel(condition: condition)
-                }
-                if let reason = condition.reason {
-                    Text(reason)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(.vertical, 8)
+        accountRevision += 1
+        health.credentialChanged(EngineID.hostedGateway)
     }
 }
 
@@ -227,6 +179,7 @@ private struct ProviderConfigCard: View {
     private var transcriptionURL: String? { spec.id == EngineID.openAI ? settings.openAIBaseURL : nil }
     private var chatURL: String? { spec.id == EngineID.openAI ? settings.openAIChatBaseURL : nil }
     private var isCustom: Bool { ProviderCatalog.isCustom(spec.id) }
+    private var isGateway: Bool { EngineID.isGateway(spec.id) }
 
     private var chatBinding: Binding<String> {
         Binding(
@@ -245,10 +198,18 @@ private struct ProviderConfigCard: View {
     var body: some View {
         SoftCard {
             if spec.requiresKey || isCustom {
-                APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey)
+                APIKeyRow(account: spec.keychainAccount, environmentKey: spec.environmentKey,
+                          title: isGateway ? "Client key" : "API key")
             }
 
-            if spec.id == EngineID.openAI {
+            if isGateway, let adminURL = ProviderSpec.validBaseURL(spec.baseURL)?
+                .deletingLastPathComponent().appendingPathComponent("admin/") {
+                SoftDivider()
+                SoftRow("Tacet Gateway", subtitle: spec.id == EngineID.hostedGateway
+                        ? "Use the client key for tacetapi.murable.ai." : "Use the client key from gateway/.env.") {
+                    Link(destination: adminURL) { Text("Open gateway admin") }
+                }
+            } else if spec.id == EngineID.openAI {
                 SoftDivider()
                 SoftRow("Base URL") {
                     TextField("Base URL", text: $settings.openAIBaseURL)
@@ -268,22 +229,9 @@ private struct ProviderConfigCard: View {
                 CustomConnectionFields(provider: provider)
             }
 
-            SoftDivider()
-
-            SoftRow("Chat model", subtitle: "Used for cleanup, translation and editing") {
-                HStack(spacing: 8) {
-                    TextField("Chat model", text: chatBinding).labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 192)
-                    Button {
-                        showingChatModels = true
-                    } label: {
-                        Image(systemName: "list.bullet")
-                            .frame(width: 13)
-                    }
-                    .buttonStyle(SoftButtonStyle())
-                    .help(Text("Browse")).accessibilityLabel(Text("Browse models"))
-                }
+            if !isGateway {
+                SoftDivider()
+                chatModelRow
             }
 
             if spec.supportsTranscription {
@@ -300,24 +248,9 @@ private struct ProviderConfigCard: View {
                 }
             }
 
-            if spec.supportsTranscription, settings.isASREnabled(for: spec.id) {
+            if !isGateway, spec.supportsTranscription, settings.isASREnabled(for: spec.id) {
                 SoftDivider()
-
-                SoftRow("Transcription model", subtitle: "Used when this provider is in the engine chain") {
-                    HStack(spacing: 8) {
-                        TextField("Transcription model", text: asrBinding).labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 192)
-                        Button {
-                            showingASRModels = true
-                        } label: {
-                            Image(systemName: "list.bullet")
-                            .frame(width: 13)
-                        }
-                        .buttonStyle(SoftButtonStyle())
-                        .help(Text("Browse")).accessibilityLabel(Text("Browse transcription models"))
-                    }
-                }
+                transcriptionModelRow
             }
 
             SoftDivider()
@@ -363,6 +296,42 @@ private struct ProviderConfigCard: View {
         }
         .sheet(isPresented: $showingASRModels) {
             ModelChooser(spec: spec, baseURL: transcriptionURL, transcription: true, selection: asrBinding)
+        }
+    }
+
+    private var chatModelRow: some View {
+        SoftRow("Chat model", subtitle: "Used for cleanup, translation and editing") {
+            HStack(spacing: 8) {
+                TextField("Chat model", text: chatBinding).labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 192)
+                Button {
+                    showingChatModels = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .frame(width: 13)
+                }
+                .buttonStyle(SoftButtonStyle())
+                .help(Text("Browse")).accessibilityLabel(Text("Browse models"))
+            }
+        }
+    }
+
+    private var transcriptionModelRow: some View {
+        SoftRow("Transcription model", subtitle: "Used when this provider is in the engine chain") {
+            HStack(spacing: 8) {
+                TextField("Transcription model", text: asrBinding).labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 192)
+                Button {
+                    showingASRModels = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .frame(width: 13)
+                }
+                .buttonStyle(SoftButtonStyle())
+                .help(Text("Browse")).accessibilityLabel(Text("Browse transcription models"))
+            }
         }
     }
 }

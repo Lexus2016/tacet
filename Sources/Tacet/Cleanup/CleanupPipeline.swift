@@ -16,8 +16,14 @@ struct CleanupConfiguration: Sendable {
     let model: String
     let timeout: TimeInterval
 
+    func requestTimeout(minimum: TimeInterval = 0, extra: TimeInterval = 0) -> TimeInterval {
+        if EngineID.isGateway(provider) { return ProviderCatalog.gatewayRequestTimeout }
+        return max(minimum, timeout + extra)
+    }
+
     var target: (spec: ProviderSpec, endpoint: URL, model: String)? {
-        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = EngineID.isGateway(provider) ? ProviderCatalog.defaultChatModel(for: provider)
+            : model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !model.isEmpty, let spec = ProviderCatalog.spec(provider), spec.supportsChat,
               let endpoint = spec.endpoint("chat/completions",
                                            baseURL: spec.id == EngineID.openAI ? baseURL : nil)
@@ -62,9 +68,10 @@ final class CleanupPipeline {
         guard let target = configuration.target else { return nil }
         let key = ProviderCatalog.key(for: target.spec)
         if target.spec.requiresKey, key == nil { return nil }
-        let candidate = try? await withTimeout(configuration.timeout) {
+        let timeout = configuration.requestTimeout()
+        let candidate = try? await withTimeout(timeout) {
             try await self.request(spec: target.spec, url: target.endpoint, key: key, text: rawText, prompt: prompt,
-                                   model: target.model, timeout: configuration.timeout)
+                                   model: target.model, timeout: timeout)
         }
         guard !Task.isCancelled, let candidate else { return nil }
         if candidate.trimmingCharacters(in: .whitespacesAndNewlines) == rawText.trimmingCharacters(in: .whitespacesAndNewlines) {
@@ -93,7 +100,7 @@ final class CleanupPipeline {
         let payload: [String: Any] = [
             "model": model,
             "temperature": 0,
-            "max_tokens": 2048,
+            "max_tokens": min(2_048, SelectionEditLimits.standardOutputTokens(for: text.utf8.count)),
             "messages": [
                 ["role": "system", "content": prompt],
                 ["role": "user", "content": text],
@@ -108,8 +115,9 @@ final class CleanupPipeline {
         }
 
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = object["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
+              let choices = object["choices"] as? [[String: Any]], let choice = choices.first,
+              choice["finish_reason"] as? String != "length",
+              let message = choice["message"] as? [String: Any],
               let content = message["content"] as? String
         else {
             throw RecognitionError.failed("Unexpected cleanup response")

@@ -55,8 +55,11 @@ final class KeyboardTypingTests: XCTestCase {
     }
 
     func testHeldDeletionAcceleratesAndLimitsEachBatch() {
-        XCTAssertEqual(KeyboardDeletion.unit(after: .milliseconds(360)), .character)
+        XCTAssertEqual(KeyboardDeletion.unit(after: .seconds(KeyboardDeletion.holdSeconds)), .character)
+        XCTAssertEqual(KeyboardDeletion.unit(after: .milliseconds(1_199)), .character)
+        XCTAssertEqual(KeyboardDeletion.unit(after: .milliseconds(1_200)), .word)
         XCTAssertEqual(KeyboardDeletion.unit(after: .seconds(2)), .word)
+        XCTAssertLessThan(KeyboardDeletion.interval(for: .character), .milliseconds(84))
         XCTAssertEqual(KeyboardDeletion.unit(after: .seconds(3)), .sentence)
         XCTAssertEqual(KeyboardDeletion.unit(after: .seconds(4)), .paragraph)
         XCTAssertEqual(KeyboardDeletion.count(in: "a👨‍👩‍👧‍👦", unit: .character), 1)
@@ -105,12 +108,66 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(KeyboardWord.dictionary(for: .czech, in: ["sk", "cs_CZ"]), "cs_CZ")
     }
 
+    func testChineseAndHindiProvideExplicitOptionalLayouts() throws {
+        XCTAssertEqual(KeyboardLayout.chinesePinyin.id, "zh")
+        XCTAssertEqual(KeyboardLayout.chinesePinyin.speechLocale, "zh-CN")
+        XCTAssertTrue(KeyboardLayout.chinesePinyin.usesPinyin)
+        XCTAssertFalse(KeyboardLayout.chinesePinyin.supportsAutomaticCapitalization)
+        XCTAssertEqual(KeyboardLayout.hindi.id, "hi")
+        XCTAssertEqual(KeyboardLayout.hindi.speechLocale, "hi-IN")
+        XCTAssertFalse(KeyboardLayout.hindi.supportsAutomaticCapitalization)
+        XCTAssertEqual(KeyboardLayout.ordered([.hindi, .english, .chinesePinyin]), [.english, .chinesePinyin, .hindi])
+        XCTAssertFalse(KeyboardLayout.defaults.contains(.chinesePinyin))
+        XCTAssertFalse(KeyboardLayout.defaults.contains(.hindi))
+
+        let keys = KeyboardLayout.hindi.keys.flatMap { $0 }
+        let vowel = try XCTUnwrap(keys.first { $0.text == "ा" })
+        let consonant = try XCTUnwrap(keys.first { $0.text == "क" })
+        let halant = try XCTUnwrap(keys.first { $0.text == "्" })
+        XCTAssertEqual(vowel.output(shift: true), "आ")
+        XCTAssertEqual(halant.output(shift: true), "अ")
+        XCTAssertEqual(KeyboardLayout.Key.title(for: vowel.text), "◌ा")
+        XCTAssertEqual(consonant.text + vowel.text, "का")
+        XCTAssertEqual(consonant.text + halant.text + "ष", "क्ष")
+    }
+
+    func testPinyinCompositionIsBoundedAndRemovesOnlyItsLastLetter() {
+        var draft = KeyboardPinyinComposition()
+        for key in ["N", "i", "3", "哈", "h", "a", "o"] { draft.append(key) }
+        XCTAssertEqual(draft.text, "nihao")
+        draft.deleteBackward()
+        XCTAssertEqual(draft.text, "niha")
+        for _ in 0..<100 { draft.append("a") }
+        XCTAssertEqual(draft.text.count, KeyboardPinyinComposition.maximumLength)
+    }
+
+    func testPinyinDictionaryPreservesAuthenticRankAndIgnoresInvalidRows() {
+        let dictionary = KeyboardPinyinDictionary(contents: "ni\t你\nni\t尼\nni\t你\nnihao\t你好\nnv\t女\nN\t嗯\ninvalid\n")
+        XCTAssertEqual(dictionary.candidates(for: "ni"), ["你", "尼"])
+        XCTAssertEqual(dictionary.candidates(for: "nihao"), ["你好"])
+        XCTAssertEqual(dictionary.candidates(for: "nv"), ["女"])
+        XCTAssertTrue(dictionary.candidates(for: "N").isEmpty)
+        XCTAssertTrue(dictionary.candidates(for: "missing").isEmpty)
+    }
+
     func testSpellingCorrectionsKeepNearbyTyposAndRejectUnrelatedWords() throws {
         let word = try XCTUnwrap(KeyboardWord(before: "teh", after: nil, selection: nil))
         XCTAssertEqual(word.corrections(["the", "THE", "ten", "technology", "today", "ten hours"]),
                        ["the", "ten"])
         let ukrainian = try XCTUnwrap(KeyboardWord(before: "првиіт", after: nil, selection: nil))
         XCTAssertEqual(ukrainian.corrections(["привіт", "вітаю", "добридень"]), ["привіт"])
+    }
+
+    func testVocabularyCorrectionsFindTheNearestWordsInTheTypedCase() throws {
+        let vocabulary = ["привіт", "привід", "приватний", "вітаю", "пора"].map { Array($0) }
+        let doubled = try XCTUnwrap(KeyboardWord(before: "Приввіт", after: "", selection: nil))
+        XCTAssertEqual(doubled.nearby(in: vocabulary), ["Привіт", "Привід"])
+        let middle = try XCTUnwrap(KeyboardWord(before: "прив", after: "віт", selection: nil))
+        XCTAssertEqual(middle.nearby(in: vocabulary).first, "привіт")
+        let exact = try XCTUnwrap(KeyboardWord(before: "привіт", after: "", selection: nil))
+        XCTAssertEqual(exact.nearby(in: vocabulary), ["привід"])
+        let short = try XCTUnwrap(KeyboardWord(before: "по", after: "", selection: nil))
+        XCTAssertTrue(short.nearby(in: vocabulary).isEmpty)
     }
 
     func testCompletionsPreserveTheTypedPrefixAndVocabularyOrder() throws {
@@ -122,13 +179,26 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(capitalized.replacement("Привет"), "Привет")
     }
 
-    func testCompletionsAreLimitedToUnfinishedWordsAtTheCaret() throws {
+    func testCompletionsFollowTheWordAroundTheCaretWhereverItSits() throws {
+        // The system keyboard keeps suggesting for a selected word, a caret inside a word,
+        // and a finished word followed by more text.
         let selected = try XCTUnwrap(KeyboardWord(before: "", after: "", selection: "приве"))
-        XCTAssertTrue(selected.completions(["привет"]).isEmpty)
+        XCTAssertEqual(selected.completions(["привет"]), ["привет"])
         let middle = try XCTUnwrap(KeyboardWord(before: "при", after: "ве", selection: nil))
-        XCTAssertTrue(middle.completions(["привет"]).isEmpty)
+        XCTAssertEqual(middle.text, "приве")
+        XCTAssertFalse(middle.canComplete)
+        XCTAssertEqual(middle.completions(["привет"]), ["привет"])
+        let finished = try XCTUnwrap(KeyboardWord(before: "Відключи", after: " захист", selection: nil))
+        XCTAssertTrue(finished.canComplete)
+        XCTAssertFalse(finished.addsSpace)
+        XCTAssertEqual(finished.completions(["відключи", "відключив", "відключила", "відкрив"]),
+                       ["Відключив", "Відключила"])
         let short = try XCTUnwrap(KeyboardWord(before: "пр", after: "", selection: nil))
-        XCTAssertTrue(short.completions(["привет"]).isEmpty)
+        XCTAssertEqual(short.completions(["привет"]), ["привет"])
+        let firstLetter = try XCTUnwrap(KeyboardWord(before: "П", after: "", selection: nil))
+        XCTAssertEqual(firstLetter.completions(["привіт", "пора", "година"]), ["Привіт", "Пора"])
+        let apostrophe = try XCTUnwrap(KeyboardWord(before: "Пʼя", after: "", selection: nil))
+        XCTAssertEqual(apostrophe.completions(["п’ять"]), ["Пʼять"])
     }
 
     func testPreviewStaysOnScreenAtBothEdgesEvenInLandscape() {

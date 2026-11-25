@@ -262,7 +262,7 @@ final class HUDController {
         stopTicking()
         startedAt = nil
         model.subtitle = nil
-        show(title: "Preparing microphone…", symbol: "mic.fill", tint: Theme.accent,
+        show(title: String(localized: "Preparing microphone…"), symbol: "mic.fill", tint: Theme.accent,
              level: false, autoHide: nil, spinner: true)
     }
 
@@ -270,7 +270,7 @@ final class HUDController {
         startedAt = Date()
         model.subtitle = "0:00"
         model.waveform.setLevel(0)
-        show(title: "Recording", symbol: "mic.fill", tint: Theme.accent,
+        show(title: String(localized: "Recording"), symbol: "mic.fill", tint: Theme.accent,
              level: true, autoHide: nil, theme: theme)
         startTicking()
     }
@@ -279,7 +279,7 @@ final class HUDController {
         stopTicking()
         startedAt = nil
         model.subtitle = nil
-        show(title: "Transcribing…", symbol: "waveform", tint: Theme.accent,
+        show(title: String(localized: "Transcribing…"), symbol: "waveform", tint: Theme.accent,
              level: false, autoHide: nil, spinner: true, theme: theme)
     }
 
@@ -309,7 +309,7 @@ final class HUDController {
         guard presentation != .dictation || hideTask != nil else { return }
         startedAt = Date()
         model.subtitle = "0:00"
-        show(title: "Preview", symbol: "mic.fill", tint: Theme.accent, level: true, autoHide: 3.0,
+        show(title: String(localized: "Preview"), symbol: "mic.fill", tint: Theme.accent, level: true, autoHide: 3.0,
              presentation: .preview)
         updateLevel(0.4)
         startTicking()

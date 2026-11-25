@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>TacetPilotGateway</key>
+	<string>$(TACET_PILOT_GATEWAY)</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
@@ -29,8 +31,6 @@
     </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>Tacet uses the microphone during sessions you start so you can dictate from its keyboard.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Tacet uses Apple speech recognition on this device when you select that provider.</string>
     <key>TacetDictationAccessGroup</key>
     <string>$(AppIdentifierPrefix)ua.rawira.tacet.ios.dictation</string>
     <key>UIBackgroundModes</key>

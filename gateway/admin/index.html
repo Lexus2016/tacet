@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Шлюз Tacet</title>
+    <link rel="stylesheet" href="/admin/style.css">
+    <script type="module" src="/admin/app.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="bar-inner">
+        <span class="brand"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span>Tacet</span>
+        <span class="badge" id="connection" hidden></span>
+      </div>
+    </header>
+    <main>
+      <p id="opening" role="status">Відкриваємо адмінку…</p>
+      <section class="login panel" id="login" aria-labelledby="login-title" hidden>
+        <h1 id="login-title">Шлюз Tacet</h1>
+        <p>Увійдіть, щоб керувати порядком і доступністю маршрутів.</p>
+        <form id="login-form">
+          <label for="password">Ключ адміністратора</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+          <button class="primary" type="submit">Увійти</button>
+          <p id="login-error" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <div id="dashboard" hidden>
+        <div class="intro">
+          <div>
+            <h1>Маршрути</h1>
+            <p>Шлюз пробує увімкнені маршрути зверху вниз.</p>
+          </div>
+          <button id="logout" type="button">Вийти</button>
+        </div>
+        <div id="groups" class="groups"></div>
+        <div class="actions">
+          <p id="status" role="status" aria-live="polite"></p>
+          <button id="reload" type="button">Перечитати</button>
+          <button id="save" class="primary" type="button" disabled>Зберегти зміни</button>
+        </div>
+      </div>
+    </main>
+
+    <template id="group-template">
+      <section class="panel group">
+        <div class="group-title"><h2></h2><p></p></div>
+        <ol></ol>
+      </section>
+    </template>
+    <template id="route-template">
+      <li class="route">
+        <span class="position"></span>
+        <div class="identity"><strong></strong><span class="model"></span></div>
+        <div class="health"><span class="badge"></span><span class="detail"></span></div>
+        <div class="controls">
+          <label class="enabled"><input type="checkbox"><span>Увімкнено</span></label>
+          <button data-move="-1" type="button">↑</button>
+          <button data-move="1" type="button">↓</button>
+        </div>
+      </li>
+    </template>
+  </body>
+</html>

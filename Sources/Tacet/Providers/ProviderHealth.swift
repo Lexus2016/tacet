@@ -104,6 +104,9 @@ enum ProviderProbe {
             }
             if let model = target.model, target.id.capability != .voiceLanguage,
                !entries.contains(where: { ($0.id ?? $0.name) == model }) {
+                if EngineID.isGateway(target.id.provider) {
+                    return .unavailable(String(localized: "Enable a route with a provider key in the gateway admin."))
+                }
                 return .unverified(String(localized: "The selected model is missing from the catalog."))
             }
             return .reachable
@@ -195,7 +198,7 @@ final class ProviderHealth: ObservableObject {
 
     func start() {
         guard monitor == nil else { return }
-        configurationChanges = Publishers.Merge(settings.objectWillChange, CustomProviderStore.shared.objectWillChange)
+        configurationChanges = settings.objectWillChange
             .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
             .sink { [weak self] in self?.refresh(configurationOnly: true) }
         refresh()
@@ -261,59 +264,16 @@ final class ProviderHealth: ObservableObject {
     }
 
     private func configuredTargets() -> [ProviderTarget] {
-        var result: [ProviderTarget] = []
-        for spec in ProviderCatalog.all {
-            let transcribes = settings.activeEngineOrder.contains(spec.id)
-            let processesText = spec.id == settings.cleanupProvider &&
-                (settings.cleanupEnabled || settings.outputLanguage != "auto" || settings.selectionEditing)
-            let detectsLanguage = spec.id == "openrouter" && settings.voiceLanguageCheck
-            let chatBase = spec.id == EngineID.openAI ? settings.openAIChatBaseURL : spec.baseURL
-            let transcriptionBase = spec.id == EngineID.openAI ? settings.openAIBaseURL : spec.baseURL
-
-            func append(_ role: ProviderCapability, base: String, path: String? = nil, model: String? = nil) {
-                result.append(ProviderTarget(
-                    id: .init(provider: spec.id, capability: role), name: spec.name,
-                    baseURL: ProviderSpec.validBaseURL(base),
-                    operationURL: role == .voiceLanguage ? Self.voiceLanguageURL : path.flatMap { spec.endpoint($0, baseURL: base) },
-                    model: model, requiresKey: spec.requiresKey, active: role != .connection
-                ))
-            }
-
-            if transcribes {
-                append(.transcription, base: transcriptionBase, path: "audio/transcriptions",
-                       model: settings.asrModel(for: spec.id))
-            }
-            if processesText {
-                append(.chat, base: chatBase, path: "chat/completions", model: settings.chatModel(for: spec.id))
-            }
-            let fallback = settings.cleanupFallback
-            let usesFallback = fallback?.provider == spec.id && fallback?.matches(settings.cleanupConfiguration) == false
-            if usesFallback, let fallback {
-                result.append(ProviderTarget(
-                    id: .init(provider: spec.id, capability: .chat, isCleanupFallback: true), name: spec.name,
-                    baseURL: ProviderSpec.validBaseURL(chatBase), operationURL: spec.endpoint("chat/completions", baseURL: chatBase),
-                    model: fallback.model.trimmingCharacters(in: .whitespacesAndNewlines),
-                    requiresKey: spec.requiresKey, active: true
-                ))
-            }
-            if detectsLanguage {
-                append(.voiceLanguage, base: spec.baseURL, model: settings.openRouterModel)
-            }
-            if !transcribes, !processesText, !usesFallback, !detectsLanguage,
-               ProviderCatalog.key(for: spec) != nil || ProviderCatalog.isCustom(spec.id) {
-                append(.connection, base: chatBase)
-            }
+        guard settings.hostedGatewayEnabled, let spec = ProviderCatalog.spec(EngineID.hostedGateway) else { return [] }
+        let operations: [(ProviderCapability, String, String)] = [
+            (.transcription, "audio/transcriptions", settings.asrModel(for: spec.id)),
+            (.chat, "chat/completions", settings.chatModel(for: spec.id)),
+        ]
+        return operations.map { capability, path, model in
+            ProviderTarget(id: .init(provider: spec.id, capability: capability), name: spec.name,
+                           baseURL: ProviderSpec.validBaseURL(spec.baseURL), operationURL: spec.endpoint(path),
+                           model: model, requiresKey: spec.requiresKey, active: true)
         }
-
-        let localActive = settings.activeEngineOrder.contains(EngineID.parakeet)
-        if localActive || ParakeetRecognizer.shared.isConfigured() {
-            result.append(ProviderTarget(
-                id: .init(provider: EngineID.parakeet, capability: .local),
-                name: String(localized: "Parakeet (local)"), baseURL: nil, operationURL: nil,
-                model: nil, requiresKey: false, active: localActive
-            ))
-        }
-        return result
     }
 
     nonisolated static func data(for request: URLRequest, provider: String, model: String,

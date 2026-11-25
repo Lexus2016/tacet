@@ -17,7 +17,7 @@ fi
 fail=0
 
 # 1. Forbidden file types.
-blocked=$(printf '%s\n' "$files" | grep -Ei '(\.p12|\.pfx|\.cer|\.cert|\.key|\.pem|\.mobileprovision|\.provisionprofile|(^|/)\.env($|\.)|local\.xcconfig|Secrets\.plist)$' || true)
+blocked=$(printf '%s\n' "$files" | grep -Ei '(\.p8|\.p12|\.pfx|\.cer|\.cert|\.key|\.pem|\.mobileprovision|\.provisionprofile|(^|/)\.env(\.[^/]+)?|local\.xcconfig|Secrets\.plist)$' || true)
 if [ -n "$blocked" ]; then
   echo "secret-scan: forbidden file type:" >&2
   printf '%s\n' "$blocked" | sed 's/^/  /' >&2
@@ -31,9 +31,11 @@ patterns=(
   'sk-ant-[A-Za-z0-9_-]{20,}'
   'xai-[A-Za-z0-9]{20,}'
   'gh[pousr]_[A-Za-z0-9]{30,}'
+  're_[A-Za-z0-9_]{18,}'
   'AKIA[0-9A-Z]{16}'
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-  '(api[_-]?key|secret|token|password)[[:space:]]*[:=][[:space:]]*[^[:space:]]{24,}'
+  "(^|[^[:alnum:]_])(api[_-]?key|secret|token|password)[\"']?[[:space:]]*[:=][[:space:]]*[\"'][[:alnum:]_+./=-]{24,}[\"']"
+  '^[[:space:]]*(export[[:space:]]+)?[[:alnum:]_]*(API[_-]?KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*=[[:space:]]*[[:alnum:]_+./=-]{24,}[[:space:]]*($|#)'
 )
 
 args=()
@@ -42,8 +44,11 @@ for pattern in "${patterns[@]}"; do
 done
 
 hits=$(printf '%s\n' "$files" | while IFS= read -r f; do
-  [ -f "$f" ] || continue
-  grep -nEI "${args[@]}" "$f" 2>/dev/null | sed "s|^|$f:|"
+  if [ "${1:-}" = "--staged" ]; then
+    git show ":$f" 2>/dev/null | grep -nEI "${args[@]}" | cut -d: -f1 | awk -v file="$f" '{print file ":" $0}'
+  elif [ -f "$f" ]; then
+    grep -nEI "${args[@]}" "$f" 2>/dev/null | cut -d: -f1 | awk -v file="$f" '{print file ":" $0}'
+  fi
 done)
 
 if [ -n "$hits" ]; then

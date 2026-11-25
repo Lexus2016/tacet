@@ -51,14 +51,15 @@ final class Translator {
 
         var request = URLRequest(url: endpoint.endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = max(4, configuration.timeout + 2)
+        let timeout = configuration.requestTimeout(minimum: 4, extra: 2)
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         spec.setHeaders(on: &request, key: key)
 
         let payload: [String: Any] = [
             "model": endpoint.model,
             "temperature": 0,
-            "max_tokens": 4096,
+            "max_tokens": SelectionEditLimits.standardOutputTokens(for: trimmed.utf8.count),
             "messages": [
                 ["role": "system", "content": Self.systemPrompt(target: target, sourceLanguage: sourceLanguage,
                                                                correctRecognition: correctRecognition)],
@@ -68,15 +69,15 @@ final class Translator {
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         let preparedRequest = request
-        guard let answer = try? await withTimeout(max(4, configuration.timeout + 2), operation: {
+        guard let answer = try? await withTimeout(timeout, operation: {
             try await Self.send(preparedRequest, provider: spec.id, model: endpoint.model, session: self.session)
         }), !Task.isCancelled else { return nil }
 
         let normalized = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
 
-        let ratio = Double(normalized.count) / Double(max(1, trimmed.count))
-        guard ratio >= 0.35, ratio <= 2.2 else { return nil }
+        guard Self.hasPlausibleLength(input: trimmed, output: normalized,
+                                     sourceLanguage: sourceLanguage, target: target) else { return nil }
 
         // If the detector is confident the answer is in another language, the
         // model ignored the instruction: keep the original.
@@ -85,6 +86,17 @@ final class Translator {
         }
 
         return normalized
+    }
+
+    static func hasPlausibleLength(input: String, output: String, sourceLanguage: String?, target: String) -> Bool {
+        let ratio = Double(output.count) / Double(max(1, input.count))
+        // A Han character often represents a full syllable or word.
+        // Китайський ієрогліф часто передає цілий склад або слово.
+        let source = LanguagePolicy.normalize(sourceLanguage)
+        let targetIsChinese = LanguagePolicy.normalize(target) == "zh"
+        let minimum = targetIsChinese && source != "zh" ? 0.15 : 0.35
+        let maximum = source == "zh" && !targetIsChinese ? 6.5 : 2.2
+        return ratio >= minimum && ratio <= maximum
     }
 
     private static func send(_ request: URLRequest, provider: String, model: String,
@@ -97,8 +109,9 @@ final class Translator {
             throw RecognitionError.failed("Translation request failed")
         }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = object["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
+              let choices = object["choices"] as? [[String: Any]], let choice = choices.first,
+              choice["finish_reason"] as? String != "length",
+              let message = choice["message"] as? [String: Any],
               let content = message["content"] as? String
         else {
             throw RecognitionError.failed("Unexpected translation response")
@@ -131,6 +144,8 @@ final class Translator {
         case "tr": return "Turkish"
         case "it": return "Italian"
         case "pt": return "Portuguese"
+        case "zh", "zh-Hans": return "Simplified Chinese"
+        case "hi": return "Hindi"
         default: return code
         }
     }

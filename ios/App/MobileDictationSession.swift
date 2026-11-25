@@ -23,62 +23,20 @@ final class MobileDictationSession: ObservableObject {
     private var lastPublish = Date.distantPast
     private var timer: Task<Void, Never>?
     private var recognition: Task<Void, Never>?
-    private var primary = MobileRecognition.Model(.apple)
-    private var fallback: MobileRecognition.Model?
-    private var locale = "en-US"
-    private var translatesToLayout = false
 
     @discardableResult
     func enableConfigured() async -> Bool {
-        MobilePreferences.migrateAudioConsent()
-        let defaults = UserDefaults.standard
-        let engine = defaults.string(forKey: MobilePreferences.provider)
-            .flatMap(MobileRecognition.init(rawValue:)) ?? .apple
-        let fallbackEngine = defaults.string(forKey: MobilePreferences.fallback)
-            .flatMap(MobileRecognition.init(rawValue:)) ?? .groq
-        let primary = MobileRecognition.Model(engine, modelID: defaults.string(forKey: MobilePreferences.recognitionModel) ?? "")
-        let fallback = MobileRecognition.Model(fallbackEngine,
-            modelID: defaults.string(forKey: MobilePreferences.fallbackRecognitionModel) ?? "")
-        let models = defaults.bool(forKey: MobilePreferences.fallbackEnabled) && primary != fallback
-            ? [primary, fallback] : [primary]
-        let locale = defaults.string(forKey: MobilePreferences.locale) ?? MobilePreferences.defaultLocale
-        return await enable(models: models, locale: locale, translatesToLayout: defaults.bool(forKey: MobilePreferences.translateToLayout))
-    }
-
-    private func enable(models: [MobileRecognition.Model], locale: String, translatesToLayout: Bool) async -> Bool {
         if session != nil { return true }
         guard !working else { return false }
         working = true
         message = nil
         defer { working = false }
         do {
-            let eligible = translatesToLayout ? models.filter { $0.engine.cloudProvider != nil } : models
-            guard !eligible.isEmpty else { throw MobileDictationError.translationNeedsOnlineRecognition }
-            if translatesToLayout {
-                let models = textModels()
-                guard models.primary?.isConfigured == true || models.fallback?.isConfigured == true else {
-                    throw MobileDictationError.translationNeedsTextModel
-                }
-            }
-            var ready: [MobileRecognition.Model] = []
-            var preparationError: Error = MobileDictationError.unavailable
-            for model in eligible {
-                do {
-                    try await model.engine.prepare()
-                    ready.append(model)
-                } catch {
-                    preparationError = error
-                }
-            }
-            guard let primary = ready.first else { throw preparationError }
+            guard MobileGateway.isProvisioned else { throw MobileDictationError.gatewayNotProvisioned }
             guard await AVAudioApplication.requestRecordPermission() else {
                 throw MobileDictationError.microphoneDenied
             }
             try audio.arm()
-            self.primary = primary
-            fallback = ready.dropFirst().first
-            self.locale = locale
-            self.translatesToLayout = translatesToLayout
             session = UUID()
             deadline = Date().addingTimeInterval(TimeInterval(Self.duration))
             try publish()
@@ -163,19 +121,11 @@ final class MobileDictationSession: ObservableObject {
         if command.action == .start, phase == .ready {
             currentRequest = command.request
             requestLayout = command.layout
-            if UserDefaults.standard.object(forKey: MobilePreferences.selectionEditing) as? Bool ?? true {
-                requestSelection = command.selection.flatMap { $0.isEmpty ? nil : $0 }
-                if let requestSelection {
-                    guard requestSelection.prefix(DictationBridge.selectionLimit + 1).count <= DictationBridge.selectionLimit else {
-                        complete(request: command.request, phase: .error, text: DictationBridge.BridgeError.selectionTooLong.localizedDescription)
-                        return
-                    }
-                    let models = textModels()
-                    guard models.primary?.isConfigured == true || models.fallback?.isConfigured == true else {
-                        complete(request: command.request, phase: .error, text: MobileDictationError.selectionNeedsTextModel.localizedDescription)
-                        return
-                    }
-                }
+            requestSelection = command.selection.flatMap { $0.isEmpty ? nil : $0 }
+            if let requestSelection,
+               requestSelection.utf8.count > SelectionEditLimits.maximumInputBytes {
+                complete(request: command.request, phase: .error, text: DictationBridge.BridgeError.selectionTooLong.localizedDescription)
+                return
             }
             audio.begin()
             phase = .recording
@@ -205,12 +155,14 @@ final class MobileDictationSession: ObservableObject {
         phase = .processing
         phaseUntil = .distantFuture
         lastPublish = .distantPast
-        let primary = self.primary
-        let fallback = self.fallback
         let layout = requestLayout
         let selection = requestSelection
-        let locale = layout?.speechLocale ?? self.locale
-        let languageHint = translatesToLayout || selection != nil ? nil : LanguagePolicy.normalize(locale)
+        let locale = layout?.speechLocale ?? UserDefaults.standard.string(forKey: MobilePreferences.locale)
+            ?? MobilePreferences.defaultLocale
+        let language = LanguagePolicy.normalize(locale)
+        let translatesToLayout = UserDefaults.standard.bool(forKey: MobilePreferences.translateToLayout)
+        let target = translatesToLayout ? layout?.rawValue ?? language : nil
+        let languageHint = target != nil || selection != nil ? nil : language
         recognition = Task {
             do {
                 let clip = try await Task.detached(priority: .userInitiated) {
@@ -218,44 +170,23 @@ final class MobileDictationSession: ObservableObject {
                 }.value
                 defer { try? FileManager.default.removeItem(at: clip.url) }
                 try Task.checkCancellation()
-                let transcript = try await MobileRecognition.transcribe(primary: primary, fallback: fallback) {
-                    try await $0.engine.transcribe(clip, locale: locale, languageHint: languageHint, modelID: $0.id)
-                }
+                let transcript = try await MobileRecognition.transcribe(clip, languageHint: languageHint)
                 try Task.checkCancellation()
-                let models = textModels()
                 let output = MobileTextOutput()
                 if let selection {
                     let replacement = try await output.editSelection(
-                        selection, instruction: transcript.text, primary: models.primary, fallback: models.fallback
+                        selection, instruction: transcript.text
                     )
                     complete(request: request, phase: .result, text: replacement)
                     return
                 }
-                let result = await output.prepare(
-                    transcript, target: translatesToLayout ? layout?.rawValue ?? LanguagePolicy.normalize(locale) : nil,
-                    correct: UserDefaults.standard.bool(forKey: MobilePreferences.cleanupEnabled),
-                    primary: models.primary, fallback: models.fallback
-                )
+                let result = await output.prepare(transcript, target: target)
                 complete(request: request, phase: .result, text: result.text,
                          warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : nil)
             } catch {
                 complete(request: request, phase: .error, text: error.localizedDescription)
             }
         }
-    }
-
-    private func textModels() -> (primary: CleanupConfiguration?, fallback: CleanupConfiguration?) {
-        let defaults = UserDefaults.standard
-        func configuration(providerKey: String, modelKey: String, fallback: Bool) -> CleanupConfiguration? {
-            let provider = defaults.string(forKey: providerKey).flatMap(MobileCloudProvider.init(rawValue:)) ?? .groq
-            return provider.cleanup(model: defaults.string(forKey: modelKey) ?? "", fallback: fallback)
-        }
-        let primary = configuration(providerKey: MobilePreferences.cleanupProvider,
-                                    modelKey: MobilePreferences.cleanupModel, fallback: false)
-        let backup = defaults.bool(forKey: MobilePreferences.cleanupFallbackEnabled)
-            ? configuration(providerKey: MobilePreferences.cleanupFallbackProvider,
-                            modelKey: MobilePreferences.cleanupFallbackModel, fallback: true) : nil
-        return (primary, backup)
     }
 
     private func complete(request: UUID, phase: DictationBridge.Status.Phase, text: String, warning: String? = nil) {

@@ -3,10 +3,15 @@ import Security
 
 enum DictationBridge {
     static let recognitionTimeout: TimeInterval = 25
-    static let correctionTimeout: TimeInterval = 5
-    static let processingTimeout = 2 * (recognitionTimeout + correctionTimeout + 4) + 5
-    static let selectionLimit = 8_000
+    static let processingTimeout = 2 * recognitionTimeout + 5
     static let wakeTimeout: TimeInterval = 45
+
+    static func processingTimeout(for selection: String?) -> TimeInterval {
+        if let selection, SelectionEditLimits.requiresExpandedBudget(selection) {
+            return recognitionTimeout + SelectionEditLimits.expandedTimeout + 5
+        }
+        return processingTimeout
+    }
 
     struct Command: Codable {
         enum Action: String, Codable { case start, stop, cancel, consume }
@@ -53,7 +58,7 @@ enum DictationBridge {
             switch self {
             case .missingGroup: return "The shared dictation access group is unavailable."
             case .keychain(let status): return "The dictation connection could not open (\(status))."
-            case .selectionTooLong: return String(localized: "Select up to 8,000 characters for a voice command.")
+            case .selectionTooLong: return String(localized: "The selection is too large for one voice command.")
             }
         }
     }

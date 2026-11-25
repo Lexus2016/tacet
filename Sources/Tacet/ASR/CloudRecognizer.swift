@@ -57,6 +57,9 @@ final class CloudRecognizer: SpeechRecognizer {
             throw RecognitionError.failed("No response from \(displayName).")
         }
         guard (200..<300).contains(http.statusCode) else {
+            if EngineID.isGateway(id), let issue = Self.gatewayAudioError(status: http.statusCode, data: data) {
+                throw issue
+            }
             throw RecognitionError.http(status: http.statusCode, message: Self.errorMessage(from: data))
         }
 
@@ -114,7 +117,7 @@ final class CloudRecognizer: SpeechRecognizer {
         append("\r\n")
 
         field("model", model)
-        let verbose = spec.id == "groq" || ["whisper-1", "openai/whisper-1", "openai/whisper-large-v3",
+        let verbose = EngineID.isGateway(spec.id) || spec.id == "groq" || ["whisper-1", "openai/whisper-1", "openai/whisper-large-v3",
                                             "openai/whisper-large-v3-turbo"].contains(model)
         field("response_format", verbose ? "verbose_json" : "json")
         field("temperature", "0")
@@ -141,9 +144,32 @@ final class CloudRecognizer: SpeechRecognizer {
     }
 
     private struct ErrorEnvelope: Decodable {
-        struct Body: Decodable { let message: String? }
+        struct Body: Decodable {
+            let message: String?
+            let code: String?
+        }
         let error: Body?
         let message: String?
+    }
+
+    static func gatewayAudioError(status: Int, data: Data) -> RecognitionError? {
+        let code = (try? JSONDecoder().decode(ErrorEnvelope.self, from: data))?.error?.code
+        switch (status, code) {
+        case (429, "daily_audio_quota"):
+            return .gatewayAudioQuota(daily: true)
+        case (429, "plan_quota"):
+            return .gatewayAudioQuota(daily: false)
+        case (429, _):
+            return .failed(String(localized: "Tacet is busy. Try dictating again in a moment."))
+        case (403, "plan_paused"):
+            return .failed(String(localized: "Dictation is paused. Check your Tacet plan."))
+        case (403, "device_limit"):
+            return .failed(String(localized: "This device exceeds the plan device limit."))
+        case (400, _), (413, _), (415, _), (422, _):
+            return .failed(String(localized: "Tacet could not process this recording."))
+        default:
+            return nil
+        }
     }
 
     private static func errorMessage(from data: Data) -> String {

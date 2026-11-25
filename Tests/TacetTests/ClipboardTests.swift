@@ -162,4 +162,24 @@ final class ClipboardTests: XCTestCase {
         XCTAssertFalse(SelectionReader.mayBeSublimeLineCopy("two\nlines\n", appID: app, range: nil))
         XCTAssertFalse(SelectionReader.mayBeSublimeLineCopy("whole line\n", appID: app, range: CFRange(location: 0, length: 11)))
     }
+
+    func testSublimeClipboardDistinguishesEmptySelectionFromSelectedLine() async {
+        let app = "com.sublimetext.4"
+        let line = "whole line\n"
+        let legacyType = NSPasteboard.PasteboardType("sublime-text-extra")
+        let implicit = Data([3, 0, 0, 0, 1, 0, 0, 0, 0])
+        let explicit = Data([3, 0, 0, 0, 0, 0, 0, 0, 0])
+        XCTAssertEqual(SelectionReader.copiedSelection(line, appID: app, range: nil, metadata: explicit), .text(line, range: nil))
+        XCTAssertEqual(SelectionReader.copiedSelection(line, appID: app, range: nil, metadata: Data([1])), .unreadable)
+        await withPasteboard { pasteboard in
+            pasteboard.setString("original", forType: .string)
+            let copied = await TemporaryClipboard.readSelection(on: pasteboard, metadataType: SelectionReader.sublimeMetadata) {
+                pasteboard.declareTypes([.string, legacyType], owner: nil)
+                return pasteboard.setString(line, forType: .string) && pasteboard.setData(implicit, forType: legacyType)
+            }
+            guard case .text(let text, let metadata) = copied else { return XCTFail("Missing fixture copy") }
+            XCTAssertEqual(SelectionReader.copiedSelection(text, appID: app, range: nil, metadata: metadata), .none)
+            XCTAssertEqual(pasteboard.string(forType: .string), "original")
+        }
+    }
 }

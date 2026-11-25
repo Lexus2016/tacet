@@ -16,6 +16,7 @@ enum RecognitionError: LocalizedError, Sendable {
     case http(status: Int, message: String)
     case empty
     case noSpeech
+    case gatewayAudioQuota(daily: Bool)
     case timedOut(String)
     case cancelled
     case failed(String)
@@ -25,8 +26,11 @@ enum RecognitionError: LocalizedError, Sendable {
         case .notConfigured(let what): return "\(what) is not configured."
         case .missingKey(let what): return "No API key for \(what)."
         case .http(let status, let message): return "HTTP \(status): \(message)"
-        case .empty: return "The engine returned no text."
-        case .noSpeech: return "No speech was detected."
+        case .empty: return String(localized: "The engine returned no text.")
+        case .noSpeech: return String(localized: "No speech was detected.")
+        case .gatewayAudioQuota(let daily):
+            return daily ? String(localized: "The daily dictation allowance has been used.")
+                : String(localized: "The monthly dictation allowance has been used.")
         case .timedOut(let engine): return "\(engine) timed out."
         case .cancelled: return "Cancelled."
         case .failed(let message): return message
@@ -58,6 +62,7 @@ struct Attempt: Sendable {
     let engine: String
     let error: String?
     let latency: TimeInterval
+    var audioQuotaExhausted = false
 }
 
 struct PipelineResult: Sendable {
@@ -71,6 +76,8 @@ struct PipelineResult: Sendable {
 
 struct PipelineFailure: Error, Sendable {
     let attempts: [Attempt]
+
+    var audioQuotaExhausted: Bool { attempts.contains(where: \.audioQuotaExhausted) }
 
     var localizedDescription: String {
         let last = attempts.last { $0.error != nil }?.error

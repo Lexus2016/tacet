@@ -29,7 +29,7 @@ enum Keychain {
 
     /// Passing nil or an empty string removes the item.
     @discardableResult
-    static func set(_ value: String?, account: String) -> Bool {
+    static func set(_ value: String?, account: String, deviceOnly: Bool = false) -> Bool {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         if trimmed.isEmpty {
@@ -50,7 +50,8 @@ enum Keychain {
         ]
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: deviceOnly ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                : kSecAttrAccessibleAfterFirstUnlock,
         ]
 
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)

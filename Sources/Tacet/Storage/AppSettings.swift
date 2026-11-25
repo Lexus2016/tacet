@@ -7,7 +7,11 @@ import SwiftUI
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    @Published var hostedGatewayEnabled: Bool {
+        didSet { defaults.set(hostedGatewayEnabled, forKey: "hostedGatewayEnabled") }
+    }
 
     // MARK: Language
 
@@ -111,6 +115,7 @@ final class AppSettings: ObservableObject {
     }
 
     func asrModel(for provider: String) -> String {
+        if EngineID.isGateway(provider) { return ProviderCatalog.defaultASRModel(for: provider) }
         let stored = asrModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !stored.isEmpty { return stored }
         let legacy = provider == EngineID.groq ? groqModel : provider == EngineID.openAI ? openAIModel : ""
@@ -122,6 +127,7 @@ final class AppSettings: ObservableObject {
     }
 
     func chatModel(for provider: String) -> String {
+        if EngineID.isGateway(provider) { return ProviderCatalog.defaultChatModel(for: provider) }
         let stored = chatModels[provider]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if stored.isEmpty || Self.retiredModels.contains(stored) {
             return ProviderCatalog.defaultChatModel(for: provider)
@@ -224,7 +230,15 @@ final class AppSettings: ObservableObject {
 
     // MARK: Derived
 
-    var activeEngineOrder: [String] { engineOrder.filter { isASREnabled(for: $0) } }
+    var activeEngineOrder: [String] { [EngineID.hostedGateway] }
+
+    var gatewayActivationIssue: String? {
+        guard hostedGatewayEnabled else { return String(localized: "Enable cloud dictation in Connection settings.") }
+        guard let gateway = ProviderCatalog.spec(EngineID.hostedGateway), ProviderCatalog.isConfigured(gateway) else {
+            return String(localized: "Connect to Tacet in Connection settings.")
+        }
+        return nil
+    }
 
     var engineConfiguration: EngineConfiguration {
         EngineConfiguration(openAIBaseURL: openAIBaseURL, cloudTimeout: cloudTimeout,
@@ -242,35 +256,25 @@ final class AppSettings: ObservableObject {
     }
 
     var cleanupConfiguration: CleanupConfiguration {
-        CleanupConfiguration(provider: cleanupProvider, baseURL: openAIChatBaseURL,
-                             model: chatModel(for: cleanupProvider), timeout: cleanupTimeout)
-    }
-
-    var cleanupFallback: CleanupConfiguration? {
-        guard cleanupEnabled, cleanupFallbackEnabled else { return nil }
-        return CleanupConfiguration(provider: cleanupFallbackProvider, baseURL: openAIChatBaseURL,
-                                    model: cleanupFallbackModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        ? defaultCleanupFallbackModel : cleanupFallbackModel,
-                                    timeout: cleanupTimeout)
-    }
-
-    var defaultCleanupFallbackModel: String {
-        cleanupFallbackProvider == EngineID.groq ? "openai/gpt-oss-20b"
-            : ProviderCatalog.defaultChatModel(for: cleanupFallbackProvider)
+        CleanupConfiguration(provider: EngineID.hostedGateway, baseURL: "",
+                             model: ProviderCatalog.defaultChatModel(for: EngineID.hostedGateway),
+                             timeout: ProviderCatalog.gatewayRequestTimeout)
     }
 
     var isCleanupConfigured: Bool {
-        cleanupEnabled && (cleanupConfiguration.isConfigured || cleanupFallback?.isConfigured == true)
+        cleanupEnabled && gatewayActivationIssue == nil
     }
 
     // MARK: Init
 
-    private init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         languageMode = defaults.string(forKey: "languageMode") ?? "auto"
         dualLanguageCheck = defaults.object(forKey: "dualLanguageCheck") as? Bool ?? true
         voiceLanguageCheck = defaults.object(forKey: "voiceLanguageCheck") as? Bool ?? false
         openRouterModel = defaults.string(forKey: "openRouterModel") ?? "google/gemini-decision-1"
-        engineOrder = defaults.stringArray(forKey: "engineOrder") ?? ["groq", "parakeet", "openai"]
+        let storedEngineOrder = defaults.stringArray(forKey: "engineOrder")
+        engineOrder = storedEngineOrder ?? ["groq", "parakeet", "openai"]
         groqModel = defaults.string(forKey: "groqModel") ?? "whisper-large-v3-turbo"
         openAIBaseURL = defaults.string(forKey: "openAIBaseURL") ?? "https://api.openai.com/v1"
         openAIModel = defaults.string(forKey: "openAIModel") ?? "whisper-1"
@@ -303,7 +307,12 @@ final class AppSettings: ObservableObject {
         indicatorTheme = defaults.string(forKey: "indicatorTheme") ?? "classic"
         uiLanguage = defaults.string(forKey: "uiLanguage") ?? "system"
         asrModels = defaults.dictionary(forKey: "asrModels") as? [String: String] ?? [:]
-        asrEnabled = defaults.dictionary(forKey: "asrEnabled") as? [String: Bool] ?? [:]
+        let storedASREnabled = defaults.dictionary(forKey: "asrEnabled") as? [String: Bool] ?? [:]
+        asrEnabled = storedASREnabled
+        let previouslyUsedGateway = storedEngineOrder?.first == EngineID.hostedGateway &&
+            storedASREnabled[EngineID.hostedGateway] == true
+        hostedGatewayEnabled = ProviderCatalog.usesPilotGateway ||
+            (defaults.object(forKey: "hostedGatewayEnabled") as? Bool ?? previouslyUsedGateway)
         outputLanguage = defaults.string(forKey: "outputLanguage") ?? "auto"
         selectionEditing = defaults.object(forKey: "selectionEditing") as? Bool ?? true
         showHUD = defaults.object(forKey: "showHUD") as? Bool ?? true
@@ -313,21 +322,30 @@ final class AppSettings: ObservableObject {
         // (right Command); a combination the user picked is kept.
         let storedKey = defaults.object(forKey: "hotkeyKeyCode") as? Int
         let storedMods = defaults.object(forKey: "hotkeyModifiers") as? Int
-        let wasOldDefault = storedKey == 49 && storedMods == 0x1800
+        let storedLabel = defaults.string(forKey: "hotkeyLabel") ?? ""
+        let wasOldDefault = storedKey == 49 && storedMods == 0x1800 && storedLabel.isEmpty
         hotkeyKeyCode = wasOldDefault ? 54 : (storedKey ?? 54)
         hotkeyModifiers = wasOldDefault ? 0x0100 : (storedMods ?? 0x0100)
-        hotkeyLabel = wasOldDefault ? "" : (defaults.string(forKey: "hotkeyLabel") ?? "")
+        hotkeyLabel = storedLabel
     }
 }
 
 /// Engine identifiers used across settings, the pipeline and the UI.
 enum EngineID {
+    static let gateway = "tacetGateway"
+    static let hostedGateway = "tacetGatewayHosted"
     static let groq = "groq"
     static let parakeet = "parakeet"
     static let openAI = "openai"
 
+    static func isGateway(_ id: String) -> Bool {
+        id == gateway || id == hostedGateway
+    }
+
     static func displayName(_ id: String) -> String {
         switch id {
+        case gateway: return String(localized: "Tacet Gateway (local)")
+        case hostedGateway: return "Tacet Gateway"
         case groq: return "Groq (cloud)"
         case parakeet: return "Parakeet (local)"
         case openAI: return "Custom / OpenAI-compatible"

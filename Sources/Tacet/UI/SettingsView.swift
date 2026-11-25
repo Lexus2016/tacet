@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case general, providers, engines, cleanup, about
+        case general, providers, cleanup, about
 
         var id: String { rawValue }
 
@@ -12,7 +12,6 @@ struct SettingsView: View {
             switch self {
             case .general: return "slider.horizontal.3"
             case .providers: return "server.rack"
-            case .engines: return "waveform"
             case .cleanup: return "text.badge.checkmark"
             case .about: return "info.circle"
             }
@@ -21,8 +20,7 @@ struct SettingsView: View {
         var title: String {
             switch self {
             case .general: return "General"
-            case .providers: return "Providers"
-            case .engines: return "Engines"
+            case .providers: return "Connection"
             case .cleanup: return "Cleanup"
             case .about: return "About"
             }
@@ -31,8 +29,8 @@ struct SettingsView: View {
 
     @State private var tab: Tab
 
-    init(initialTab: Tab = .general) {
-        _tab = State(initialValue: initialTab)
+    init(initialTab: Tab? = nil) {
+        _tab = State(initialValue: initialTab ?? (AppSettings.shared.gatewayActivationIssue == nil ? .general : .providers))
     }
 
     var body: some View {
@@ -48,7 +46,6 @@ struct SettingsView: View {
                     switch tab {
                     case .general: GeneralSettingsView()
                     case .providers: ProvidersSettingsView()
-                    case .engines: ChainSettingsView()
                     case .cleanup: CleanupSettingsView()
                     case .about: AboutView()
                     }
@@ -105,7 +102,8 @@ struct GeneralSettingsView: View {
                     HotkeyRecorder(keyCode: $settings.hotkeyKeyCode,
                                    modifiers: $settings.hotkeyModifiers,
                                    label: $settings.hotkeyLabel,
-                                   onChange: { controller.configureHotkey() })
+                                   onRecordingChange: controller.setHotkeyRecording)
+                        .disabled(controller.phase != .idle)
                 }
 
                 SoftDivider()
@@ -180,16 +178,6 @@ struct GeneralSettingsView: View {
                 SoftRow("Second language check",
                         subtitle: "When the script is ambiguous, try the likely alternative: Ukrainian/Russian, Belarusian/Russian, Polish/Ukrainian and similar pairs") {
                     Toggle("Second language check", isOn: $settings.dualLanguageCheck)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                }
-
-                SoftDivider()
-
-                SoftRow("Voice language check",
-                        subtitle: "Listens to the clip with Gemini Decision, so Ukrainian speech decoded as Russian is caught. Needs an OpenRouter key.") {
-                    Toggle("Voice language check", isOn: $settings.voiceLanguageCheck)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -424,107 +412,18 @@ struct GeneralSettingsView: View {
 
 struct CleanupSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var customProviders = CustomProviderStore.shared
 
     var body: some View {
-        let primary = settings.cleanupProvider
-        VStack(spacing: 18) {
-            SoftCard(title: "Cleanup", systemImage: "wand.and.stars") {
-                SoftRow("Clean up after recognition",
-                        subtitle: "Fix punctuation, casing and obvious recognition errors") {
-                    Toggle("Clean up after recognition", isOn: $settings.cleanupEnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                }
-
-                Group {
-                    SoftDivider()
-                    modelRow("Primary model", provider: $settings.cleanupProvider, model: Binding(
-                        get: { settings.chatModels[primary] ?? "" },
-                        set: { settings.setChatModel($0, for: primary) }
-                    ), placeholder: ProviderCatalog.defaultChatModel(for: primary))
-
-                    SoftDivider()
-                    SoftRow("Use fallback model", subtitle: "Try a second model if the primary attempt fails.") {
-                        Toggle("Use fallback model", isOn: $settings.cleanupFallbackEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    if settings.cleanupFallbackEnabled {
-                        modelRow("Fallback model", provider: Binding(
-                            get: { settings.cleanupFallbackProvider },
-                            set: {
-                                guard $0 != settings.cleanupFallbackProvider else { return }
-                                settings.cleanupFallbackProvider = $0
-                                settings.cleanupFallbackModel = ""
-                            }
-                        ), model: $settings.cleanupFallbackModel, placeholder: settings.defaultCleanupFallbackModel)
-                        if settings.cleanupFallback?.matches(settings.cleanupConfiguration) == true {
-                            Text("Choose a different model or provider for the fallback.")
-                                .font(.caption)
-                                .foregroundStyle(Theme.warning)
-                        }
-                    }
-
-                    SoftDivider()
-                    SoftRow("Time per model", subtitle: "If cleanup fails, Tacet uses the original transcript.") {
-                        Stepper(value: $settings.cleanupTimeout, in: 1...10, step: 0.5) {
-                            Text(settings.cleanupTimeout.formatted(.number.precision(.fractionLength(1))) + " " +
-                                 String(localized: "s"))
-                                .monospacedDigit()
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                        .frame(width: Theme.settingsControlWidth)
-                    }
-
-                    SoftDivider()
-                    CleanupTestRow()
-                }
-                .disabled(!settings.cleanupEnabled)
+        SoftCard(title: "Cleanup", systemImage: "wand.and.stars") {
+            SoftRow("Clean up after recognition",
+                    subtitle: "Fix punctuation, casing and obvious recognition errors") {
+                Toggle("Clean up after recognition", isOn: $settings.cleanupEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
             }
-        }
-    }
-
-    private func modelRow(_ title: String, provider: Binding<String>, model: Binding<String>,
-                          placeholder: String) -> some View {
-        SoftRow(title, subtitle: "Save provider keys in Providers.") {
-            VStack(alignment: .trailing, spacing: 6) {
-                SettingsPicker(title: "Choose a provider", selection: provider,
-                               options: ProviderCatalog.chatProviders.map { .init($0.id, name: $0.name) })
-                CleanupModelField(model: model, placeholder: placeholder, spec: ProviderCatalog.spec(provider.wrappedValue),
-                                  baseURL: provider.wrappedValue == EngineID.openAI ? settings.openAIChatBaseURL : nil)
-                    .id(provider.wrappedValue)
-            }
-            .frame(width: Theme.settingsControlWidth)
-        }
-    }
-}
-
-private struct CleanupModelField: View {
-    @Binding var model: String
-    let placeholder: String
-    let spec: ProviderSpec?
-    let baseURL: String?
-    @State private var choosing = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            TextField("Model ID", text: $model, prompt: Text(placeholder.isEmpty ? String(localized: "Model ID") : placeholder))
-                .font(.caption.monospaced())
-            if let spec {
-                Button {
-                    choosing = true
-                } label: {
-                    Image(systemName: "list.bullet")
-                }
-                .buttonStyle(SoftButtonStyle())
-                .accessibilityLabel("Browse models")
-                .sheet(isPresented: $choosing) {
-                    ModelChooser(spec: spec, baseURL: baseURL, selection: $model)
-                }
-            }
+            SoftDivider()
+            CleanupTestRow().disabled(!settings.cleanupEnabled)
         }
     }
 }
@@ -560,18 +459,17 @@ private struct CleanupTestRow: View {
     }
 
     private func run() {
-        guard !busy else { return }
+        guard !busy, settings.isCleanupConfigured else { return }
         busy = true
         message = nil
 
         let configuration = settings.cleanupConfiguration
-        let fallback = settings.cleanupFallback
 
         Task {
             let result = await CleanupPipeline().clean("привіт як справи це тест пунктуації",
-                                                       configuration: configuration, fallback: fallback)
+                                                       configuration: configuration)
             if result.engine == "none" {
-                message = "Failed. The raw transcript would be used instead. Check the model name and the key."
+                message = String(localized: "Text processing failed. Check the Tacet connection.")
             } else {
                 message = "\(result.engine): \(result.text)"
             }
@@ -633,17 +531,23 @@ struct AboutView: View {
 struct APIKeyRow: View {
     let account: String
     var environmentKey: String?
+    var title: LocalizedStringKey = "API key"
 
     @State private var value = ""
     @State private var configured = false
     @State private var keyError: String?
 
+    private var usesEnvironmentKey: Bool {
+        guard let environmentKey, let value = ProcessInfo.processInfo.environment[environmentKey] else { return false }
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                StatusDot(ok: configured)
+                StatusDot(ok: configured || usesEnvironmentKey)
 
-                Text("API key")
+                Text(title)
                     .font(.system(size: 13))
 
                 Spacer()
@@ -661,17 +565,9 @@ struct APIKeyRow: View {
                 .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 6) {
-                Text(configured ? "Stored in the Keychain" : "No key")
+                Text(configured ? "Stored in the Keychain" : usesEnvironmentKey ? "Loaded from the environment" : "No key")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
-
-                if let environmentKey,
-                   ProcessInfo.processInfo.environment[environmentKey] != nil,
-                   !configured {
-                    Text("· \(environmentKey) is set in the environment")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                }
             }
             .padding(.leading, 18)
 

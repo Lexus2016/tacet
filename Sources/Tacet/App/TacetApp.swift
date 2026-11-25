@@ -25,19 +25,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.applyActivationPolicy()
         TacetIcon.applyToDock()
         if CLIHarness.runIfRequested() { return }
+#if DEBUG
+        if NSClassFromString("XCTestCase") != nil { return }
+#endif
 
         dictation = DictationController.shared
+        dictation?.recoverAtLaunch()
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(workspaceWillSleep(_:)), name: NSWorkspace.willSleepNotification, object: nil
         )
 #if !DEBUG
         ProviderHealth.shared.start()
-        _ = Updater.shared
+        if !ProviderCatalog.usesPilotGateway { _ = Updater.shared }
 #endif
 
-        // A menu bar app with no engine looks broken: every dictation fails with
-        // "not configured". Open the one window that fixes it.
-        if !SetupState.hasUsableEngine {
+        if AppSettings.shared.gatewayActivationIssue != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 AppWindows.shared.showSettings()
             }

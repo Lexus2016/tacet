@@ -1,30 +1,9 @@
 import AppIntents
 
 enum MobilePreferences {
-    static let provider = "ios.recognizer"
-    static let recognitionModel = "ios.recognitionModel"
-    static let fallbackEnabled = "ios.recognitionFallbackEnabled"
-    static let fallback = "ios.recognitionFallback"
-    static let fallbackRecognitionModel = "ios.fallbackRecognitionModel"
     static let locale = "ios.speechLocale"
     static let defaultLocale = "en-US"
-    static let cleanupEnabled = "ios.cleanupEnabled"
-    static let selectionEditing = "ios.selectionEditing"
     static let translateToLayout = "ios.translateToLayout"
-    static let cleanupProvider = "ios.cleanupProvider"
-    static let cleanupModel = "ios.cleanupModel"
-    static let cleanupFallbackEnabled = "ios.cleanupFallbackEnabled"
-    static let cleanupFallbackProvider = "ios.cleanupFallbackProvider"
-    static let cleanupFallbackModel = "ios.cleanupFallbackModel"
-
-    static func migrateAudioConsent() {
-        let preference = MobileCloudProvider.groq.audioPreference
-        // Earlier builds only saved a Groq key after explicit audio consent.
-        // Попередні збірки зберігали ключ Groq лише після явної згоди на надсилання аудіо.
-        if UserDefaults.standard.object(forKey: preference) == nil {
-            UserDefaults.standard.set(MobileCloudProvider.groq.hasKey, forKey: preference)
-        }
-    }
 }
 
 struct EnableTacetDictation: AppIntent {

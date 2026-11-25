@@ -211,21 +211,6 @@ private final class WindowDragBar: NSView {
     }
 }
 
-enum SetupState {
-    /// True when at least one engine can transcribe right now.
-    @MainActor
-    static var hasUsableEngine: Bool {
-        let settings = AppSettings.shared
-        return settings.activeEngineOrder.contains { engine in
-            if engine == EngineID.parakeet { return ParakeetRecognizer.shared.isConfigured() }
-            guard let spec = ProviderCatalog.spec(engine) else { return false }
-            return ProviderCatalog.isConfigured(spec) && !settings.asrModel(for: engine).isEmpty
-                && spec.endpoint("audio/transcriptions", baseURL: engine == EngineID.openAI ? settings.openAIBaseURL : nil) != nil
-        }
-    }
-
-}
-
 enum LoginItem {
     static var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled

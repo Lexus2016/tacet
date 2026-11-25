@@ -62,7 +62,7 @@ enum TemporaryClipboard {
     private static var inUse = false
     enum SelectionCopy: Equatable {
         case unchanged
-        case text(String)
+        case text(String, metadata: Data? = nil)
         case unavailable
     }
 
@@ -105,7 +105,8 @@ enum TemporaryClipboard {
         return provider.wasRequested
     }
 
-    static func readSelection(on pasteboard: NSPasteboard, send: () -> Bool) async -> SelectionCopy {
+    static func readSelection(on pasteboard: NSPasteboard, metadataType: NSPasteboard.PasteboardType? = nil,
+                              send: () -> Bool) async -> SelectionCopy {
         guard !inUse, !Task.isCancelled, let snapshot = ClipboardSnapshot(pasteboard),
               pasteboard.changeCount == snapshot.changeCount else { return .unavailable }
         inUse = true
@@ -122,9 +123,10 @@ enum TemporaryClipboard {
                 guard copiedChange == snapshot.changeCount + 1 else { return .unavailable }
                 if pasteboard.pasteboardItems?.isEmpty == false {
                     let text = pasteboard.string(forType: .string)
+                    let metadata = metadataType.flatMap { pasteboard.data(forType: $0) }
                     guard snapshot.restore(pasteboard, ifUnchangedSince: copiedChange),
                           let text, !text.isEmpty else { return .unavailable }
-                    return .text(text)
+                    return .text(text, metadata: metadata)
                 }
             }
             do {

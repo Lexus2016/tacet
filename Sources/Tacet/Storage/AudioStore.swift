@@ -5,6 +5,11 @@ enum AppPaths {
     static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        #if DEBUG
+        if Bundle.main.bundleIdentifier == "ua.rawira.tacet.gateway-preview" {
+            return base.appendingPathComponent("Tacet Gateway Preview", isDirectory: true)
+        }
+        #endif
         return base.appendingPathComponent("Tacet", isDirectory: true)
     }
 

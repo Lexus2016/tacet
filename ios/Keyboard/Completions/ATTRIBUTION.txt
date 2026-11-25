@@ -15,3 +15,22 @@ to remove words carried over from Russian subtitles.
 Списки поширюються за ліцензією CC BY-SA 4.0.
 Українські слова також перевірено за українським правописом, щоб прибрати
 російські слова з вихідних субтитрів.
+
+Chinese Pinyin and Hindi vocabulary are adapted from wordfreq 3.1.1 by
+Robyn Speer. The derived data is distributed under CC BY-SA 4.0. We removed
+counts, filtered to the target script, and seeded common greetings. Chinese
+entries were converted to Simplified Chinese with a toneless Pinyin index.
+https://github.com/rspeer/wordfreq/tree/v3.1.1#license
+https://pypi.org/project/wordfreq/3.1.1/
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Credit to freely available SUBTLEX-CH by Qing Cai and Marc Brysbaert,
+OpenSubtitles, and the other data sources documented by wordfreq.
+https://doi.org/10.1371/journal.pone.0010729
+https://opus.nlpl.eu/OpenSubtitles.php
+
+Китайський словник піньїню та словник гінді адаптовано з wordfreq 3.1.1
+Робін Спір. Змінені дані поширюються за ліцензією CC BY-SA 4.0. Ми вилучили
+частоти, залишили слова потрібною писемністю й додали поширені привітання.
+Для китайської використовуємо спрощене письмо та піньїнь без тонів.
+Дякуємо Цін Цай, Марку Брісберту, OpenSubtitles та авторам джерел wordfreq.

@@ -10,7 +10,7 @@ settings:
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "29"
+    CURRENT_PROJECT_VERSION: "30"
 packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
@@ -23,6 +23,8 @@ targets:
       - path: App
         excludes: [Info.plist]
       - path: Shared
+      - path: Keyboard/Completions/ATTRIBUTION.txt
+        buildPhase: resources
       - path: ../Sources/Tacet/ASR
       - path: ../Sources/Tacet/Cleanup
       - path: ../Sources/Tacet/Providers
@@ -48,6 +50,7 @@ targets:
       - path: Keyboard
         excludes: [Info.plist]
       - path: Shared
+      - path: ../Sources/Tacet/Cleanup/SelectionEditLimits.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ua.rawira.tacet.ios.keyboard

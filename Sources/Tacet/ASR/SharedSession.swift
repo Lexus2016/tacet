@@ -12,7 +12,7 @@ enum SharedSession {
         configuration.httpMaximumConnectionsPerHost = 4
         configuration.httpShouldUsePipelining = true
         configuration.timeoutIntervalForRequest = 90
-        configuration.timeoutIntervalForResource = 120
+        configuration.timeoutIntervalForResource = SelectionEditLimits.expandedTimeout + 5
         configuration.httpAdditionalHeaders = ["User-Agent": "Tacet/0.1"]
         return URLSession(configuration: configuration)
     }()

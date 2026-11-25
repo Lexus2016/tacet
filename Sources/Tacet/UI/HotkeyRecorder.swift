@@ -2,18 +2,17 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// Records a key combination by catching the next key press in the window.
-/// Only combinations with at least one modifier are accepted, so the hotkey can
-/// never swallow ordinary typing.
+/// Records either a chord or a tap of one physical modifier.
+/// Записує комбінацію клавіш або натискання одного фізичного модифікатора.
 struct HotkeyRecorder: View {
     @Binding var keyCode: Int
     @Binding var modifiers: Int
     @Binding var label: String
-    var onChange: () -> Void
+    var onRecordingChange: (Bool) -> Void
 
     @State private var isRecording = false
     @State private var monitor: Any?
-    @State private var modifierMonitor: Any?
+    @State private var capture = HotkeyCapture()
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
@@ -35,12 +34,14 @@ struct HotkeyRecorder: View {
             .buttonStyle(SoftButtonStyle())
 
             if isRecording {
-                Text("Esc to cancel")
+                Text("Release a modifier on its own, or hold it and press another key. Esc cancels.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
             }
         }
         .onDisappear(perform: stop)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in stop() }
     }
 
     private func toggle() {
@@ -49,51 +50,77 @@ struct HotkeyRecorder: View {
 
     private func start() {
         guard !isRecording else { return }
+        capture = HotkeyCapture()
         isRecording = true
+        onRecordingChange(true)
 
-        // A single modifier produces flagsChanged, not a key press.
-        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { event in
-            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-            let singles: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift]
-            let pressed = singles.filter { flags.contains($0) }
-            guard pressed.count == 1 else { return event }
-
-            keyCode = Int(event.keyCode)
-            modifiers = HotkeyFormat.carbon(flags)
-            label = ""
-            stop()
-            onChange()
-            return nil
-        }
-
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
-            if event.keyCode == 53 { // Escape
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { event in
+            let code = Int(event.keyCode)
+            if event.type == .keyDown, code == kVK_Escape {
                 stop()
                 return nil
             }
 
-            let carbon = HotkeyFormat.carbon(event.modifierFlags)
-            guard carbon != 0 else { return nil }
-
-            keyCode = Int(event.keyCode)
-            modifiers = carbon
-            label = HotkeyFormat.label(for: event)
-            stop()
-            onChange()
+            let choice = capture.handle(event.type, keyCode: code, modifiers: HotkeyFormat.carbon(event.modifierFlags),
+                                        label: event.type == .keyDown ? HotkeyFormat.label(for: event) : "")
+            if let choice {
+                keyCode = choice.keyCode
+                modifiers = choice.modifiers
+                label = choice.label
+                stop()
+            }
             return nil
         }
     }
 
     private func stop() {
+        guard isRecording else { return }
         isRecording = false
         if let monitor {
             NSEvent.removeMonitor(monitor)
             self.monitor = nil
         }
-        if let modifierMonitor {
-            NSEvent.removeMonitor(modifierMonitor)
-            self.modifierMonitor = nil
+        capture = HotkeyCapture()
+        onRecordingChange(false)
+    }
+}
+
+struct HotkeyCapture {
+    struct Choice: Equatable {
+        let keyCode: Int
+        let modifiers: Int
+        let label: String
+    }
+
+    private var activeModifiers = 0
+    private var single: Choice?
+    private var chord: Choice?
+
+    mutating func handle(_ type: NSEvent.EventType, keyCode: Int, modifiers: Int, label: String = "") -> Choice? {
+        switch type {
+        case .flagsChanged:
+            defer { activeModifiers = modifiers }
+            if modifiers == 0 {
+                defer { single = nil }
+                return single?.keyCode == keyCode ? single : nil
+            }
+            if activeModifiers == 0, chord == nil, HotkeyFormat.isModifierKeyCode(keyCode),
+               HotkeyFormat.singleModifier(modifiers) != nil {
+                single = Choice(keyCode: keyCode, modifiers: modifiers, label: "")
+            } else {
+                single = nil
+            }
+        case .keyDown:
+            single = nil
+            if chord == nil, modifiers != 0 {
+                chord = Choice(keyCode: keyCode, modifiers: modifiers, label: label)
+            }
+        case .keyUp:
+            if chord?.keyCode == keyCode { return chord }
+        default:
+            break
         }
+        return nil
     }
 }
 

@@ -41,6 +41,7 @@ final class DictationController: ObservableObject {
     private let languageMemory = LanguageMemory()
 
     private var isStarting = false
+    private var isRecordingHotkey = false
     private var updateRestart = UpdateRestartGate()
     private var noteTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
@@ -63,32 +64,21 @@ final class DictationController: ObservableObject {
             }
         }
         capture.configurationChangeHandler = { [weak self] in
-            self?.status("Input device changed, stopping")
+            self?.status(String(localized: "Input device changed, stopping"))
             self?.stopRecording()
         }
         configureHotkey()
         refreshHistory()
-        purgeAudio()
-        adoptOrphanRecordings()
-        recoverPendingRecordings()
-        prewarmLocalEngine()
 
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
         }
     }
 
-    /// Load the local fallback while the app is idle, so the first dictation
-    /// does not pay for it. Released again after ten quiet minutes.
-    private func prewarmLocalEngine() {
-        if settings.activeEngineOrder.contains(EngineID.groq) { CloudWarmup.warm() }
-        guard settings.activeEngineOrder.contains(EngineID.parakeet),
-              ParakeetRecognizer.shared.isConfigured() else { return }
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard phase == .idle else { return }
-            try? await ParakeetRecognizer.shared.warmUp()
-        }
+    func recoverAtLaunch() {
+        purgeAudio()
+        adoptOrphanRecordings()
+        recoverPendingRecordings()
     }
 
     private func scheduleIdleUnload() {
@@ -103,6 +93,7 @@ final class DictationController: ObservableObject {
     /// Dictations that failed earlier (a killed process, an outage) are retried
     /// on launch instead of waiting for the user to notice them in History.
     private func recoverPendingRecordings() {
+        guard settings.hostedGatewayEnabled else { return }
         let pending = store.entries(limit: 100).filter {
             $0.status == .unrecovered && ($0.audioPath?.isEmpty == false)
         }
@@ -114,6 +105,7 @@ final class DictationController: ObservableObject {
             for entry in pending {
                 guard !Task.isCancelled,
                       phase == .idle,
+                      settings.hostedGatewayEnabled,
                       !updateRestart.isRestarting,
                       let url = entry.audioURL
                 else { break }
@@ -163,7 +155,18 @@ final class DictationController: ObservableObject {
 
     // MARK: Hotkey
 
+    func setHotkeyRecording(_ recording: Bool) {
+        isRecordingHotkey = recording
+        if recording {
+            hotkey.unregister()
+            pasteHotkey.unregister()
+        } else {
+            configureHotkey()
+        }
+    }
+
     func configureHotkey() {
+        guard !isRecordingHotkey else { return }
         pasteHotkey.unregister()
         defer {
             pasteHotkey.onPress = { [weak self] in self?.pasteLast() }
@@ -223,7 +226,7 @@ final class DictationController: ObservableObject {
     }
 
     private func hotkeyPressed() {
-        guard phase != .processing else { return }
+        guard !isRecordingHotkey, phase != .processing else { return }
 
         if settings.hotkeyMode == "hold" {
             if phase == .idle { startRecording() }
@@ -255,7 +258,7 @@ final class DictationController: ObservableObject {
         backgroundAudio.end()
         capture.cancel()
         phase = .idle
-        status("Ready")
+        status(String(localized: "Ready"))
         HUDController.shared.hide()
     }
 
@@ -273,6 +276,13 @@ final class DictationController: ObservableObject {
 
     func startRecording() {
         guard phase == .idle, !isStarting, !updateRestart.isRestarting else { return }
+        if let issue = settings.gatewayActivationIssue {
+            lastFailure = issue
+            status(issue)
+            if settings.showHUD { HUDController.shared.finish(error: issue) }
+            AppWindows.shared.showSettings()
+            return
+        }
         isStarting = true
         stopRequested = false
         let startingApp = NSWorkspace.shared.frontmostApplication
@@ -324,7 +334,7 @@ final class DictationController: ObservableObject {
                 if settings.quietBackgroundAudio { backgroundAudio.begin() }
                 phase = .recording
                 lastFailure = nil
-                status("Recording…")
+                status(String(localized: "Recording…"))
                 if settings.playSounds { SoundService.shared.play(.start, style: settings.soundStyle) }
                 if settings.showHUD { HUDController.shared.showRecording() }
 
@@ -345,7 +355,7 @@ final class DictationController: ObservableObject {
         do {
             guard let captured = try capture.stop() else {
                 phase = .idle
-                status("Ready")
+                status(String(localized: "Ready"))
                 HUDController.shared.hide()
                 return
             }
@@ -359,7 +369,7 @@ final class DictationController: ObservableObject {
         }
 
         phase = .processing
-        status("Transcribing…")
+        status(String(localized: "Transcribing…"))
         if settings.showHUD { HUDController.shared.showProcessing() }
 
         let clip = AudioClip(url: result.url, duration: result.duration, samples: result.samples)
@@ -376,7 +386,7 @@ final class DictationController: ObservableObject {
         if clip.duration < 0.25 {
             phase = .idle
             AudioStore.delete(path: result.url.path)
-            status("No speech detected")
+            status(String(localized: "No speech detected"))
             HUDController.shared.hide()
             return
         }
@@ -384,7 +394,7 @@ final class DictationController: ObservableObject {
         if result.rms < 0.0016, result.peak < 0.01 {
             phase = .idle
             AudioStore.delete(path: result.url.path)
-            status("No speech detected")
+            status(String(localized: "No speech detected"))
             HUDController.shared.hide()
             return
         }
@@ -403,7 +413,7 @@ final class DictationController: ObservableObject {
         backgroundAudio.end()
         capture.cancel()
         phase = .idle
-        status("Cancelled")
+        status(String(localized: "Cancelled"))
         HUDController.shared.hide()
     }
 
@@ -427,6 +437,13 @@ final class DictationController: ObservableObject {
         let started = Date()
         let appName = focus?.application.localizedName
 
+        if let issue = settings.gatewayActivationIssue {
+            recordFailure(PipelineFailure(attempts: [Attempt(engine: EngineID.hostedGateway, error: issue, latency: 0)]),
+                          clip: clip, latency: 0, appName: appName, existingEntryID: existingEntryID,
+                          autoRetry: false, inBackground: inBackground)
+            return
+        }
+
         let engineConfiguration = settings.engineConfiguration
         let expectedLanguage: String? = focus?.application.bundleIdentifier
             .flatMap { languageMemory.language(for: $0) }
@@ -436,10 +453,7 @@ final class DictationController: ObservableObject {
             engineOrder: settings.activeEngineOrder,
             dualLanguageCheck: settings.dualLanguageCheck,
             cloudTimeout: settings.cloudTimeout,
-            expectedLanguage: expectedLanguage,
-            voiceLanguageCheck: settings.voiceLanguageCheck,
-            voiceLanguageModel: settings.openRouterModel,
-            voiceLanguageCandidates: LanguageOption.allCases.filter { $0 != .auto }.map(\.rawValue)
+            expectedLanguage: expectedLanguage
         )
 
         let result = await pipeline.transcribe(clip, settings: pipelineSettings, engines: engineConfiguration)
@@ -468,8 +482,7 @@ final class DictationController: ObservableObject {
             let editingSelection = allowPaste && settings.selectionEditing && selection != .none
             if !editingSelection, settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
-                let cleaned = await cleanupPipeline.clean(text, sourceLanguage: sourceLanguage, configuration: configuration,
-                                                          fallback: settings.cleanupFallback)
+                let cleaned = await cleanupPipeline.clean(text, sourceLanguage: sourceLanguage, configuration: configuration)
                 guard !Task.isCancelled else { return }
                 if cleaned.changed {
                     text = cleaned.text
@@ -479,7 +492,7 @@ final class DictationController: ObservableObject {
 
             // Translation runs after cleanup: the model gets clean text and the
             // transcript keeps its original wording in History.
-            if !editingSelection, settings.outputLanguage != "auto" {
+            if !editingSelection, settings.hostedGatewayEnabled, settings.outputLanguage != "auto" {
                 if sourceLanguage != settings.outputLanguage {
                     let outcome = await translator.translate(text,
                                                               to: settings.outputLanguage,
@@ -487,7 +500,7 @@ final class DictationController: ObservableObject {
                     if outcome.translated {
                         text = outcome.text
                     } else {
-                        notes.append("Translation to \(settings.outputLanguage) failed — original inserted")
+                        notes.append(String(localized: "Translation unavailable. The original dictation was inserted."))
                     }
                 }
             }
@@ -497,10 +510,13 @@ final class DictationController: ObservableObject {
             if allowPaste, settings.selectionEditing {
                 switch selection {
                 case .text(let selectedText, _):
-                    if let outcome = await selectionEditor.edit(selection: selectedText,
+                    do {
+                        if settings.hostedGatewayEnabled,
+                           let outcome = try await selectionEditor.edit(selection: selectedText,
                                                                 instruction: text,
                                                                 configuration: configuration) {
-                        await applySelectionEdit(outcome.text,
+                            guard !Task.isCancelled else { return }
+                            await applySelectionEdit(outcome.text,
                                                  instruction: text,
                                                  selection: selection,
                                                  focus: focus,
@@ -510,9 +526,13 @@ final class DictationController: ObservableObject {
                                                  appName: appName,
                                                  cleanupEngine: cleanupEngine,
                                                  note: notes.isEmpty ? nil : notes.joined(separator: "; "))
-                        return
+                            return
+                        }
+                        notes.append(String(localized: "Selection edit failed. The instruction is in History."))
+                    } catch {
+                        notes.append(error.localizedDescription)
                     }
-                    notes.append(String(localized: "Selection edit failed. The instruction is in History."))
+                    guard !Task.isCancelled else { return }
                 case .unreadable:
                     notes.append(String(localized: "Selection could not be read. Text saved in History."))
                 case .none:
@@ -689,7 +709,10 @@ final class DictationController: ObservableObject {
 
         if pasted { store.markInserted(id: entryID) }
         refreshHistory()
-        guard !inBackground || (phase == .idle && !Task.isCancelled) else { return }
+        guard !inBackground else {
+            if phase == .idle { scheduleIdleUnload() }
+            return
+        }
 
         let message: String
         if pasted {
@@ -708,7 +731,7 @@ final class DictationController: ObservableObject {
         phase = .idle
         lastFailure = nil
         scheduleIdleUnload()
-        if settings.playSounds { SoundService.shared.play(partial ? .error : .success, style: settings.soundStyle) }
+        if settings.playSounds { SoundService.shared.play(failedToDeliver ? .error : .success, style: settings.soundStyle) }
     }
 
     private func recordFailure(_ failure: PipelineFailure,
@@ -751,14 +774,20 @@ final class DictationController: ObservableObject {
         }
 
         refreshHistory()
-        guard !inBackground || (phase == .idle && !Task.isCancelled) else { return }
+        guard !inBackground else {
+            if phase == .idle { scheduleIdleUnload() }
+            return
+        }
 
         phase = .idle
         lastFailure = message
-        status("Failed: \(message)")
-        HUDController.shared.finish(error: settings.showHUD ? "Not transcribed, recording kept" : nil)
+        status(String(localized: "Failed: \(message)"))
+        let alert = failure.audioQuotaExhausted
+            ? String(localized: "Dictation limit reached. See Plan and usage.")
+            : String(localized: "Not transcribed, recording kept")
+        HUDController.shared.finish(error: settings.showHUD ? alert : nil)
         if settings.playSounds { SoundService.shared.play(.error, style: settings.soundStyle) }
-        if autoRetry, let failedID {
+        if autoRetry, !failure.audioQuotaExhausted, let failedID {
             scheduleRetry(entryID: failedID, clip: clip)
         }
         scheduleIdleUnload()
@@ -922,8 +951,8 @@ final class DictationController: ObservableObject {
     private func handleBlockedMicrophone() {
         phase = .idle
         lastFailure = "Microphone is blocked"
-        status("Microphone is blocked — allow Tacet in System Settings")
-        HUDController.shared.finish(error: settings.showHUD ? "Microphone blocked" : nil)
+        status(String(localized: "Microphone is blocked — allow Tacet in System Settings"))
+        HUDController.shared.finish(error: settings.showHUD ? String(localized: "Microphone blocked") : nil)
         if settings.playSounds {
             SoundService.shared.play(.error, style: settings.soundStyle)
         }

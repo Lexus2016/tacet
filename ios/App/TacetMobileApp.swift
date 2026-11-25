@@ -4,7 +4,9 @@ import SwiftUI
 @main
 struct TacetMobileApp: App {
     init() {
-        MobilePreferences.migrateAudioConsent()
+        #if DEBUG
+        MobileGateway.provisionDevelopmentDevice()
+        #endif
     }
 
     var body: some Scene {
@@ -19,6 +21,8 @@ private struct SessionView: View {
     @StateObject private var session = MobileDictationSession.shared
     @State private var openedFromKeyboard = false
     @State private var settingsPath: [MobileSettingsPage] = []
+    @State private var hasAccess = MobileGateway.isProvisioned
+    @State private var showingAccess = false
 
     var body: some View {
         NavigationStack(path: $settingsPath) {
@@ -51,12 +55,20 @@ private struct SessionView: View {
                     }
                 }
 
-                Section("Settings") {
-                    ForEach(MobileSettingsPage.menu, id: \.self) { page in
-                        NavigationLink(value: page) {
-                            page.menuLabel
+                Section {
+                    NavigationLink(value: MobileSettingsPage.keyboard) {
+                        Label("Keyboard", systemImage: "keyboard")
+                    }
+                    if hasAccess, ProviderCatalog.usesPilotGateway || EmailAccountClient().storedToken != nil {
+                        NavigationLink(value: MobileSettingsPage.plan) {
+                            Label("Plan and usage", systemImage: "chart.bar")
                         }
                     }
+                    Button { showingAccess = true } label: {
+                        Label("Tacet account", systemImage: "person.crop.circle")
+                    }
+                } footer: {
+                    Text("Dictation audio and text for voice commands are sent through Tacet Gateway.")
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -66,7 +78,14 @@ private struct SessionView: View {
             }
             .navigationTitle("Tacet")
             .navigationDestination(for: MobileSettingsPage.self) { page in
-                page.destination(locked: session.deadline != nil || session.working)
+                page.destination
+            }
+        }
+        .sheet(isPresented: $showingAccess) {
+            MobileAccessSheet { connected in
+                hasAccess = MobileGateway.isProvisioned
+                if session.deadline != nil { session.end() }
+                if connected, openedFromKeyboard { Task { await session.enableConfigured() } }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { event in
@@ -85,13 +104,15 @@ private struct SessionView: View {
             guard DictationBridge.consumeWake(url) else { return }
             openedFromKeyboard = true
             settingsPath.removeAll()
-            Task { await session.enableConfigured() }
+            if hasAccess { Task { await session.enableConfigured() } }
+            else { showingAccess = true }
         }
     }
 
     private var activationButton: some View {
         Button {
-            Task { await session.enableConfigured() }
+            if hasAccess { Task { await session.enableConfigured() } }
+            else { showingAccess = true }
         } label: {
             if session.working {
                 HStack(spacing: 8) {
@@ -99,7 +120,8 @@ private struct SessionView: View {
                     Text("Preparing session…")
                 }
             } else {
-                Label("Enable dictation", systemImage: "mic")
+                if hasAccess { Label("Enable dictation", systemImage: "mic") }
+                else { Label("Connect to Tacet", systemImage: "key") }
             }
         }
         .disabled(session.working)

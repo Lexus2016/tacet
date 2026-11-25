@@ -9,7 +9,14 @@ struct ProviderSpec: Identifiable, Sendable {
     let supportsChat: Bool
     let environmentKey: String?
 
-    var keychainAccount: String { id }
+    var keychainAccount: String {
+        guard id == EngineID.hostedGateway, ProviderCatalog.usesPilotGateway else { return id }
+        #if os(macOS)
+        return "tacetGatewayPilotDevice"
+        #else
+        return "tacetGatewayPilot"
+        #endif
+    }
 
     func endpoint(_ path: String, baseURL override: String? = nil) -> URL? {
         Self.validBaseURL(override ?? baseURL)?.appendingPathComponent(path)
@@ -37,6 +44,8 @@ struct ProviderSpec: Identifiable, Sendable {
 /// a key, and what it can do. Base URLs are editable in Settings for providers
 /// that people self-host.
 enum ProviderCatalog {
+    static let usesPilotGateway = Bundle.main.object(forInfoDictionaryKey: "TacetPilotGateway") as? String == "YES"
+    static let gatewayRequestTimeout: TimeInterval = 23
     static var all: [ProviderSpec] { builtin + customs }
 
     private static var customs: [ProviderSpec] {
@@ -52,6 +61,14 @@ enum ProviderCatalog {
     }
 
     private static let builtin: [ProviderSpec] = [
+        ProviderSpec(id: EngineID.hostedGateway, name: EngineID.displayName(EngineID.hostedGateway),
+                     baseURL: usesPilotGateway ? "https://tacetapi.murable.ai/pilot/v1" : "https://tacetapi.murable.ai/v1",
+                     requiresKey: true, supportsTranscription: true, supportsChat: true,
+                     environmentKey: usesPilotGateway ? "TACET_GATEWAY_PILOT_CLIENT_TOKEN" : "TACET_GATEWAY_HOSTED_CLIENT_TOKEN"),
+        ProviderSpec(id: EngineID.gateway, name: EngineID.displayName(EngineID.gateway),
+                     baseURL: "http://127.0.0.1:8787/v1",
+                     requiresKey: true, supportsTranscription: true, supportsChat: true,
+                     environmentKey: "TACET_GATEWAY_CLIENT_TOKEN"),
         ProviderSpec(id: "groq", name: "Groq",
                      baseURL: "https://api.groq.com/openai/v1",
                      requiresKey: true, supportsTranscription: true, supportsChat: true,
@@ -89,6 +106,7 @@ enum ProviderCatalog {
     /// picker and the test button exist precisely because catalogues change.
     static func defaultASRModel(for id: String) -> String {
         switch id {
+        case EngineID.gateway, EngineID.hostedGateway: return "tacet-transcription"
         case "groq": return "whisper-large-v3-turbo"
         case "openrouter": return "openai/whisper-large-v3"
         default: return "whisper-1"
@@ -97,6 +115,7 @@ enum ProviderCatalog {
 
     static func defaultChatModel(for id: String) -> String {
         switch id {
+        case EngineID.gateway, EngineID.hostedGateway: return "tacet-text"
         case "groq": return "openai/gpt-oss-120b"
         case "openai": return "gpt-4o-mini"
         case "openrouter": return "openai/gpt-4o-mini"
@@ -108,6 +127,10 @@ enum ProviderCatalog {
     }
 
     static func key(for spec: ProviderSpec) -> String? {
+        if spec.id == EngineID.hostedGateway, let token = EmailAccountClient.storedToken(for: spec) { return token }
+        #if os(iOS)
+        if spec.id == EngineID.hostedGateway { return Keychain.string(spec.keychainAccount) }
+        #endif
         if let environment = spec.environmentKey {
             return Keychain.secret(spec.keychainAccount, environment: environment)
         }

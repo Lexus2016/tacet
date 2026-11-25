@@ -21,6 +21,50 @@ enum KeyboardCapitalization {
     }
 }
 
+struct KeyboardPinyinComposition {
+    static let maximumLength = 32
+    private(set) var text = ""
+
+    static func letter(_ input: String) -> String? {
+        let bytes = input.utf8
+        guard bytes.count == 1, let value = bytes.first,
+              (65...90).contains(value) || (97...122).contains(value) else { return nil }
+        return input.lowercased()
+    }
+
+    mutating func append(_ letter: String) {
+        guard text.count < Self.maximumLength, let letter = Self.letter(letter) else { return }
+        text += letter
+    }
+
+    mutating func deleteBackward() {
+        if !text.isEmpty { text.removeLast() }
+    }
+}
+
+struct KeyboardPinyinDictionary: Sendable {
+    static let maximumCandidates = 16
+    private let table: [String: [String]]
+
+    init(contents: String) {
+        var table: [String: [String]] = [:]
+        for line in contents.split(whereSeparator: \.isNewline) {
+            let pair = line.split(separator: "\t", maxSplits: 1)
+            guard pair.count == 2, pair[0].utf8.allSatisfy({ (97...122).contains($0) }),
+                  pair[0].utf8.count <= KeyboardPinyinComposition.maximumLength else { continue }
+            let syllables = String(pair[0])
+            let candidate = String(pair[1])
+            if table[syllables, default: []].count < Self.maximumCandidates,
+               !table[syllables, default: []].contains(candidate) {
+                table[syllables, default: []].append(candidate)
+            }
+        }
+        self.table = table
+    }
+
+    func candidates(for pinyin: String) -> [String] { table[pinyin] ?? [] }
+}
+
 struct KeyboardWord: Equatable, Sendable {
     let text: String
     let addsSpace: Bool
@@ -57,19 +101,24 @@ struct KeyboardWord: Equatable, Sendable {
     }
 
     var canComplete: Bool {
-        !selected && trailing.isEmpty && text.count >= 3
+        !selected && trailing.isEmpty
     }
 
     var completionPrefix: String {
-        text.lowercased().replacingOccurrences(of: "’", with: "'")
+        Self.completionKey(text)
     }
 
+    static func completionKey(_ text: String) -> String {
+        text.lowercased().replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "ʼ", with: "'")
+    }
+
+    // Like the system keyboard, complete the word around the caret wherever the caret sits.
+    // Як системна клавіатура, доповнюємо слово біля курсора, де б курсор не стояв.
     func completions(_ candidates: [String]) -> [String] {
-        guard canComplete else { return [] }
         let prefix = completionPrefix
         let length = prefix.count
         let matches = candidates.lazy.compactMap { candidate -> String? in
-            let normalized = candidate.lowercased().replacingOccurrences(of: "’", with: "'")
+            let normalized = Self.completionKey(candidate)
             guard normalized.hasPrefix(prefix), normalized.count > length,
                   normalized.allSatisfy(Self.isWordCharacter) else { return nil }
             return text + candidate.dropFirst(length)
@@ -101,14 +150,41 @@ struct KeyboardWord: Equatable, Sendable {
         return options(Array(nearby))
     }
 
+    /// Vocabulary words one typo away from the typed word (two for words of five letters or more):
+    /// closest first, vocabulary order within the same distance, in the typed word's letter case.
+    /// Слова словника на відстані однієї одруківки від набраного (двох — для слів від п'яти літер):
+    /// спершу найближчі, за однакової відстані — у порядку словника, у регістрі набраного слова.
+    func nearby(in vocabulary: [[Character]]) -> [String] {
+        let original = Array(completionPrefix)
+        guard original.count >= 3 else { return [] }
+        let limit = original.count >= 5 ? 2 : 1
+        var ranked: [(distance: Int, rank: Int, letters: [Character])] = []
+        for (rank, candidate) in vocabulary.enumerated() {
+            guard let distance = Self.distance(original, candidate, limit: limit), distance > 0 else { continue }
+            ranked.append((distance, rank, candidate))
+        }
+        ranked.sort { ($0.distance, $0.rank) < ($1.distance, $1.rank) }
+        let uppercase = text.count > 1 && text.allSatisfy { !$0.isLowercase }
+        let capitalized = text.first?.isUppercase == true
+        return options(ranked.prefix(6).map { entry in
+            let word = String(entry.letters)
+            if uppercase { return word.uppercased() }
+            return capitalized ? word.prefix(1).uppercased() + word.dropFirst() : word
+        })
+    }
+
     private static func isNearby(_ original: [Character], _ candidate: [Character], limit: Int) -> Bool {
-        guard abs(original.count - candidate.count) <= limit else { return false }
+        distance(original, candidate, limit: limit) != nil
+    }
+
+    private static func distance(_ original: [Character], _ candidate: [Character], limit: Int) -> Int? {
+        guard abs(original.count - candidate.count) <= limit else { return nil }
         if original.count == candidate.count {
             let mismatches = original.indices.filter { original[$0] != candidate[$0] }
             if mismatches.count == 2, mismatches[1] == mismatches[0] + 1,
                original[mismatches[0]] == candidate[mismatches[1]],
                original[mismatches[1]] == candidate[mismatches[0]] {
-                return true
+                return 1
             }
         }
         var previous = Array(0...candidate.count)
@@ -120,7 +196,7 @@ struct KeyboardWord: Equatable, Sendable {
             }
             previous = current
         }
-        return previous[candidate.count] <= limit
+        return previous[candidate.count] <= limit ? previous[candidate.count] : nil
     }
 
     func replacement(_ choice: String) -> String {
@@ -140,11 +216,24 @@ enum KeyboardDeletion {
         case character, word, sentence, paragraph
     }
 
+    /// Hold time before the first repeat; the first character is deleted on touch-down.
+    /// Час утримання до першого повтору; перший символ видаляється одразу при дотику.
+    static let holdSeconds: TimeInterval = 0.32
+
     static func unit(after held: Duration) -> Unit {
-        if held >= .seconds(4) { return .paragraph }
-        if held >= .milliseconds(2_700) { return .sentence }
-        if held >= .milliseconds(1_400) { return .word }
+        if held >= .milliseconds(3_800) { return .paragraph }
+        if held >= .milliseconds(2_500) { return .sentence }
+        if held >= .milliseconds(1_200) { return .word }
         return .character
+    }
+
+    static func interval(for unit: Unit) -> Duration {
+        switch unit {
+        case .character: .milliseconds(55)
+        case .word: .milliseconds(110)
+        case .sentence: .milliseconds(170)
+        case .paragraph: .milliseconds(230)
+        }
     }
 
     static func count(in before: String, unit: Unit) -> Int {

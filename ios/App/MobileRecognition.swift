@@ -1,171 +1,122 @@
 import Foundation
-import Speech
+
+// The host app owns the credential and all network requests.
+// Ключ і мережеві запити належать основному застосунку.
+enum MobileGateway {
+    private static var gateway: ProviderSpec? { ProviderCatalog.spec(EngineID.hostedGateway) }
+    static var isProvisioned: Bool { gateway.flatMap(ProviderCatalog.key(for:)) != nil }
+
+    static var textConfiguration: CleanupConfiguration {
+        CleanupConfiguration(provider: EngineID.hostedGateway, baseURL: "",
+                             model: ProviderCatalog.defaultChatModel(for: EngineID.hostedGateway),
+                             timeout: ProviderCatalog.gatewayRequestTimeout)
+    }
+
+    static func validateAccessKey(_ enteredKey: String,
+                                  send: (URLRequest) async throws -> (Data, URLResponse) = {
+                                      try await SharedSession.cloud.data(for: $0)
+                                  }) async throws -> String {
+        guard let key = normalizedKey(enteredKey) else { throw AccessError.invalidKey }
+        guard let gateway = ProviderCatalog.spec(EngineID.hostedGateway), let url = gateway.endpoint("models") else {
+            throw MobileDictationError.unavailable
+        }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+        gateway.setHeaders(on: &request, key: key)
+        let (data, response) = try await send(request)
+        if (response as? HTTPURLResponse)?.statusCode == 401 { throw AccessError.invalidKey }
+        guard let http = response as? HTTPURLResponse, http.url == url, http.statusCode == 200,
+              (try? JSONDecoder().decode(ModelList.self, from: data))?.object == "list" else {
+            throw MobileDictationError.unavailable
+        }
+        return key
+    }
+
+    static func saveAccessKey(_ enteredKey: String) async throws {
+        let key = try await validateAccessKey(enteredKey)
+        try Task.checkCancellation()
+        guard let gateway, Keychain.set(key, account: gateway.keychainAccount, deviceOnly: true) else { throw AccessError.storage }
+    }
+
+    private static func normalizedKey(_ value: String) -> String? {
+        let key = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (24...256).contains(key.utf8.count), key.utf8.allSatisfy({ (33...126).contains($0) }) else { return nil }
+        return key
+    }
+
+    private struct ModelList: Decodable { let object: String }
+
+    enum AccessError: LocalizedError {
+        case invalidKey, storage
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidKey: String(localized: "This Tacet access key is invalid.")
+            case .storage: String(localized: "The Tacet access key could not be saved.")
+            }
+        }
+    }
+
+    #if DEBUG
+    static func provisionDevelopmentDevice() {
+        guard let gateway, let variable = gateway.environmentKey,
+              let value = ProcessInfo.processInfo.environment[variable],
+              let key = normalizedKey(value) else { return }
+        Keychain.set(key, account: gateway.keychainAccount, deviceOnly: true)
+    }
+    #endif
+}
 
 enum MobileDictationError: LocalizedError {
-    case microphoneDenied, speechDenied, noInput, unsupportedLanguage, tooShort, unavailable
-    case audioSharingDisabled(String), missingKey(String)
-    case translationNeedsOnlineRecognition, translationNeedsTextModel
-    case selectionNeedsTextModel, selectionEditFailed
+    case microphoneDenied, noInput, tooShort, unavailable
+    case gatewayNotProvisioned, selectionEditFailed
 
     var errorDescription: String? {
         switch self {
         case .microphoneDenied: return String(localized: "Allow microphone access in Settings.")
-        case .speechDenied: return String(localized: "Allow speech recognition in Settings.")
         case .noInput: return String(localized: "The microphone is unavailable.")
-        case .unsupportedLanguage: return String(localized: "This layout’s speech language is unavailable on this device. Choose an online recognition model.")
-        case .audioSharingDisabled(let name): return String(localized: "Allow sending dictation audio to \(name) in Tacet.")
-        case .missingKey(let name): return String(localized: "Save an API key for \(name) in Tacet.")
         case .tooShort: return String(localized: "No speech was recorded. Try a longer phrase.")
-        case .unavailable: return String(localized: "The recognition service is unavailable.")
-        case .translationNeedsOnlineRecognition: return String(localized: "Choose an online recognition model and allow audio sharing to detect the spoken language.")
-        case .translationNeedsTextModel: return String(localized: "Save a key for a text model to translate dictation.")
-        case .selectionNeedsTextModel: return String(localized: "Choose a text model in Tacet to edit selected text.")
+        case .unavailable: return String(localized: "The Tacet gateway is unavailable. Try again.")
+        case .gatewayNotProvisioned: return String(localized: "This iPhone is not connected to Tacet Gateway yet.")
         case .selectionEditFailed: return String(localized: "The voice command could not be applied. The selected text was kept.")
         }
     }
 }
 
-enum MobileRecognition: String, CaseIterable, Identifiable, Sendable {
-    case apple, groq, groqLarge, openai, openrouter
-
+enum MobileRecognition {
     struct Result: Equatable, Sendable {
         let text: String
         var language: String? = nil
     }
 
-    struct Model: Equatable, Sendable {
-        let engine: MobileRecognition
-        let id: String
-
-        init(_ engine: MobileRecognition, modelID: String = "") {
-            self.engine = engine
-            let manual = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
-            id = engine == .openrouter && !manual.isEmpty ? manual : engine.defaultModelID
-        }
-
-        var name: String { engine == .openrouter ? "\(engine.name) · \(id)" : engine.name }
-    }
-
-    var id: String { rawValue }
-
-    var cloudProvider: MobileCloudProvider? {
-        switch self {
-        case .apple: nil
-        case .groq, .groqLarge: .groq
-        case .openai: .openai
-        case .openrouter: .openrouter
-        }
-    }
-
-    var name: String {
-        switch self {
-        case .apple: return String(localized: "Apple · on this iPhone")
-        case .groq: return "Groq · Whisper Large v3 Turbo"
-        case .groqLarge: return "Groq · Whisper Large v3"
-        case .openai: return "OpenAI · Whisper"
-        case .openrouter: return "OpenRouter"
-        }
-    }
-
-    var defaultModelID: String {
-        if self == .groqLarge { return "whisper-large-v3" }
-        guard let provider = cloudProvider else { return "" }
-        return ProviderCatalog.defaultASRModel(for: provider.rawValue)
-    }
-
-    func prepare() async throws {
-        switch self {
-        case .apple:
-            let authorization = await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-            }
-            guard authorization == .authorized else { throw MobileDictationError.speechDenied }
-        default:
-            guard let provider = cloudProvider else { throw MobileDictationError.unavailable }
-            guard provider.allowsAudio else { throw MobileDictationError.audioSharingDisabled(provider.name) }
-            guard provider.hasKey else { throw MobileDictationError.missingKey(provider.name) }
-        }
-    }
-
-    func transcribe(_ clip: AudioClip, locale: String, languageHint: String?, modelID: String) async throws -> Result {
-        switch self {
-        case .apple:
-            guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)),
-                  recognizer.supportsOnDeviceRecognition else { throw MobileDictationError.unsupportedLanguage }
-            let request = SFSpeechURLRecognitionRequest(url: clip.url)
-            request.requiresOnDeviceRecognition = true
-            request.shouldReportPartialResults = false
-            let results = AsyncThrowingStream<String, Error> { continuation in
-                let operation = recognizer.recognitionTask(with: request) { result, error in
-                    if let result, result.isFinal {
-                        continuation.yield(result.bestTranscription.formattedString)
-                        continuation.finish()
-                    } else if let error {
-                        continuation.finish(throwing: error)
-                    }
-                }
-                continuation.onTermination = { _ in operation.cancel() }
-            }
-            for try await text in results { return Result(text: text, language: LanguagePolicy.normalize(locale)) }
-            throw RecognitionError.empty
-        default:
-            guard let provider = cloudProvider, provider.allowsAudio,
-                  let spec = ProviderCatalog.spec(provider.rawValue),
-                  let endpoint = spec.endpoint("audio/transcriptions") else { throw MobileDictationError.unavailable }
-            let engine = CloudRecognizer(configuration: .init(
-                id: spec.id, displayName: spec.name, baseURL: endpoint,
-                model: modelID,
-                spec: spec, timeout: 22
-            ))
-            let response = try await engine.transcribe(clip, language: languageHint)
-            return Result(text: response.text, language: response.language)
-        }
-    }
-
-    static func transcribe(primary: Model, fallback: Model?,
-                           timeout: TimeInterval = DictationBridge.recognitionTimeout,
-                           using recognize: @escaping @Sendable (Model) async throws -> Result) async throws -> Result {
-        let models = [primary, fallback == primary ? nil : fallback].compactMap { $0 }
-        var errors: [String] = []
-        for model in models {
-            try Task.checkCancellation()
+    static func transcribe(_ clip: AudioClip, languageHint: String?) async throws -> Result {
+        guard MobileGateway.isProvisioned else { throw MobileDictationError.gatewayNotProvisioned }
+        guard let spec = ProviderCatalog.spec(EngineID.hostedGateway),
+              let url = spec.endpoint("audio/transcriptions") else { throw MobileDictationError.unavailable }
+        let engine = CloudRecognizer(configuration: .init(
+            id: spec.id, displayName: spec.name, baseURL: url,
+            model: ProviderCatalog.defaultASRModel(for: spec.id), spec: spec,
+            timeout: ProviderCatalog.gatewayRequestTimeout
+        ))
+        return try await validatedTranscription {
             do {
-                let result = try await withTimeout(timeout) {
-                    try await recognize(model)
-                }
-                try Task.checkCancellation()
-                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { throw RecognitionError.empty }
-                guard Plausibility.hasSpeechText(text) else { throw RecognitionError.noSpeech }
-                return Result(text: text, language: result.language)
-            } catch {
-                try Task.checkCancellation()
-                errors.append("\(model.name): \(error.localizedDescription)")
+                let response = try await engine.transcribe(clip, language: languageHint)
+                return Result(text: response.text, language: response.language)
+            } catch RecognitionError.http(let status, _) where status == 401 {
+                throw MobileDictationError.gatewayNotProvisioned
+            } catch RecognitionError.http(let status, _) where status >= 500 {
+                throw MobileDictationError.unavailable
             }
         }
-        throw RecognitionError.failed(errors.joined(separator: "\n"))
-    }
-}
-
-enum MobileCloudProvider: String, CaseIterable, Identifiable {
-    case groq, openai, openrouter
-
-    var id: String { rawValue }
-    var name: String { ProviderCatalog.spec(rawValue)?.name ?? rawValue }
-    var hasKey: Bool { Keychain.string(rawValue) != nil }
-    var audioPreference: String { "ios.audioConsent.\(rawValue)" }
-    var allowsAudio: Bool { UserDefaults.standard.bool(forKey: audioPreference) }
-
-    func cleanup(model: String, fallback: Bool) -> CleanupConfiguration? {
-        guard hasKey, let spec = ProviderCatalog.spec(rawValue) else { return nil }
-        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return CleanupConfiguration(provider: rawValue, baseURL: spec.baseURL,
-                                    model: model.isEmpty ? defaultChatModel(fallback: fallback) : model,
-                                    timeout: DictationBridge.correctionTimeout)
     }
 
-    func defaultChatModel(fallback: Bool) -> String {
-        if self == .groq, fallback { return "openai/gpt-oss-20b" }
-        return ProviderCatalog.defaultChatModel(for: rawValue)
+    static func validatedTranscription(timeout: TimeInterval = DictationBridge.recognitionTimeout,
+                                        using recognize: @escaping @Sendable () async throws -> Result) async throws -> Result {
+        try Task.checkCancellation()
+        let result = try await withTimeout(timeout, operation: recognize)
+        try Task.checkCancellation()
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw RecognitionError.empty }
+        guard Plausibility.hasSpeechText(text) else { throw RecognitionError.noSpeech }
+        return Result(text: text, language: result.language)
     }
 }
