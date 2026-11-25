@@ -5,6 +5,7 @@ enum MobileDictationError: LocalizedError {
     case microphoneDenied, speechDenied, noInput, unsupportedLanguage, tooShort, unavailable
     case audioSharingDisabled(String), missingKey(String)
     case translationNeedsOnlineRecognition, translationNeedsTextModel
+    case selectionNeedsTextModel, selectionEditFailed
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum MobileDictationError: LocalizedError {
         case .unavailable: return String(localized: "The recognition service is unavailable.")
         case .translationNeedsOnlineRecognition: return String(localized: "Choose an online recognition model and allow audio sharing to detect the spoken language.")
         case .translationNeedsTextModel: return String(localized: "Save a key for a text model to translate dictation.")
+        case .selectionNeedsTextModel: return String(localized: "Choose a text model in Tacet to edit selected text.")
+        case .selectionEditFailed: return String(localized: "The voice command could not be applied. The selected text was kept.")
         }
     }
 }
@@ -133,6 +136,7 @@ enum MobileRecognition: String, CaseIterable, Identifiable, Sendable {
                 try Task.checkCancellation()
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { throw RecognitionError.empty }
+                guard Plausibility.hasSpeechText(text) else { throw RecognitionError.noSpeech }
                 return Result(text: text, language: result.language)
             } catch {
                 try Task.checkCancellation()

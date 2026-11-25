@@ -15,3 +15,10 @@
 "The text field changed. Dictate again here." = "Поле змінилося. Продиктуйте ще раз.";
 "The session ended. Start a new session to dictate." = "Сесія завершилась. Увімкніть нову в Tacet.";
 "Dictation failed. Try again." = "Не вдалося розпізнати мовлення. Спробуйте ще раз.";
+"Replaces the word you are typing." = "Замінює слово, яке ви набираєте.";
+"Hold and drag to move the cursor." = "Утримуйте й перетягніть, щоб перемістити курсор.";
+"Trackpad · Drag to move the cursor" = "Трекпад · Проведіть, щоб перемістити курсор";
+"Select up to 8,000 characters for a voice command." = "Для голосової команди виділіть до 8 000 символів.";
+"Keyboard languages" = "Мови клавіатури";
+"Hold to see all enabled keyboard languages." = "Затисніть, щоб побачити всі ввімкнені мови клавіатури.";
+"Close" = "Закрити";

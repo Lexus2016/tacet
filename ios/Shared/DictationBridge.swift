@@ -4,7 +4,8 @@ import Security
 enum DictationBridge {
     static let recognitionTimeout: TimeInterval = 25
     static let correctionTimeout: TimeInterval = 5
-    static let processingTimeout = 2 * (recognitionTimeout + correctionTimeout + 2) + 5
+    static let processingTimeout = 2 * (recognitionTimeout + correctionTimeout + 4) + 5
+    static let selectionLimit = 8_000
     static let wakeTimeout: TimeInterval = 45
 
     struct Command: Codable {
@@ -15,14 +16,16 @@ enum DictationBridge {
         let request: UUID
         let action: Action
         let layout: KeyboardLayout?
+        let selection: String?
 
-        init(session: UUID, request: UUID, action: Action, layout: KeyboardLayout? = nil) {
+        init(session: UUID, request: UUID, action: Action, layout: KeyboardLayout? = nil, selection: String? = nil) {
             nonce = UUID()
             time = Date()
             self.session = session
             self.request = request
             self.action = action
             self.layout = layout
+            self.selection = selection
         }
     }
 
@@ -44,11 +47,13 @@ enum DictationBridge {
     enum BridgeError: LocalizedError {
         case missingGroup
         case keychain(OSStatus)
+        case selectionTooLong
 
         var errorDescription: String? {
             switch self {
             case .missingGroup: return "The shared dictation access group is unavailable."
             case .keychain(let status): return "The dictation connection could not open (\(status))."
+            case .selectionTooLong: return String(localized: "Select up to 8,000 characters for a voice command.")
             }
         }
     }

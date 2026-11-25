@@ -2,9 +2,11 @@ import Foundation
 
 enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
     case english = "en", ukrainian = "uk", german = "de", spanish = "es", french = "fr"
-    case italian = "it", polish = "pl", portuguese = "pt", russian = "ru"
+    case italian = "it", polish = "pl", portuguese = "pt", russian = "ru", czech = "cs"
 
-    static let defaults: [Self] = [.english, .ukrainian, .russian]
+    static let defaults: [Self] = [
+        .english, .ukrainian, .german, .spanish, .french, .italian, .portuguese, .russian, .czech
+    ]
 
     var id: String { rawValue }
 
@@ -19,6 +21,7 @@ enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
         case .polish: "pl-PL"
         case .portuguese: "pt-PT"
         case .russian: "ru-RU"
+        case .czech: "cs-CZ"
         }
     }
 
@@ -41,6 +44,7 @@ enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
         case .polish: return "Polski"
         case .portuguese: return "Português"
         case .russian: return "Русский"
+        case .czech: return "Čeština"
         }
     }
 
@@ -55,6 +59,7 @@ enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
         case .italian: return "spazio"
         case .polish: return "spacja"
         case .russian: return "пробел"
+        case .czech: return "mezerník"
         }
     }
 
@@ -65,6 +70,7 @@ enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
         case .spanish: return ["qwertyuiop", "asdfghjklñ", "zxcvbnm"]
         case .french: return ["azertyuiop", "qsdfghjklm", "wxcvbn"]
         case .russian: return ["йцукенгшщзхъ", "фывапролджэ", "ячсмитьбюё"]
+        case .czech: return ["qwertzuiop", "asdfghjkl", "yxcvbnm"]
         case .english, .italian, .polish, .portuguese:
             return ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
         }
@@ -81,6 +87,9 @@ enum KeyboardLayout: String, Codable, CaseIterable, Identifiable, Sendable {
         case .italian: accented = ["a": "à", "e": "èé", "i": "ì", "o": "òó", "u": "ù"]
         case .polish: accented = ["a": "ą", "c": "ć", "e": "ę", "l": "ł", "n": "ń", "o": "ó", "s": "ś", "z": "źż"]
         case .portuguese: accented = ["a": "áàâã", "c": "ç", "e": "éê", "i": "í", "o": "óôõ", "u": "úü"]
+        case .czech:
+            accented = ["a": "á", "c": "č", "d": "ď", "e": "ěé", "i": "í", "n": "ň",
+                        "o": "ó", "r": "ř", "s": "š", "t": "ť", "u": "ůú", "y": "ý", "z": "ž"]
         case .english, .ukrainian, .russian: return ""
         }
         return accented[letter] ?? ""

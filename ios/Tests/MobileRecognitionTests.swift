@@ -14,6 +14,19 @@ final class MobileRecognitionTests: XCTestCase {
         XCTAssertEqual(models, [.init(.apple)])
     }
 
+    func testNonSpeechMarkersUseFallbackAndKeepShortSpeech() async throws {
+        for marker in ["♪", "...", "[music]"] {
+            let calls = Calls()
+            let result = try await MobileRecognition.transcribe(primary: .init(.apple), fallback: .init(.groq)) { model in
+                await calls.add(model)
+                return .init(text: model.engine == .apple ? marker : "Thank you.")
+            }
+            XCTAssertEqual(result.text, "Thank you.")
+            let models = await calls.models
+            XCTAssertEqual(models, [.init(.apple), .init(.groq)])
+        }
+    }
+
     func testEmptyErrorAndTimeoutSwitchToFallback() async throws {
         for failure in [Failure.empty, .unavailable, .timeout] {
             let calls = Calls()

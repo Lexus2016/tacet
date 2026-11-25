@@ -453,7 +453,14 @@ final class DictationController: ObservableObject {
             var notes: [String] = []
 
             if output.partial {
-                notes.append("Partially transcribed: \(output.totalParts - output.failedParts) of \(output.totalParts) parts")
+                let completed = output.totalParts - output.failedParts
+                let note = String(localized: "Only \(completed) of \(output.totalParts) parts were transcribed. The partial text is in History.")
+                await deliver(text: text, raw: text, transcript: output.transcript, clip: clip,
+                              latency: Date().timeIntervalSince(started), appName: appName,
+                              cleanupEngine: nil, existingEntryID: existingEntryID, allowPaste: false,
+                              allowClipboard: false, inBackground: inBackground, focus: focus,
+                              note: note, partial: true)
+                return
             }
 
             let configuration = settings.cleanupConfiguration
@@ -616,7 +623,8 @@ final class DictationController: ObservableObject {
                          allowClipboard: Bool,
                          inBackground: Bool,
                          focus: SelectionReader.Focus?,
-                         note: String?) async {
+                         note: String?,
+                         partial: Bool = false) async {
         // A background attempt must not revive a deleted history entry.
         // Фоновий повтор не має відновлювати видалений запис історії.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
@@ -694,13 +702,13 @@ final class DictationController: ObservableObject {
             message = String(localized: "Recovered — open History to copy")
         }
         status(message)
-        let failedToDeliver = !pasted && !copied && (allowPaste || focus != nil)
+        let failedToDeliver = partial || (!pasted && !copied && (allowPaste || focus != nil))
         HUDController.shared.finish(error: settings.showHUD && failedToDeliver ? message : nil)
 
         phase = .idle
         lastFailure = nil
         scheduleIdleUnload()
-        if settings.playSounds { SoundService.shared.play(.success, style: settings.soundStyle) }
+        if settings.playSounds { SoundService.shared.play(partial ? .error : .success, style: settings.soundStyle) }
     }
 
     private func recordFailure(_ failure: PipelineFailure,

@@ -14,7 +14,7 @@ struct LanguageDecision: Sendable {
 ///
 /// The Decisions API is not OpenAI-compatible: it takes a `state` and typed
 /// `questions`, and returns calibrated probabilities instead of text.
-final class VoiceLanguageDetector {
+final class VoiceLanguageDetector: Sendable {
     struct Configuration: Sendable {
         let model: String
         let timeout: TimeInterval
@@ -36,19 +36,25 @@ final class VoiceLanguageDetector {
     /// Returns nil on any failure: the detector is an enhancement, never a
     /// dependency, and dictation must continue without it.
     func detect(_ clip: AudioClip) async -> LanguageDecision? {
+        try? await withTimeout(configuration.timeout) { await self.requestDecision(clip) }
+    }
+
+    private func requestDecision(_ clip: AudioClip) async -> LanguageDecision? {
         guard let key = Keychain.secret(KeychainAccount.openRouter, environment: "OPENROUTER_API_KEY"),
               !configuration.model.isEmpty,
               let audio = try? Data(contentsOf: clip.url)
         else { return nil }
 
         var request = URLRequest(url: ProviderHealth.voiceLanguageURL)
+        request.timeoutInterval = configuration.timeout
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")
         request.setValue("Tacet", forHTTPHeaderField: "X-Title")
 
-        let criteria = Dictionary(uniqueKeysWithValues: configuration.candidates.map { ($0, Self.displayName($0)) })
+        let criteria = Dictionary(configuration.candidates.map { ($0, Self.displayName($0)) },
+                                  uniquingKeysWith: { first, _ in first })
         let payload: [String: Any] = [
             "model": configuration.model,
             "state": [

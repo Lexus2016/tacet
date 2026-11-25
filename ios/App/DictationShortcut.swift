@@ -9,6 +9,7 @@ enum MobilePreferences {
     static let locale = "ios.speechLocale"
     static let defaultLocale = "en-US"
     static let cleanupEnabled = "ios.cleanupEnabled"
+    static let selectionEditing = "ios.selectionEditing"
     static let translateToLayout = "ios.translateToLayout"
     static let cleanupProvider = "ios.cleanupProvider"
     static let cleanupModel = "ios.cleanupModel"

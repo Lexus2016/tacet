@@ -99,12 +99,7 @@ struct AudioClip: Sendable {
 
         while start < samples.count {
             let hardEnd = min(samples.count, start + chunkSamples)
-            var end = hardEnd == samples.count ? hardEnd : quietCut(from: start, to: hardEnd)
-
-            // Do not leave a sliver behind: merge a short tail into this piece.
-            if samples.count - end < chunkSamples / 3 {
-                end = samples.count
-            }
+            let end = hardEnd == samples.count ? hardEnd : quietCut(from: start, to: hardEnd)
 
             let slice = Array(samples[start..<end])
             guard !slice.isEmpty, let url = Self.writeTemporaryWav(slice) else {

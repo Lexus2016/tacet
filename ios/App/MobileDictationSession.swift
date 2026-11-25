@@ -17,6 +17,7 @@ final class MobileDictationSession: ObservableObject {
     private var text: String?
     private var warning: String?
     private var requestLayout: KeyboardLayout?
+    private var requestSelection: String?
     private var phaseUntil = Date.distantFuture
     private var lastNonce: UUID?
     private var lastPublish = Date.distantPast
@@ -85,7 +86,7 @@ final class MobileDictationSession: ObservableObject {
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .milliseconds(160)) } catch { return }
                     guard let self else { return }
-                    tick()
+                    await tick()
                 }
             }
             return true
@@ -114,32 +115,46 @@ final class MobileDictationSession: ObservableObject {
         phaseUntil = .distantFuture
         currentRequest = nil
         requestLayout = nil
+        requestSelection = nil
         text = nil
         warning = nil
         lastPublish = .distantPast
     }
 
-    private func tick() {
-        let now = Date()
-        guard let deadline, let session, now < deadline, audio.isRunning else {
+    private func tick() async {
+        guard let deadline, let session else { return }
+        guard audio.isRunning else {
+            end(message: String(localized: "The session ended. Start a new session to dictate."))
+            return
+        }
+        if Date() >= deadline, phase == .ready {
             end(message: String(localized: "The session ended. Start a new session to dictate."))
             return
         }
         do {
-            if let command = try DictationBridge.command(), command.session == session,
+            let command = try await Task.detached(priority: .userInitiated) { try DictationBridge.command() }.value
+            guard !Task.isCancelled, self.session == session else { return }
+            let now = Date()
+            if let command, command.session == session,
+               command.action != .start || now < deadline,
                command.nonce != lastNonce, abs(now.timeIntervalSince(command.time)) < 4 {
                 lastNonce = command.nonce
                 handle(command)
             }
-            if now >= phaseUntil {
+            if now >= phaseUntil || (now >= deadline && phase == .recording) {
                 switch phase {
                 case .recording: finishRecording()
                 case .result, .error: setReady()
                 case .ready, .processing: break
                 }
             }
+            if now >= deadline, phase == .ready {
+                end(message: String(localized: "The session ended. Start a new session to dictate."))
+                return
+            }
             if now.timeIntervalSince(lastPublish) >= 0.8 { try publish() }
         } catch {
+            guard !Task.isCancelled, self.session == session else { return }
             end(message: error.localizedDescription)
         }
     }
@@ -148,6 +163,20 @@ final class MobileDictationSession: ObservableObject {
         if command.action == .start, phase == .ready {
             currentRequest = command.request
             requestLayout = command.layout
+            if UserDefaults.standard.object(forKey: MobilePreferences.selectionEditing) as? Bool ?? true {
+                requestSelection = command.selection.flatMap { $0.isEmpty ? nil : $0 }
+                if let requestSelection {
+                    guard requestSelection.prefix(DictationBridge.selectionLimit + 1).count <= DictationBridge.selectionLimit else {
+                        complete(request: command.request, phase: .error, text: DictationBridge.BridgeError.selectionTooLong.localizedDescription)
+                        return
+                    }
+                    let models = textModels()
+                    guard models.primary?.isConfigured == true || models.fallback?.isConfigured == true else {
+                        complete(request: command.request, phase: .error, text: MobileDictationError.selectionNeedsTextModel.localizedDescription)
+                        return
+                    }
+                }
+            }
             audio.begin()
             phase = .recording
             phaseUntil = Date().addingTimeInterval(60)
@@ -179,8 +208,9 @@ final class MobileDictationSession: ObservableObject {
         let primary = self.primary
         let fallback = self.fallback
         let layout = requestLayout
+        let selection = requestSelection
         let locale = layout?.speechLocale ?? self.locale
-        let languageHint = translatesToLayout ? nil : LanguagePolicy.normalize(locale)
+        let languageHint = translatesToLayout || selection != nil ? nil : LanguagePolicy.normalize(locale)
         recognition = Task {
             do {
                 let clip = try await Task.detached(priority: .userInitiated) {
@@ -193,7 +223,15 @@ final class MobileDictationSession: ObservableObject {
                 }
                 try Task.checkCancellation()
                 let models = textModels()
-                let result = await MobileTextOutput().prepare(
+                let output = MobileTextOutput()
+                if let selection {
+                    let replacement = try await output.editSelection(
+                        selection, instruction: transcript.text, primary: models.primary, fallback: models.fallback
+                    )
+                    complete(request: request, phase: .result, text: replacement)
+                    return
+                }
+                let result = await output.prepare(
                     transcript, target: translatesToLayout ? layout?.rawValue ?? LanguagePolicy.normalize(locale) : nil,
                     correct: UserDefaults.standard.bool(forKey: MobilePreferences.cleanupEnabled),
                     primary: models.primary, fallback: models.fallback
@@ -223,6 +261,7 @@ final class MobileDictationSession: ObservableObject {
     private func complete(request: UUID, phase: DictationBridge.Status.Phase, text: String, warning: String? = nil) {
         guard !Task.isCancelled, currentRequest == request else { return }
         recognition = nil
+        requestSelection = nil
         self.phase = phase
         self.text = text
         self.warning = warning
@@ -233,8 +272,9 @@ final class MobileDictationSession: ObservableObject {
     private func publish() throws {
         guard let session, let deadline else { return }
         let now = Date()
+        let heartbeat = now.addingTimeInterval(4)
         try DictationBridge.publish(.init(session: session, request: currentRequest, phase: phase,
-                                           expires: min(deadline, now.addingTimeInterval(4)),
+                                           expires: phase == .ready ? min(deadline, heartbeat) : heartbeat,
                                            text: text, warning: warning))
         lastPublish = now
     }

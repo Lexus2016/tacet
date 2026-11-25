@@ -10,7 +10,7 @@ settings:
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "12"
+    CURRENT_PROJECT_VERSION: "28"
 packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git

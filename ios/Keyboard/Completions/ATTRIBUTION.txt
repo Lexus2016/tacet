@@ -1,0 +1,17 @@
+Tacet's offline completion vocabulary is adapted from hermitdave's
+FrequencyWords, using its 2018 OpenSubtitles word-frequency lists.
+https://github.com/hermitdave/FrequencyWords/tree/525f9b560de45753a5ea01069454e72e9aa541c6
+
+The adapted word lists retain frequency order, omit counts, and keep the first
+3,000 alphabetic entries per language after normalization and filtering. These
+lists are distributed under CC BY-SA 4.0.
+https://creativecommons.org/licenses/by-sa/4.0/
+Ukrainian entries were also checked against the Ukrainian spelling dictionary
+to remove words carried over from Russian subtitles.
+
+Словник Tacet адаптовано зі списків FrequencyWords (hermitdave)
+на основі OpenSubtitles 2018. Збережено порядок за частотою, вилучено частоти й
+залишено перші 3 000 слів кожної мови після нормалізації та фільтрування.
+Списки поширюються за ліцензією CC BY-SA 4.0.
+Українські слова також перевірено за українським правописом, щоб прибрати
+російські слова з вихідних субтитрів.

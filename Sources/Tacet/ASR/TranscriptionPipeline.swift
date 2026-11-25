@@ -22,7 +22,12 @@ final class TranscriptionPipeline {
         if clip.duration > 600 {
             return await transcribeChunked(clip, settings: settings, engines: engines)
         }
+        return await transcribeSingle(clip, settings: settings, engines: engines)
+    }
 
+    private func transcribeSingle(_ clip: AudioClip,
+                                  settings: PipelineSettings,
+                                  engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
         var attempts: [Attempt] = []
 
         // Start the voice-based language check alongside the first engine: it
@@ -52,7 +57,7 @@ final class TranscriptionPipeline {
                     try await recognizer.transcribe(clip, language: settings.languageOverride)
                 }
 
-                guard Plausibility.isAcceptable(transcript.text, duration: clip.duration) else {
+                guard Plausibility.isAcceptable(transcript.text) else {
                     throw RecognitionError.noSpeech
                 }
 
@@ -66,7 +71,7 @@ final class TranscriptionPipeline {
                     // better result.
                     if let second = try? await withTimeout(timeout, operation: {
                         try await recognizer.transcribe(clip, language: language)
-                    }), Plausibility.isAcceptable(second.text, duration: clip.duration) {
+                    }), Plausibility.isAcceptable(second.text) {
                         transcript = LanguagePolicy.pick(first: transcript,
                                                          second: second,
                                                          secondRequested: language)
@@ -77,7 +82,7 @@ final class TranscriptionPipeline {
                                                                   expected: settings.expectedLanguage) {
                     if let second = try? await withTimeout(timeout, operation: {
                         try await recognizer.transcribe(clip, language: alternate)
-                    }), Plausibility.isAcceptable(second.text, duration: clip.duration) {
+                    }), Plausibility.isAcceptable(second.text) {
                         transcript = LanguagePolicy.pick(first: transcript,
                                                          second: second,
                                                          secondRequested: alternate)
@@ -113,14 +118,20 @@ final class TranscriptionPipeline {
             }
         }
 
+        guard chunks.count > 1, chunks.allSatisfy({ $0.duration <= 480 }) else {
+            let message = String(localized: "Could not split the recording. The original audio was kept.")
+            return .failure(PipelineFailure(attempts: [Attempt(engine: "audio", error: message, latency: 0)]))
+        }
         for chunk in chunks {
-            let result = await transcribe(chunk, settings: settings, engines: engines)
+            if Task.isCancelled { return .failure(PipelineFailure(attempts: attempts)) }
+            let result = await transcribeSingle(chunk, settings: settings, engines: engines)
             switch result {
             case .success(let output):
                 texts.append(output.transcript.text)
                 if first == nil { first = output.transcript }
                 attempts.append(contentsOf: output.attempts)
-            case .failure:
+            case .failure(let failure):
+                attempts.append(contentsOf: failure.attempts)
                 failures += 1
             }
         }

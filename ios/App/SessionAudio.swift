@@ -14,6 +14,7 @@ final class SessionAudio {
     func arm() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement)
+        try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try session.setActive(true)
         do {
             let input = engine.inputNode

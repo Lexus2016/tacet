@@ -71,6 +71,15 @@ final class LanguagePolicyTests: XCTestCase {
         XCTAssertNil(LanguagePolicy.alternate(for: result))
     }
 
+    func testCyrillicLettersDoNotOverrideOtherReportedLanguages() {
+        for (text, language) in [("България е красива.", "bg"), ("Кыргызстандын тоолору", "ky")] {
+            let result = transcript(text, language: language)
+            XCTAssertNil(LanguagePolicy.alternate(for: result))
+            XCTAssertNil(LanguagePolicy.alternate(for: result, expected: language))
+            XCTAssertEqual(LanguagePolicy.adjustedScore(result, requested: language), result.score)
+        }
+    }
+
     func testRememberedLanguageSkipsTheSecondDecode() {
         let result = transcript("Добрий день", language: "uk")
         XCTAssertNil(LanguagePolicy.alternate(for: result, expected: "uk"))
@@ -147,20 +156,24 @@ final class CleanupGuardTests: XCTestCase {
 
 final class PlausibilityTests: XCTestCase {
     func testKnownHallucinationsAreRejected() {
-        XCTAssertFalse(Plausibility.isAcceptable("Thank you.", duration: 4))
-        XCTAssertFalse(Plausibility.isAcceptable("Продолжение следует...", duration: 4))
+        XCTAssertFalse(Plausibility.isAcceptable("Thanks for watching!"))
+        XCTAssertFalse(Plausibility.isAcceptable("Продолжение следует..."))
     }
 
     func testShortRealAnswerIsAccepted() {
-        XCTAssertTrue(Plausibility.isAcceptable("Так", duration: 0.6))
+        for phrase in ["Так", "Thank you.", "Bye", "好的", "OK"] {
+            XCTAssertTrue(Plausibility.isAcceptable(phrase))
+        }
     }
 
     func testEmptyIsRejected() {
-        XCTAssertFalse(Plausibility.isAcceptable("   ", duration: 1))
+        XCTAssertFalse(Plausibility.isAcceptable("   "))
     }
 
-    func testTooFewCharactersForLongAudioIsRejected() {
-        XCTAssertFalse(Plausibility.isAcceptable("ok", duration: 5))
+    func testNonSpeechAnnotationsAreRejected() {
+        for marker in ["...", "♪", " [Music] ", "[applause]", "(music)"] {
+            XCTAssertFalse(Plausibility.isAcceptable(marker))
+        }
     }
 }
 
@@ -307,7 +320,8 @@ final class AppPresentationTests: XCTestCase {
     }
 }
 
-final class AudioChunkTests: XCTestCase {    private func makeClip(seconds: Double) -> AudioClip {
+final class AudioChunkTests: XCTestCase {
+    private func makeClip(seconds: Double) -> AudioClip {
         let count = Int(seconds * 16_000)
         let samples = (0..<count).map { Float(sin(Double($0) * 0.01) * 0.2) }
         return AudioClip(url: URL(fileURLWithPath: "/tmp/tacet-none.wav"),
@@ -324,11 +338,69 @@ final class AudioChunkTests: XCTestCase {    private func makeClip(seconds: Doub
         let clip = makeClip(seconds: 30)
         let chunks = clip.chunked(seconds: 10)
 
-        XCTAssertEqual(chunks.count, 3)
+        defer { chunks.forEach { try? FileManager.default.removeItem(at: $0.url) } }
+        XCTAssertGreaterThanOrEqual(chunks.count, 3)
+        XCTAssertEqual(chunks.reduce(0) { $0 + $1.samples.count }, clip.samples.count)
         for chunk in chunks {
-            XCTAssertGreaterThan(chunk.duration, 5)
-            XCTAssertLessThanOrEqual(chunk.duration, 14)
-            try? FileManager.default.removeItem(at: chunk.url)
+            XCTAssertGreaterThan(chunk.duration, 0)
+            XCTAssertLessThanOrEqual(chunk.duration, 10)
         }
+    }
+
+    func testLongRecordingCannotReturnAnOversizedTail() {
+        let samples = [Float](repeating: 0.2, count: 601 * 16_000)
+        let clip = AudioClip(url: URL(fileURLWithPath: "/tmp/tacet-original.wav"), duration: 601, samples: samples)
+        let chunks = clip.chunked(seconds: 480)
+        defer { chunks.filter { $0.url != clip.url }.forEach { try? FileManager.default.removeItem(at: $0.url) } }
+        XCTAssertEqual(chunks.count, 2)
+        XCTAssertTrue(chunks.allSatisfy { $0.duration <= 480 && $0.url != clip.url })
+        XCTAssertEqual(chunks.reduce(0) { $0 + $1.samples.count }, samples.count)
+    }
+}
+
+final class WavRepairTests: XCTestCase {
+    func testValidTrailingMetadataIsPreserved() throws {
+        let wave = makeWave(audio: Data(repeating: 16, count: 8), trailing: Data("LIST\u{04}\0\0\0INFO".utf8))
+        try withTemporaryFile(wave) { url in
+            XCTAssertFalse(WavRepair.repairIfNeeded(url: url))
+            XCTAssertEqual(try Data(contentsOf: url), wave)
+        }
+    }
+
+    func testInterruptedPCMHeaderIsRecovered() throws {
+        let complete = makeWave(audio: Data(repeating: 16, count: 20), ancillary: Data("JUNK\u{04}\0\0\0data".utf8))
+        var interrupted = complete
+        interrupted.replaceSubrange(4..<8, with: [0, 0, 0, 0])
+        interrupted.replaceSubrange(52..<56, with: [0, 0, 0, 0])
+        try withTemporaryFile(interrupted) { url in
+            XCTAssertTrue(WavRepair.repairIfNeeded(url: url))
+            XCTAssertEqual(try Data(contentsOf: url), complete)
+        }
+    }
+
+    func testNonWavInputIsNeverModified() throws {
+        let bytes = Data(("not a waveform with a data marker " + String(repeating: "a", count: 40)).utf8)
+        try withTemporaryFile(bytes) { url in
+            XCTAssertFalse(WavRepair.repairIfNeeded(url: url))
+            XCTAssertEqual(try Data(contentsOf: url), bytes)
+        }
+    }
+
+    private func makeWave(audio: Data, ancillary: Data = Data(), trailing: Data = Data()) -> Data {
+        let format = Data([1, 0, 1, 0, 128, 62, 0, 0, 0, 125, 0, 0, 2, 0, 16, 0])
+        let body = Data("WAVEfmt \u{10}\0\0\0".utf8) + format + ancillary + Data("data".utf8)
+            + size(audio.count) + audio + trailing
+        return Data("RIFF".utf8) + size(body.count) + body
+    }
+
+    private func size(_ value: Int) -> Data {
+        withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) }
+    }
+
+    private func withTemporaryFile(_ data: Data, run: (URL) throws -> Void) throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try data.write(to: url)
+        try run(url)
     }
 }

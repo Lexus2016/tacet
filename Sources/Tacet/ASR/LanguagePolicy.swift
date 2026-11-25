@@ -47,7 +47,7 @@ enum LanguagePolicy {
     /// Not a claim that they sound alike — just where the extra check is worth
     /// one request.
     private static let siblings: [String: String] = [
-        "uk": "ru", "ru": "uk", "be": "ru", "bg": "ru", "mk": "bg",
+        "uk": "ru", "ru": "uk",
         "pl": "uk", "cs": "sk", "sk": "cs", "hr": "sr", "sl": "hr",
     ]
 
@@ -58,7 +58,8 @@ enum LanguagePolicy {
 
         // Decisive script evidence: the detected language is confirmed, so a
         // second decode would only add cost and a chance to corrupt good text.
-        if let verdict = cyrillicVerdict(transcript.text) {
+        if detected == nil || detected == "uk" || detected == "ru",
+           let verdict = cyrillicVerdict(transcript.text) {
             return verdict == detected ? nil : verdict
         }
 
@@ -85,7 +86,8 @@ enum LanguagePolicy {
     /// second pass exists to catch.
     static func adjustedScore(_ transcript: Transcript, requested: String?) -> Double {
         var score = transcript.score
-        if let requested, let verdict = cyrillicVerdict(transcript.text), verdict != requested {
+        if let requested, requested == "uk" || requested == "ru",
+           let verdict = cyrillicVerdict(transcript.text), verdict != requested {
             score -= 0.35
         }
         return score
