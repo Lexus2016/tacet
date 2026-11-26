@@ -70,10 +70,10 @@ struct OnboardingView: View {
     private var rail: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Welcome to Tacet")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .padding(.bottom, 2)
             Text("Ten short steps. Each one is something you do, not something you read.")
-                .font(.system(size: 11.5))
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 14)
@@ -83,17 +83,17 @@ struct OnboardingView: View {
                         Circle()
                             .fill(tour.finished.contains(step) ? Theme.success
                                   : step == tour.step ? Theme.accent : Theme.trackFill(scheme))
-                            .frame(width: 22, height: 22)
+                            .frame(width: 26, height: 26)
                         if tour.finished.contains(step) {
-                            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                            Image(systemName: "checkmark").font(.system(size: 11.5, weight: .bold)).foregroundStyle(.white)
                         } else {
                             Text("\(step.rawValue + 1)")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(step == tour.step ? .white : .secondary)
                         }
                     }
                     Text(title(step))
-                        .font(.system(size: 12.5, weight: step == tour.step ? .semibold : .regular))
+                        .font(.system(size: 15, weight: step == tour.step ? .semibold : .regular))
                         .foregroundStyle(step == tour.step ? .primary : .secondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -104,18 +104,18 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 24)
-        .frame(width: 264, alignment: .leading)
+        .frame(width: 310, alignment: .leading)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Step \(tour.step.rawValue + 1) of \(Onboarding.Step.allCases.count)")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.accent)
                 .textCase(.uppercase)
-            Text(title(tour.step)).font(.system(size: 26, weight: .bold))
+            Text(title(tour.step)).font(.system(size: 36, weight: .bold))
             Text(summary(tour.step))
-                .font(.system(size: 13.5))
+                .font(.system(size: 16))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -125,17 +125,17 @@ struct OnboardingView: View {
         HStack(spacing: 12) {
             if tour.canContinue {
                 Label("Done", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15.5, weight: .semibold))
             } else {
-                Label(waiting(tour.step), systemImage: "circle.dotted").foregroundStyle(.secondary)
-                    .font(.system(size: 12.5))
+                Label(waiting(tour.step, attempts: tour.attempts), systemImage: "circle.dotted").foregroundStyle(.secondary)
+                    .font(.system(size: 15))
             }
             Spacer()
             if tour.step != .key {
-                Button("Back") { tour.back() }.buttonStyle(SoftButtonStyle())
+                Button("Back") { tour.back() }.buttonStyle(SoftButtonStyle(large: true))
             }
             Button(tour.isLast ? "Start using Tacet" : "Continue") { tour.advance() }
-                .buttonStyle(SoftProminentButtonStyle())
+                .buttonStyle(SoftProminentButtonStyle(large: true))
                 .disabled(!tour.canContinue)
                 .keyboardShortcut(.defaultAction)
         }
@@ -194,16 +194,17 @@ struct OnboardingView: View {
             }
             field
         case .languages:
-            say("Dictate one phrase, then another in a different language. Nothing to switch.", "Good morning! … Доброго ранку!")
+            sayTwo("Dictate these two phrases one after the other, each in its own dictation. Nothing to switch.",
+                   "Good morning!", "¡Buenos días!")
             if settings.languageMode != "auto" {
                 HStack {
-                    Text("A fixed language is selected, so Tacet will not detect it.").font(.system(size: 12.5))
+                    Text("A fixed language is selected, so Tacet will not detect it.").font(.system(size: 15))
                     Button("Detect automatically") { settings.languageMode = "auto" }.buttonStyle(SoftButtonStyle())
                 }
             }
             if !tour.languages.isEmpty {
                 HStack(spacing: 8) {
-                    Text("Heard so far:").font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    Text("Heard so far:").font(.system(size: 15)).foregroundStyle(.secondary)
                     ForEach(tour.languages, id: \.self) { SoftChip(text: $0.uppercased()) }
                 }
             }
@@ -275,12 +276,32 @@ struct OnboardingView: View {
 
     private func say(_ lead: LocalizedStringKey, _ phrase: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(lead).font(.system(size: 12.5)).foregroundStyle(.secondary)
+            Text(lead).font(.system(size: 15)).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: "quote.opening").foregroundStyle(Theme.accent)
-                Text(phrase).font(.system(size: 17, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                Text(phrase).font(.system(size: 22, weight: .medium)).fixedSize(horizontal: false, vertical: true)
             }
-            Text("Hold \(keyName), speak, release.").font(.system(size: 11.5)).foregroundStyle(.secondary)
+            Text("Hold \(keyName), speak, release.").font(.system(size: 14)).foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).fill(Theme.accent.opacity(0.10)))
+    }
+
+    private func sayTwo(_ lead: LocalizedStringKey, _ first: LocalizedStringKey, _ second: LocalizedStringKey) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(lead).font(.system(size: 15)).foregroundStyle(.secondary)
+            ForEach([(1, first), (2, second)], id: \.0) { number, phrase in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("\(number)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(Theme.accent))
+                    Text(phrase).font(.system(size: 22, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("Hold \(keyName), speak, release.").font(.system(size: 14)).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -290,7 +311,7 @@ struct OnboardingView: View {
     private func task(_ text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "hand.point.right.fill").foregroundStyle(Theme.accent)
-            Text(text).font(.system(size: 13.5)).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -298,8 +319,8 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 12) {
             ForEach([(leftTitle, left, false), (rightTitle, right, true)], id: \.1) { title, text, strong in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(strong ? Theme.accent : .secondary)
-                    Text(text).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(strong ? Theme.accent : .secondary)
+                    Text(text).font(.system(size: 15.5)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -310,13 +331,13 @@ struct OnboardingView: View {
 
     private var field: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Practice field").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            Text("Practice field").font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
             TextEditor(text: $practice)
-                .font(.system(size: 14))
+                .font(.system(size: 17))
                 .focused($practiceFocused)
                 .scrollContentBackground(.hidden)
                 .padding(10)
-                .frame(minHeight: 96, maxHeight: 150)
+                .frame(minHeight: 130, maxHeight: 200)
                 .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(Theme.trackFill(scheme)))
                 .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
                     .stroke(practiceFocused ? Theme.accent.opacity(0.7) : .clear, lineWidth: 1.5))
@@ -422,15 +443,17 @@ struct OnboardingView: View {
         }
     }
 
-    private func waiting(_ step: Onboarding.Step) -> LocalizedStringKey {
+    private func waiting(_ step: Onboarding.Step, attempts: Int) -> LocalizedStringKey {
         switch step {
         case .key: "Waiting for you to press the key"
         case .history: "Waiting for you to open History"
         case .indicator: "Waiting for you to show the indicator"
         case .paste: "Waiting for a dictation with pasting off"
         case .edit, .translateSelection: "Waiting for a voice edit of the selected text"
-        case .translate: "Waiting for a translated dictation"
-        case .languages: "Waiting for two languages"
+        case .translate:
+            attempts > 0 ? "That phrase was not translated. Choose a language different from the one you speak." : "Waiting for a translated dictation"
+        case .languages:
+            attempts > 0 ? "Now dictate the second phrase, in another language." : "Waiting for your first phrase"
         default: "Waiting for your dictation"
         }
     }

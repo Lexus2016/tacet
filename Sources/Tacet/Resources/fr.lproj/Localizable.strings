@@ -142,8 +142,6 @@
 "Let’s meet on Tuesday, no, on Wednesday at three." = "On se voit mardi, non, mercredi à trois heures.";
 "What was heard" = "Ce qui a été entendu";
 "What Tacet wrote" = "Ce que Tacet a écrit";
-"Dictate one phrase, then another in a different language. Nothing to switch." = "Dictez une phrase, puis une autre dans une langue différente. Rien à changer.";
-"Good morning! … Доброго ранку!" = "Bonjour ! … Good morning!";
 "A fixed language is selected, so Tacet will not detect it." = "Une langue fixe est sélectionnée, Tacet ne la détectera donc pas.";
 "Detect automatically" = "Détecter automatiquement";
 "Heard so far:" = "Entendu jusqu’ici :";
@@ -186,7 +184,12 @@
 "Waiting for a dictation with pasting off" = "En attente d’une dictée sans collage automatique";
 "Waiting for a voice edit of the selected text" = "En attente d’une retouche vocale du texte sélectionné";
 "Waiting for a translated dictation" = "En attente d’une dictée traduite";
-"Waiting for two languages" = "En attente de deux langues";
 "Waiting for your dictation" = "En attente de votre dictée";
 "Show the introduction again" = "Revoir l’introduction";
 "History" = "Historique";
+"Dictate these two phrases one after the other, each in its own dictation. Nothing to switch." = "Dictez ces deux phrases l’une après l’autre, chacune dans sa propre dictée. Rien à changer.";
+"Good morning!" = "Bonjour !";
+"¡Buenos días!" = "Good morning!";
+"That phrase was not translated. Choose a language different from the one you speak." = "Cette phrase n’a pas été traduite. Choisissez une langue différente de celle que vous parlez.";
+"Now dictate the second phrase, in another language." = "Dictez maintenant la deuxième phrase, dans une autre langue.";
+"Waiting for your first phrase" = "En attente de votre première phrase";

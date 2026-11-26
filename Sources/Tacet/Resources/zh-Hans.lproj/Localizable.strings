@@ -142,8 +142,6 @@
 "Let’s meet on Tuesday, no, on Wednesday at three." = "我们周二见，不，周三三点见。";
 "What was heard" = "听到的内容";
 "What Tacet wrote" = "Tacet 写下的内容";
-"Dictate one phrase, then another in a different language. Nothing to switch." = "先说一句话，再用另一种语言说一句。无需切换。";
-"Good morning! … Доброго ранку!" = "早上好！… Good morning!";
 "A fixed language is selected, so Tacet will not detect it." = "已选择固定语言，因此 Tacet 不会自动识别。";
 "Detect automatically" = "自动识别";
 "Heard so far:" = "目前听到：";
@@ -186,7 +184,12 @@
 "Waiting for a dictation with pasting off" = "等待一次关闭粘贴的听写";
 "Waiting for a voice edit of the selected text" = "等待对所选文本的语音编辑";
 "Waiting for a translated dictation" = "等待一次带翻译的听写";
-"Waiting for two languages" = "等待两种语言";
 "Waiting for your dictation" = "等待你的听写";
 "Show the introduction again" = "再次显示介绍";
 "History" = "历史记录";
+"Dictate these two phrases one after the other, each in its own dictation. Nothing to switch." = "请依次说出这两句话，每句单独听写一次。无需切换。";
+"Good morning!" = "早上好！";
+"¡Buenos días!" = "Good morning!";
+"That phrase was not translated. Choose a language different from the one you speak." = "这句话没有被翻译。请选择一种与你所说语言不同的语言。";
+"Now dictate the second phrase, in another language." = "现在用另一种语言说第二句话。";
+"Waiting for your first phrase" = "等待你说第一句话";

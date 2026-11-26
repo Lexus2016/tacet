@@ -421,8 +421,6 @@
 "Let’s meet on Tuesday, no, on Wednesday at three." = "Зустрінемося у вівторок, ні, у середу о третій.";
 "What was heard" = "Що було почуто";
 "What Tacet wrote" = "Що написав Tacet";
-"Dictate one phrase, then another in a different language. Nothing to switch." = "Продиктуйте одну фразу, потім іншу — іншою мовою. Перемикати нічого не треба.";
-"Good morning! … Доброго ранку!" = "Доброго ранку! … Good morning!";
 "A fixed language is selected, so Tacet will not detect it." = "Вибрано сталу мову, тому Tacet її не визначатиме.";
 "Detect automatically" = "Визначати автоматично";
 "Heard so far:" = "Уже почуто:";
@@ -465,7 +463,12 @@
 "Waiting for a dictation with pasting off" = "Чекаю на диктування з вимкненим вставленням";
 "Waiting for a voice edit of the selected text" = "Чекаю на голосову правку виділеного тексту";
 "Waiting for a translated dictation" = "Чекаю на диктування з перекладом";
-"Waiting for two languages" = "Чекаю на дві мови";
 "Waiting for your dictation" = "Чекаю на ваше диктування";
 "Show the introduction again" = "Показати знайомство ще раз";
 "History" = "Історія";
+"Dictate these two phrases one after the other, each in its own dictation. Nothing to switch." = "Продиктуйте ці дві фрази одну за одною, кожну окремим диктуванням. Перемикати нічого не треба.";
+"Good morning!" = "Доброго ранку!";
+"¡Buenos días!" = "Good morning!";
+"That phrase was not translated. Choose a language different from the one you speak." = "Ту фразу не перекладено. Виберіть мову, відмінну від тієї, якою ви говорите.";
+"Now dictate the second phrase, in another language." = "Тепер продиктуйте другу фразу, іншою мовою.";
+"Waiting for your first phrase" = "Чекаю на першу фразу";

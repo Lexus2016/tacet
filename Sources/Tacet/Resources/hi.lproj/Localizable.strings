@@ -142,8 +142,6 @@
 "Let’s meet on Tuesday, no, on Wednesday at three." = "मंगलवार को मिलते हैं, नहीं, बुधवार को तीन बजे।";
 "What was heard" = "जो सुना गया";
 "What Tacet wrote" = "जो Tacet ने लिखा";
-"Dictate one phrase, then another in a different language. Nothing to switch." = "एक वाक्य बोलें, फिर दूसरा किसी और भाषा में। कुछ बदलना नहीं है।";
-"Good morning! … Доброго ранку!" = "सुप्रभात! … Good morning!";
 "A fixed language is selected, so Tacet will not detect it." = "एक निश्चित भाषा चुनी हुई है, इसलिए Tacet उसे नहीं पहचानेगा।";
 "Detect automatically" = "अपने आप पहचानें";
 "Heard so far:" = "अब तक सुनी गई:";
@@ -186,7 +184,12 @@
 "Waiting for a dictation with pasting off" = "बिना चिपकाए डिक्टेशन की प्रतीक्षा";
 "Waiting for a voice edit of the selected text" = "चुने हुए टेक्स्ट के आवाज़ से संपादन की प्रतीक्षा";
 "Waiting for a translated dictation" = "अनुवाद वाले डिक्टेशन की प्रतीक्षा";
-"Waiting for two languages" = "दो भाषाओं की प्रतीक्षा";
 "Waiting for your dictation" = "आपके डिक्टेशन की प्रतीक्षा";
 "Show the introduction again" = "परिचय फिर दिखाएँ";
 "History" = "इतिहास";
+"Dictate these two phrases one after the other, each in its own dictation. Nothing to switch." = "ये दो वाक्य एक के बाद एक बोलें, हर एक अलग डिक्टेशन में। कुछ बदलना नहीं है।";
+"Good morning!" = "सुप्रभात!";
+"¡Buenos días!" = "Good morning!";
+"That phrase was not translated. Choose a language different from the one you speak." = "वह वाक्य अनूदित नहीं हुआ। ऐसी भाषा चुनें जो आपकी बोली हुई भाषा से अलग हो।";
+"Now dictate the second phrase, in another language." = "अब दूसरा वाक्य किसी और भाषा में बोलें।";
+"Waiting for your first phrase" = "आपके पहले वाक्य की प्रतीक्षा";

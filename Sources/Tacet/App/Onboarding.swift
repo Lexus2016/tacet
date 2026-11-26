@@ -96,7 +96,7 @@ final class Onboarding: ObservableObject {
         // Recognition names one language per recording, so «Доброго ранку! Good morning!» in one go counted as Ukrainian only and the step never passed
         // (owner, 26 Nov 2026). Two writing systems in one text count as two languages.
         // Розпізнавання дає одну мову на запис; дві писемності в одному тексті зараховуються як дві мови.
-        case .languages: if languages.count >= 2 || Self.writingSystems(in: delivery.text).count >= 2 || attempts >= 3 { finished.insert(.languages) }
+        case .languages: if languages.count >= 2 || Self.writingSystems(in: delivery.text).count >= 2 || attempts >= 2 { finished.insert(.languages) }
         case .translate: if delivery.translated { finished.insert(.translate) }
         case .edit, .translateSelection: if delivery.edited { finished.insert(step) }
         case .paste: if !delivery.pasted { finished.insert(.paste) }

@@ -296,24 +296,27 @@ struct PendingActionLabel: View {
 
 struct SoftButtonStyle: ButtonStyle {
     var destructive = false
+    /// Larger type and padding for first-run screens. / Більший шрифт і відступи для екранів першого запуску.
+    var large = false
     @Environment(\.colorScheme) private var scheme
 
     func makeBody(configuration: Configuration) -> some View {
-        SoftButtonBody(configuration: configuration, destructive: destructive, scheme: scheme)
+        SoftButtonBody(configuration: configuration, destructive: destructive, large: large, scheme: scheme)
     }
 
     private struct SoftButtonBody: View {
         let configuration: ButtonStyleConfiguration
         let destructive: Bool
+        let large: Bool
         let scheme: ColorScheme
 
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
             configuration.label
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: large ? 15 : 12, weight: .medium))
                 .foregroundStyle(destructive ? Theme.danger : Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, large ? 18 : 12)
+                .padding(.vertical, large ? 9 : 6)
                 .background {
                     shape
                         .fill(Theme.cardFill(scheme))
@@ -328,23 +331,25 @@ struct SoftButtonStyle: ButtonStyle {
 }
 
 struct SoftProminentButtonStyle: ButtonStyle {
+    var large = false
     @Environment(\.colorScheme) private var scheme
 
     func makeBody(configuration: Configuration) -> some View {
-        SoftProminentBody(configuration: configuration, scheme: scheme)
+        SoftProminentBody(configuration: configuration, large: large, scheme: scheme)
     }
 
     private struct SoftProminentBody: View {
         let configuration: ButtonStyleConfiguration
+        let large: Bool
         let scheme: ColorScheme
 
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
             configuration.label
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: large ? 15 : 12, weight: .semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .padding(.horizontal, large ? 22 : 14)
+                .padding(.vertical, large ? 9 : 6)
                 .background {
                     shape
                         .fill(LinearGradient(colors: [Theme.accentStart, Theme.accentEnd],

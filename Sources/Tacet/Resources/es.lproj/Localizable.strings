@@ -142,8 +142,6 @@
 "Let’s meet on Tuesday, no, on Wednesday at three." = "Quedamos el martes, no, el miércoles a las tres.";
 "What was heard" = "Lo que se oyó";
 "What Tacet wrote" = "Lo que escribió Tacet";
-"Dictate one phrase, then another in a different language. Nothing to switch." = "Dicta una frase y luego otra en un idioma distinto. No hay que cambiar nada.";
-"Good morning! … Доброго ранку!" = "¡Buenos días! … Good morning!";
 "A fixed language is selected, so Tacet will not detect it." = "Hay un idioma fijo seleccionado, así que Tacet no lo detectará.";
 "Detect automatically" = "Detectar automáticamente";
 "Heard so far:" = "Oído hasta ahora:";
@@ -186,7 +184,12 @@
 "Waiting for a dictation with pasting off" = "Esperando un dictado con el pegado desactivado";
 "Waiting for a voice edit of the selected text" = "Esperando una edición por voz del texto seleccionado";
 "Waiting for a translated dictation" = "Esperando un dictado traducido";
-"Waiting for two languages" = "Esperando dos idiomas";
 "Waiting for your dictation" = "Esperando tu dictado";
 "Show the introduction again" = "Mostrar la introducción de nuevo";
 "History" = "Historial";
+"Dictate these two phrases one after the other, each in its own dictation. Nothing to switch." = "Dicta estas dos frases una tras otra, cada una en su propio dictado. No hay que cambiar nada.";
+"Good morning!" = "¡Buenos días!";
+"¡Buenos días!" = "Good morning!";
+"That phrase was not translated. Choose a language different from the one you speak." = "Esa frase no se tradujo. Elige un idioma distinto del que hablas.";
+"Now dictate the second phrase, in another language." = "Ahora dicta la segunda frase en otro idioma.";
+"Waiting for your first phrase" = "Esperando tu primera frase";
