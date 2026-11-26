@@ -35,6 +35,7 @@ final class DictationController: ObservableObject {
     private let cleanupPipeline = CleanupPipeline()
     private let translator = Translator()
     private var localNotice = LocalFallbackNotice()
+    private var lastWasTranslated = false
     private let selectionEditor = SelectionEditor()
     private let hotkey = HotkeyManager()
     private let pasteHotkey = HotkeyManager(identifier: 2)
@@ -284,6 +285,14 @@ final class DictationController: ObservableObject {
             AppWindows.shared.showSettings()
             return
         }
+        // Until the first-run tour is finished, dictation works only inside it.
+        // Доки знайомство не пройдено, диктування працює лише всередині нього.
+        if Onboarding.shared.blocksDictation {
+            AppWindows.shared.showOnboarding()
+            return
+        }
+        Onboarding.shared.recordingStarted()
+        lastWasTranslated = false
         isStarting = true
         stopRequested = false
         let startingApp = NSWorkspace.shared.frontmostApplication
@@ -504,6 +513,7 @@ final class DictationController: ObservableObject {
                                                               configuration: configuration, sourceLanguage: sourceLanguage)
                     if outcome.translated {
                         text = outcome.text
+                        lastWasTranslated = true
                     } else {
                         notes.append(String(localized: "Translation unavailable. The original dictation was inserted."))
                     }
@@ -536,6 +546,8 @@ final class DictationController: ObservableObject {
                                                  appName: appName,
                                                  cleanupEngine: cleanupEngine,
                                                  note: notes.isEmpty ? nil : notes.joined(separator: "; "))
+                            Onboarding.shared.delivered(.init(text: outcome.text, raw: selectedText,
+                                                              language: output.transcript.language, edited: true, pasted: true))
                             return
                         }
                         notes.append(String(localized: "Selection edit failed. The instruction is in History."))
@@ -754,6 +766,8 @@ final class DictationController: ObservableObject {
         lastFailure = nil
         scheduleIdleUnload()
         if settings.playSounds { SoundService.shared.play(failedToDeliver ? .error : .success, style: settings.soundStyle) }
+        Onboarding.shared.delivered(.init(text: text, raw: raw, language: transcript.language,
+                                          translated: lastWasTranslated, pasted: pasted))
     }
 
     private func recordFailure(_ failure: PipelineFailure,

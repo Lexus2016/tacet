@@ -491,6 +491,9 @@ struct EmailAccountConnection<Legacy: View>: View {
         resetChallenge()
         signedIn = true
         onCredentialChanged(true)
+        #if os(macOS)
+        AppWindows.shared.showOnboarding()
+        #endif
     }
 
     private func confirm(_ change: DeviceChange) {

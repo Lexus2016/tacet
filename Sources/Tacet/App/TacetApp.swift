@@ -51,9 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !ProviderCatalog.usesPilotGateway { _ = Updater.shared }
 #endif
 
-        if AppSettings.shared.gatewayActivationIssue != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Sign-in first, then the tour, then the app. / Спершу вхід, потім знайомство, потім застосунок.
+            if AppSettings.shared.gatewayActivationIssue != nil {
                 AppWindows.shared.showSettings()
+            } else {
+                AppWindows.shared.showOnboarding()
             }
         }
     }

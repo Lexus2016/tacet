@@ -33,6 +33,11 @@ struct ProviderSpec: Identifiable, Sendable {
 
     func setHeaders(on request: inout URLRequest, key: String?) {
         if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        #if os(macOS)
+        // Practice requests of the first-run tour are not charged to the plan (capped by the gateway).
+        // Тренувальні запити знайомства не списуються з тарифу (шлюз обмежує їх обсяг).
+        if EngineID.isGateway(id), Onboarding.isRunning { request.setValue("1", forHTTPHeaderField: "X-Tacet-Onboarding") }
+        #endif
         if id == "openrouter" {
             request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")
             request.setValue("Tacet", forHTTPHeaderField: "X-Title")

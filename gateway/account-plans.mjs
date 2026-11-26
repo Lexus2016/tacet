@@ -30,6 +30,12 @@ export const plans = Object.freeze({
 // символи рахуються як слово.
 export const selectionWordLimit = 1000;
 
+// What the first-run tour may use without touching the plan: about five minutes of speech and
+// the text processing that goes with it, once per account.
+// Що знайомство може використати, не чіпаючи тариф: близько п'яти хвилин мовлення та обробку
+// тексту до них, раз на акаунт.
+export const practiceBudget = Object.freeze({ audioSeconds: 300, textTokens: 60_000 });
+
 export function selectionWords(text) {
   const spaced = text.trim().split(/\s+/u).filter(Boolean).length;
   return spaced + Math.floor((text.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/gu)?.length ?? 0) / 2);
@@ -120,6 +126,9 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
         scope TEXT NOT NULL, id TEXT NOT NULL, audio INTEGER NOT NULL DEFAULT 0, text INTEGER NOT NULL DEFAULT 0,
         bonus_audio INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (scope, id)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS practice_allowance (
+        account TEXT PRIMARY KEY, audio INTEGER NOT NULL DEFAULT 0, text INTEGER NOT NULL DEFAULT 0
+      ) STRICT;
     `);
     if (!hadDailyAudio && tableExists.get('usage_daily')) {
       // Carry only usage known to have occurred on the current UTC day.
@@ -145,6 +154,9 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
   // applies: a device that used it under one email brings nothing new to another.
   // Безплатний запас рахується і для акаунта, і для пристрою, а діє більше з двох чисел:
   // пристрій, який витратив його під однією поштою, нічого не додає іншій.
+  const readPractice = db.prepare('SELECT audio, text FROM practice_allowance WHERE account = ?');
+  const changePractice = db.prepare(`INSERT INTO practice_allowance (account, audio, text) VALUES (?, ?, ?)
+    ON CONFLICT(account) DO UPDATE SET audio = audio + excluded.audio, text = text + excluded.text`);
   const readFree = db.prepare('SELECT audio, text, bonus_audio AS bonus FROM free_allowance WHERE scope = ? AND id = ?');
   const changeFree = db.prepare(`INSERT INTO free_allowance (scope, id, audio, text) VALUES (?, ?, ?, ?)
     ON CONFLICT(scope, id) DO UPDATE SET audio = audio + excluded.audio, text = text + excluded.text`);
@@ -191,12 +203,29 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
       savePlan.run(client.account, id);
       return get(client);
     },
-    reserve(client, kind, input) {
+    // `practice` marks a request made inside the app's first-run tour. Such requests are not charged
+    // to the plan, within a small lifetime budget per account; past it they are charged as usual,
+    // so the mark cannot be used to dictate for free.
+    // `practice` позначає запит, зроблений у знайомстві із застосунком. Такі запити не списуються з
+    // тарифу в межах невеликого довічного бюджету на акаунт; понад нього списуються як звичайні,
+    // тож позначкою не можна диктувати безплатно.
+    reserve(client, kind, input, practice = false) {
       const amount = kind === 'audio' ? wavSeconds(input.input_audio) + 1 : textUnits(input);
+      let exempt = false;
       const snapshot = transaction(() => {
         const snapshot = get(client);
         if (snapshot.plan === 'paused') throw new GatewayError(403, 'plan_paused', 'Dictation is paused. Select a plan in Tacet.');
         if (!snapshot.deviceAllowed) throw new GatewayError(403, 'device_limit', 'This device exceeds the plan device limit');
+        if (practice) {
+          const used = readPractice.get(client.account) ?? { audio: 0, text: 0 };
+          const within = kind === 'audio' ? used.audio + amount <= practiceBudget.audioSeconds
+            : used.text + amount <= practiceBudget.textTokens;
+          if (within) {
+            changePractice.run(client.account, kind === 'audio' ? amount : 0, kind === 'text' ? amount : 0);
+            exempt = true;
+            return snapshot;
+          }
+        }
         const field = kind === 'audio' ? 'audioSeconds' : 'textTokens';
         const limit = snapshot.limits[field];
         if (limit !== null && snapshot.used[field] + amount > limit) {
@@ -210,6 +239,7 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
         if (snapshot.audioPeriod === 'once') chargeFree(client, kind === 'audio' ? amount : 0, kind === 'text' ? amount : 0);
         return snapshot;
       });
+      if (exempt) return () => {};
       return reply => {
         const input = reply?.usage?.prompt_tokens;
         const output = reply?.usage?.completion_tokens;

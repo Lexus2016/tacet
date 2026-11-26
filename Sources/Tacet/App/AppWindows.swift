@@ -18,8 +18,39 @@ final class AppWindows {
 
     private var settingsWindow: NSWindow?
     private var historyWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
 
     private init() {}
+
+    /// The first-run tour. It cannot be dismissed for good: dictation stays locked until it is done.
+    /// Знайомство під час першого запуску. Закрити його назавжди не можна: диктування заблоковане, доки його не пройдено.
+    func showOnboarding() {
+        guard !Onboarding.shared.isComplete else { return }
+        if onboardingWindow == nil {
+            let window = Self.makeWindow(title: String(localized: "Welcome to Tacet"),
+                                         size: NSSize(width: 860, height: 620),
+                                         minimum: NSSize(width: 760, height: 560)) {
+                OnboardingView().environmentObject(DictationController.shared)
+            }
+            onboardingWindow = window
+            observe(window)
+            let center = NotificationCenter.default
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+                center.addObserver(forName: name, object: window, queue: .main) { note in
+                    let closing = note.name == NSWindow.willCloseNotification
+                    DispatchQueue.main.async {
+                        Onboarding.shared.windowChanged(open: !closing, key: !closing && window.isKeyWindow)
+                    }
+                }
+            }
+        }
+        present(onboardingWindow)
+        Onboarding.shared.windowChanged(open: true, key: true)
+    }
+
+    func closeOnboarding() {
+        onboardingWindow?.close()
+    }
 
     func showSettings() {
         if settingsWindow == nil {
@@ -50,6 +81,7 @@ final class AppWindows {
         }
         DictationController.shared.refreshHistory()
         present(historyWindow)
+        Onboarding.shared.note(.history)
     }
 
     /// The Dock icon is a window affordance, not a permanent badge: the app is
@@ -68,7 +100,7 @@ final class AppWindows {
     }
 
     private func updatePolicy() {
-        let hasVisibleWindow = [settingsWindow, historyWindow]
+        let hasVisibleWindow = [settingsWindow, historyWindow, onboardingWindow]
             .compactMap { $0 }
             .contains { $0.isVisible || $0.isMiniaturized }
         NSApp.setActivationPolicy(hasVisibleWindow ? .regular : .accessory)

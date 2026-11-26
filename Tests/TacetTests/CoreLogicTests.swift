@@ -292,6 +292,80 @@ final class TranslatorTests: XCTestCase {
     }
 }
 
+@MainActor
+final class OnboardingTests: XCTestCase {
+    private func tour() -> (Onboarding, UserDefaults, String) {
+        let name = "ua.rawira.tacet.tests.onboarding.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        return (Onboarding(defaults: defaults), defaults, name)
+    }
+
+    func testEveryStepNeedsItsOwnActionAndTheTourLocksDictationUntilTheEnd() {
+        let (tour, defaults, name) = tour()
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertFalse(tour.isComplete)
+        XCTAssertTrue(tour.blocksDictation)
+        tour.windowChanged(open: true, key: true)
+        XCTAssertFalse(tour.blocksDictation)
+
+        tour.advance()
+        XCTAssertEqual(tour.step, .key, "A step cannot be passed without doing it")
+        tour.recordingStarted()
+        tour.advance()
+        XCTAssertEqual(tour.step, .dictate)
+        tour.delivered(.init(text: "Hello", raw: "hello", pasted: true))
+        tour.advance()
+        // An unchanged phrase does not show correction; the second try completes the step.
+        tour.delivered(.init(text: "Same", raw: "Same"))
+        XCTAssertFalse(tour.canContinue)
+        tour.delivered(.init(text: "On Wednesday at three.", raw: "on tuesday no on wednesday at three"))
+        tour.advance()
+        XCTAssertEqual(tour.step, .languages)
+        tour.delivered(.init(text: "a", raw: "a", language: "en"))
+        XCTAssertFalse(tour.canContinue)
+        tour.delivered(.init(text: "б", raw: "б", language: "uk"))
+        tour.advance()
+        tour.delivered(.init(text: "a", raw: "a"))
+        XCTAssertFalse(tour.canContinue, "Translation step needs a translated result")
+        tour.delivered(.init(text: "Hola", raw: "Hello", translated: true))
+        tour.advance()
+        XCTAssertEqual(tour.step, .edit)
+        tour.delivered(.init(text: "a", raw: "a"))
+        XCTAssertFalse(tour.canContinue)
+        tour.delivered(.init(text: "Short", raw: "Long text", edited: true))
+        tour.advance()
+        tour.delivered(.init(text: "Corto", raw: "Short", edited: true))
+        tour.advance()
+        XCTAssertEqual(tour.step, .paste)
+        tour.delivered(.init(text: "a", raw: "a", pasted: true))
+        XCTAssertFalse(tour.canContinue)
+        tour.delivered(.init(text: "a", raw: "a", pasted: false))
+        tour.advance()
+        tour.note(.indicator)
+        XCTAssertFalse(tour.canContinue, "Only the current step can be completed")
+        tour.note(.history)
+        tour.advance()
+        tour.note(.indicator)
+        XCTAssertTrue(tour.isLast)
+        tour.advance()
+        XCTAssertTrue(tour.isComplete)
+        XCTAssertFalse(tour.blocksDictation)
+        // The result survives a restart, and the tour can be taken again from Settings.
+        XCTAssertTrue(Onboarding(defaults: defaults).isComplete)
+        tour.restart()
+        XCTAssertFalse(tour.isComplete)
+        XCTAssertEqual(tour.step, .key)
+    }
+
+    func testAnInterruptedTourResumesAtTheSameStep() {
+        let (tour, defaults, name) = tour()
+        defer { defaults.removePersistentDomain(forName: name) }
+        tour.recordingStarted()
+        tour.advance()
+        XCTAssertEqual(Onboarding(defaults: defaults).step, .dictate)
+    }
+}
+
 final class AccountPlanTests: XCTestCase {
     func testFreeMinutesAreOneTimeAndPaidMinutesRenewMonthly() throws {
         func plan(_ json: String) throws -> AccountPlan { try JSONDecoder().decode(AccountPlan.self, from: Data(json.utf8)) }

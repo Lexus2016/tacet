@@ -309,6 +309,17 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            SoftCard {
+                SoftRow("Welcome to Tacet", subtitle: "Ten short steps. Each one is something you do, not something you read.") {
+                    Button("Show the introduction again") {
+                        Onboarding.shared.restart()
+                        AppWindows.shared.showOnboarding()
+                    }
+                    .buttonStyle(SoftButtonStyle())
+                    .disabled(controller.phase != .idle)
+                }
+            }
+
             SoftCard(title: "Permissions", systemImage: "lock.shield") {
                 SoftRow("Microphone", icon: nil) {
                     HStack(spacing: 10) {

@@ -128,7 +128,20 @@ enum CLIHarness {
                 }
                 let tab = SettingsView.Tab(rawValue: value(after: "--tab", in: arguments) ?? "") ?? .general
                 let appearance = value(after: "--appearance", in: arguments) == "dark" ? NSAppearance.Name.darkAqua : .aqua
-                let window = arguments.contains("--history") ? makeHistoryWindow(entries: sampleEntries()) : makeSettingsWindow(tab: tab)
+                let window: NSWindow
+                if let raw = value(after: "--onboarding", in: arguments), let number = Int(raw),
+                   let step = Onboarding.Step(rawValue: number) {
+                    let tour = Onboarding(defaults: UserDefaults(suiteName: "ua.rawira.tacet.render") ?? .standard)
+                    tour.preview(step, sample: step == .correct
+                                 ? .init(text: "Let’s meet on Wednesday at three.", raw: "lets meet on tuesday no on wednesday at three")
+                                 : step == .languages ? .init(text: "Good morning!", raw: "good morning", language: "en") : nil)
+                    window = AppWindows.makeWindow(title: String(localized: "Welcome to Tacet"),
+                                                   size: NSSize(width: 860, height: 620), minimum: NSSize(width: 760, height: 560)) {
+                        OnboardingView(tour: tour).environmentObject(DictationController.shared)
+                    }
+                } else {
+                    window = arguments.contains("--history") ? makeHistoryWindow(entries: sampleEntries()) : makeSettingsWindow(tab: tab)
+                }
                 if arguments.contains("--minimum-size") {
                     window.setContentSize(arguments.contains("--history") ? AppWindows.historyMinimum : AppWindows.settingsMinimum)
                 }

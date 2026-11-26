@@ -353,7 +353,7 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
         try {
           const input = await (kind === 'audio' ? audioInput(req) : textInput(req, expanded));
           const onAttempt = usage.record ? attempt => usage.record(client, kind, attempt) : undefined;
-          const settle = accountPlans?.reserve(client, kind, input);
+          const settle = accountPlans?.reserve(client, kind, input, req.headers['x-tacet-onboarding'] === '1');
           let reply;
           try {
             reply = await router.forward(kind, input, controller.signal, { onAttempt, expanded });

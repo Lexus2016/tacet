@@ -314,6 +314,18 @@ test('enforces one durable quota and the chosen device counts across desktop and
   assert.deepEqual([refused.status, (await refused.json()).error.code], [429, 'plan_quota']);
   await set(restarted, phone, 'basic');
   assert.equal((await audio(restarted, phone)).status, 200);
+
+  // Practice requests of the first-run tour are not charged, up to a small budget; past it they are.
+  await set(restarted, phone, 'free');
+  const practice = () => restarted.request('/v1/audio/transcriptions', { method: 'POST', token: phone,
+    json: { input_audio: { data: wave.toString('base64'), format: 'wav' } }, headers: { 'x-tacet-onboarding': '1' } });
+  assert.equal((await audio(restarted, phone)).status, 429);
+  assert.equal((await practice()).status, 200);
+  assert.equal((await plan(restarted, mac)).used.audioSeconds, freeLimit.audioSeconds);
+  const budget = new DatabaseSync(usagePath);
+  budget.prepare("UPDATE practice_allowance SET audio = 300 WHERE account = 'pilot'").run();
+  budget.close();
+  assert.equal((await practice()).status, 429);
 });
 
 test('keeps the admin and client credentials separate and serves the admin UI', async t => {
