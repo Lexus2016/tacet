@@ -33,6 +33,19 @@ const minutes = seconds => `${number.format(Math.round(seconds / 60))} хв`;
 const limit = (used, max, format) => (max === null ? `${format(used)} / без ліміту` : `${format(used)} / ${format(max)}`);
 const money = (cents, currency) => `${(cents / 100).toFixed(2)} ${currency}`;
 
+// The conditions of a plan in one line, so the operator does not have to look them up.
+// Умови тарифу одним рядком, щоб операторові не доводилося їх шукати.
+function terms(plan) {
+  if (plan.id === 'paused') return 'диктування й обробку тексту вимкнено';
+  const tokens = plan.textTokens >= 1_000_000 ? `${number.format(plan.textTokens / 1_000_000)} млн` : `${number.format(plan.textTokens / 1000)} тис.`;
+  return [
+    plan.priceCents ? `$${(plan.priceCents / 100).toFixed(2)}/міс` : plan.id === 'free' ? 'безплатно' : 'не продається',
+    plan.audioSeconds === null ? 'диктування без ліміту' : `${number.format(plan.audioSeconds / 60)} хв ${plan.id === 'free' ? 'на день' : 'на місяць'}`,
+    plan.textTokens === null ? 'текст без ліміту' : `${tokens} токенів на місяць`,
+    `до ${plan.devices} пристроїв`,
+  ].join(' · ');
+}
+
 export function createUsers({ root, api, unauthorized }) {
   const filters = { query: '', status: '', plan: '', sort: 'active' };
   let opened;
@@ -134,7 +147,7 @@ export function createUsers({ root, api, unauthorized }) {
 
   function renderDetail(user) {
     const post = (path, data) => call('POST', `/${user.account}${path}`, data);
-    const planOptions = user.plans.map(plan => [plan.id, planNames[plan.id] ?? plan.id]);
+    const planOptions = user.plans.map(plan => [plan.id, `${planNames[plan.id] ?? plan.id} — ${terms(plan)}`]);
     const facts = [
       ['Акаунт', user.account],
       ['Тариф', `${planNames[user.plan] ?? user.plan} · ${sources[user.planSource] ?? user.planSource}` +
