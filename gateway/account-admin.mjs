@@ -40,6 +40,10 @@ export function openAccountAdmin({ path, now = Date.now }) {
       reference TEXT NOT NULL, note TEXT NOT NULL, recorded INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS account_payments_account ON account_payments(account, time);
+    CREATE TABLE IF NOT EXISTS free_allowance (
+      scope TEXT NOT NULL, id TEXT NOT NULL, audio INTEGER NOT NULL DEFAULT 0, text INTEGER NOT NULL DEFAULT 0,
+      bonus_audio INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (scope, id)
+    ) STRICT;
   `);
 
   const known = `known(account) AS (
@@ -47,11 +51,13 @@ export function openAccountAdmin({ path, now = Date.now }) {
     UNION SELECT account FROM pilot_account_quota UNION SELECT account FROM account_state)`;
   const columns = `k.account, a.email, p.plan, s.created, s.last_active, s.blocked, s.plan_source, s.plan_until,
     (SELECT COUNT(*) FROM login_devices d WHERE d.account = k.account) AS devices,
-    COALESCE(q.audio, 0) AS audio, COALESCE(q.text, 0) AS text`;
+    COALESCE(q.audio, 0) AS audio, COALESCE(q.text, 0) AS text,
+    COALESCE(f.audio, 0) AS free_audio, COALESCE(f.text, 0) AS free_text, COALESCE(f.bonus_audio, 0) AS bonus`;
   const joins = `FROM known k LEFT JOIN login_accounts a ON a.id = k.account
     LEFT JOIN pilot_account_plan p ON p.account = k.account
     LEFT JOIN account_state s ON s.account = k.account
-    LEFT JOIN pilot_account_quota q ON q.account = k.account AND q.month = ?`;
+    LEFT JOIN pilot_account_quota q ON q.account = k.account AND q.month = ?
+    LEFT JOIN free_allowance f ON f.scope = 'account' AND f.id = k.account`;
   const filter = `WHERE (? = '' OR a.email LIKE ? ESCAPE '\\' OR k.account LIKE ? ESCAPE '\\')
     AND (? = '' OR (? = 'blocked') = (s.blocked IS NOT NULL))`;
   const lists = Object.fromEntries(Object.entries(sorts).map(([name, order]) => [name,
@@ -100,7 +106,14 @@ export function openAccountAdmin({ path, now = Date.now }) {
     'DELETE FROM pilot_account_plan WHERE account = ?', 'DELETE FROM pilot_account_quota WHERE account = ?',
     'DELETE FROM pilot_account_audio_daily WHERE account = ?', 'DELETE FROM usage_daily WHERE account = ?',
     'DELETE FROM account_state WHERE account = ?', 'DELETE FROM login_accounts WHERE id = ?',
+    // Device rows stay: they hold no personal data and stop a deleted account from being
+    // re-created for a fresh allowance.
+    // Рядки пристроїв лишаються: особистих даних у них немає, і вони не дають відтворити
+    // видалений акаунт заради нового запасу.
+    "DELETE FROM free_allowance WHERE scope = 'account' AND id = ?",
   ].map(sql => db.prepare(sql));
+  const addBonus = db.prepare(`INSERT INTO free_allowance (scope, id, bonus_audio) VALUES ('account', ?, ?)
+    ON CONFLICT(scope, id) DO UPDATE SET bonus_audio = bonus_audio + excluded.bonus_audio`);
 
   const seen = new Map();
 
@@ -130,11 +143,18 @@ export function openAccountAdmin({ path, now = Date.now }) {
     const expired = ended(row, time);
     if (expired) row = { ...row, plan: 'free', plan_source: 'default', plan_until: null };
     const plan = Object.hasOwn(catalog, row.plan) ? row.plan : 'free';
+    // The free plan is a one-time allowance: show what is used of it, not this month's usage.
+    // A device that used its allowance under another email can make the user's own figure higher.
+    // Безплатний тариф — разовий запас: показуємо, скільки з нього використано, а не місячне
+    // використання. Пристрій, що витратив запас під іншою поштою, може зробити число користувача вищим.
+    const once = plan === 'free';
     return {
-      account: row.account, email: row.email, plan, limits: catalog[plan],
+      account: row.account, email: row.email, plan,
+      limits: once && row.bonus ? { ...catalog.free, audioSeconds: catalog.free.audioSeconds + row.bonus } : catalog[plan],
       planSource: row.plan_source ?? 'default', planUntil: row.plan_until,
       blocked: row.blocked, created: row.created, lastActive: row.last_active, devices: row.devices,
-      used: { audioSeconds: row.audio, textTokens: row.text },
+      period: once ? 'once' : 'month', bonusAudioSeconds: row.bonus,
+      used: once ? { audioSeconds: row.free_audio, textTokens: row.free_text } : { audioSeconds: row.audio, textTokens: row.text },
     };
   }
 
@@ -247,6 +267,23 @@ export function openAccountAdmin({ path, now = Date.now }) {
       const reason = text(input?.reason, 'reason', 200);
       const end = until(input?.until, time);
       transaction(() => assign(account, input?.plan, end, 'operator', reason, time));
+      return this.detail(account);
+    },
+
+    // Adds minutes to an account's one-time free allowance. / Додає хвилини до разового безплатного запасу акаунта.
+    grantMinutes(account, input) {
+      const time = now();
+      find(account);
+      const minutes = input?.minutes;
+      if (!Number.isSafeInteger(minutes) || minutes <= 0 || minutes > 10_000) {
+        throw new GatewayError(400, 'invalid_admin_input', 'Enter between 1 and 10000 minutes');
+      }
+      const reason = text(input?.reason, 'reason', 200);
+      transaction(() => {
+        ensure(account);
+        addBonus.run(account, minutes * 60);
+        log.run(time, account, 'allowance', JSON.stringify({ minutes }), reason);
+      });
       return this.detail(account);
     },
 

@@ -1,13 +1,15 @@
 import { DatabaseSync } from 'node:sqlite';
 import { GatewayError } from './routing.mjs';
 
-// One price table for every account and platform: USD cents, monthly allowances and a shared
-// limit on connected devices. The free plan's dictation allowance is counted per day.
-// Єдина таблиця тарифів для всіх акаунтів і платформ: центи США, місячні пакети та спільний
-// ліміт під'єднаних пристроїв. Пакет диктування безплатного тарифу рахується за день.
+// One price table for every account and platform: USD cents, allowances and a shared limit on
+// connected devices. Paid allowances renew monthly. The free plan is a one-time allowance of
+// cloud dictation that never renews; once it is used, only on-device dictation remains.
+// Єдина таблиця тарифів для всіх акаунтів і платформ: центи США, пакети та спільний ліміт
+// під'єднаних пристроїв. Платні пакети поновлюються щомісяця. Безплатний тариф — разовий запас
+// хмарного диктування, який не поновлюється; після нього лишається диктування на пристрої.
 export const plans = Object.freeze({
-  free: { priceCents: 0, audioSeconds: 30 * 60, textTokens: 75_000, devices: 2 },
-  basic: { priceCents: 599, audioSeconds: 500 * 60, textTokens: 1_000_000, devices: 5 },
+  free: { priceCents: 0, audioSeconds: 100 * 60, textTokens: 300_000, devices: 2 },
+  basic: { priceCents: 499, audioSeconds: 600 * 60, textTokens: 1_000_000, devices: 5 },
   pro: { priceCents: 999, audioSeconds: 900 * 60, textTokens: 1_500_000, devices: 8 },
 });
 
@@ -92,6 +94,10 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
       CREATE TABLE IF NOT EXISTS pilot_account_audio_daily (
         account TEXT NOT NULL, day TEXT NOT NULL, audio INTEGER NOT NULL, PRIMARY KEY (account, day)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS free_allowance (
+        scope TEXT NOT NULL, id TEXT NOT NULL, audio INTEGER NOT NULL DEFAULT 0, text INTEGER NOT NULL DEFAULT 0,
+        bonus_audio INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (scope, id)
+      ) STRICT;
     `);
     if (!hadDailyAudio && tableExists.get('usage_daily')) {
       // Carry only usage known to have occurred on the current UTC day.
@@ -111,9 +117,27 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
   const readUsage = db.prepare('SELECT audio, text FROM pilot_account_quota WHERE account = ? AND month = ?');
   const changeUsage = db.prepare(`INSERT INTO pilot_account_quota VALUES (?, ?, ?, ?)
     ON CONFLICT(account, month) DO UPDATE SET audio = audio + excluded.audio, text = text + excluded.text`);
-  const readDailyAudio = db.prepare('SELECT audio FROM pilot_account_audio_daily WHERE account = ? AND day = ?');
   const changeDailyAudio = db.prepare(`INSERT INTO pilot_account_audio_daily VALUES (?, ?, ?)
     ON CONFLICT(account, day) DO UPDATE SET audio = audio + excluded.audio`);
+  // The free allowance is counted for the account and for the device, and the larger figure
+  // applies: a device that used it under one email brings nothing new to another.
+  // Безплатний запас рахується і для акаунта, і для пристрою, а діє більше з двох чисел:
+  // пристрій, який витратив його під однією поштою, нічого не додає іншій.
+  const readFree = db.prepare('SELECT audio, text, bonus_audio AS bonus FROM free_allowance WHERE scope = ? AND id = ?');
+  const changeFree = db.prepare(`INSERT INTO free_allowance (scope, id, audio, text) VALUES (?, ?, ?, ?)
+    ON CONFLICT(scope, id) DO UPDATE SET audio = audio + excluded.audio, text = text + excluded.text`);
+
+  function freeUsed(client) {
+    const account = readFree.get('account', client.account) ?? { audio: 0, text: 0, bonus: 0 };
+    const device = client.device ? readFree.get('device', client.device) : undefined;
+    return { audio: Math.max(account.audio, device?.audio ?? 0), text: Math.max(account.text, device?.text ?? 0),
+      bonus: account.bonus };
+  }
+
+  function chargeFree(client, audio, text) {
+    changeFree.run('account', client.account, audio, text);
+    if (client.device) changeFree.run('device', client.device, audio, text);
+  }
 
   function get(client) {
     if (!client.account) throw new GatewayError(403, 'account_required', 'An account access key is required');
@@ -123,16 +147,17 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
     const resetsAt = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toISOString();
     const saved = readPlan.get(client.account)?.plan;
     const plan = Object.hasOwn(catalog, saved) ? saved : 'free';
-    const used = readUsage.get(client.account, month) ?? { audio: 0, text: 0 };
-    const audioPeriod = plan === 'free' ? 'day' : 'month';
-    const audioResetsAt = audioPeriod === 'day'
-      ? new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)).toISOString() : resetsAt;
-    const audioUsed = audioPeriod === 'day' ? readDailyAudio.get(client.account, day)?.audio ?? 0 : used.audio;
-    const limits = catalog[plan];
+    const monthly = readUsage.get(client.account, month) ?? { audio: 0, text: 0 };
+    const once = plan === 'free' ? freeUsed(client) : undefined;
+    const used = once ?? monthly;
+    // 'once' marks an allowance that never renews. / 'once' позначає запас, який не поновлюється.
+    const audioPeriod = once ? 'once' : 'month';
+    const audioResetsAt = once ? null : resetsAt;
+    const limits = once?.bonus ? { ...catalog[plan], audioSeconds: catalog[plan].audioSeconds + once.bonus } : catalog[plan];
     const deviceAllowed = client.managed || client.seat <= limits.devices;
     const canSwitch = !client.managed && allowed.has(client.account);
     return { plan, day, month, resetsAt, audioPeriod, audioResetsAt, limits,
-      used: { audioSeconds: audioUsed, textTokens: used.text }, deviceAllowed,
+      used: { audioSeconds: used.audio, textTokens: used.text }, deviceAllowed,
       canSwitch, available: Object.entries(canSwitch ? catalog : plans).map(([id, limits]) => ({ id, ...limits })) };
   }
 
@@ -153,13 +178,14 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
         const field = kind === 'audio' ? 'audioSeconds' : 'textTokens';
         const limit = snapshot.limits[field];
         if (limit !== null && snapshot.used[field] + amount > limit) {
-          if (kind === 'audio' && snapshot.audioPeriod === 'day') {
-            throw new GatewayError(429, 'daily_audio_quota', 'The shared daily dictation allowance has been reached');
+          if (snapshot.audioPeriod === 'once') {
+            throw new GatewayError(429, 'plan_quota', 'The free cloud allowance has been used');
           }
           throw new GatewayError(429, 'plan_quota', 'The shared monthly allowance has been reached');
         }
         changeUsage.run(client.account, snapshot.month, kind === 'audio' ? amount : 0, kind === 'text' ? amount : 0);
         if (kind === 'audio') changeDailyAudio.run(client.account, snapshot.day, amount);
+        if (snapshot.audioPeriod === 'once') chargeFree(client, kind === 'audio' ? amount : 0, kind === 'text' ? amount : 0);
         return snapshot;
       });
       return reply => {
@@ -172,6 +198,7 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
         if (refund) transaction(() => {
           changeUsage.run(client.account, snapshot.month, kind === 'audio' ? refund : 0, kind === 'text' ? refund : 0);
           if (kind === 'audio') changeDailyAudio.run(client.account, snapshot.day, refund);
+          if (snapshot.audioPeriod === 'once') chargeFree(client, kind === 'audio' ? refund : 0, kind === 'text' ? refund : 0);
         });
       };
     },

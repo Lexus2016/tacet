@@ -79,7 +79,7 @@ test('email login joins platforms, shares quota, rejects reuse and restores sess
   await f.restart();
   assert.equal((await f.request('/models', { token: macToken })).status, 200);
   const before = await f.request('/account/plan', { token: phoneToken });
-  assert.deepEqual(before.body.limits, { priceCents: 0, audioSeconds: 1800, textTokens: 75_000, devices: 2 });
+  assert.deepEqual(before.body.limits, { priceCents: 0, audioSeconds: 6000, textTokens: 300_000, devices: 2 });
   assert.equal(before.body.canSwitch, false);
   assert.equal((await f.request('/account/plan', { method: 'PUT', token: phoneToken, data: { plan: 'pro' } })).status, 403);
   assert.equal((await f.request('/chat/completions', { token: macToken,
@@ -162,14 +162,47 @@ test('a short selection can be edited within the remaining text allowance', asyn
   const { body: { token } } = await f.connect('first@example.test', f.device());
   const db = new DatabaseSync(f.usagePath);
   const account = db.prepare('SELECT id FROM login_accounts').get().id;
-  db.prepare('INSERT INTO pilot_account_quota VALUES (?, ?, ?, ?)').run(account, '2026-11', 0, 72_000);
+  db.prepare("INSERT INTO free_allowance (scope, id, audio, text) VALUES ('account', ?, 0, 297000)").run(account);
   db.close();
   const messages = [{ role: 'system', content: 'Follow the translation instruction. '.repeat(25) },
     { role: 'user', content: 'SELECTED TEXT:\nHello!\n\nSPOKEN:\nTranslate to Ukrainian.' }];
   const send = max_tokens => f.request('/chat/completions', { token, data: { messages, max_tokens } });
   assert.equal((await send(4096)).body.error.code, 'plan_quota');
   assert.equal((await send(530)).body.choices[0].message.content, 'Вітаю!');
-  assert.equal((await f.request('/account/plan', { token })).body.used.textTokens, 72_015);
+  assert.equal((await f.request('/account/plan', { token })).body.used.textTokens, 297_015);
+});
+
+test('the free allowance is one-time, follows the device to a new email and can be extended by the owner', async t => {
+  const f = await fixture(t);
+  const laptop = f.device();
+  const first = (await f.connect('first@example.test', laptop)).body.token;
+  const db = new DatabaseSync(f.usagePath);
+  const account = db.prepare("SELECT id FROM login_accounts WHERE email = 'first@example.test'").get().id;
+  // The account and the device have both used the whole allowance.
+  for (const [scope, id] of [['account', account], ['device', laptop.deviceID.toLowerCase()]]) {
+    db.prepare('INSERT INTO free_allowance (scope, id, audio, text) VALUES (?, ?, 6000, 0)').run(scope, id);
+  }
+  db.close();
+  const plan = async token => (await f.request('/account/plan', { token })).body;
+  assert.deepEqual([(await plan(first)).audioPeriod, (await plan(first)).used.audioSeconds], ['once', 6000]);
+
+  // A new email on the same device starts with that device's used allowance, not a fresh one.
+  const again = (await f.connect('second@example.test', laptop)).body.token;
+  assert.equal((await plan(again)).used.audioSeconds, 6000);
+  // The same new email on a device that never used the allowance does get it.
+  const fresh = (await f.connect('second@example.test', f.device('Other Mac'))).body.token;
+  assert.equal((await plan(fresh)).used.audioSeconds, 0);
+
+  const admin = async (path, data) => {
+    const response = await fetch(`${f.origin}/admin/api/users${path}`, { method: 'POST',
+      headers: { authorization: 'Bearer test-administrator-key-only', 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.equal((await admin(`/${account}/allowance`, { minutes: 0, reason: 'x' })).status, 400);
+  const granted = await admin(`/${account}/allowance`, { minutes: 30, reason: 'Support request' });
+  assert.deepEqual([granted.status, granted.body.period, granted.body.limits.audioSeconds, granted.body.bonusAudioSeconds,
+    granted.body.actions[0].action], [200, 'once', 7800, 1800, 'allowance']);
+  assert.equal((await plan(first)).limits.audioSeconds, 7800);
 });
 
 test('the owner console lists users and applies plans, blocks, payments and removal', async t => {

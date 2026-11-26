@@ -7,7 +7,7 @@ const planNames = { free: 'Free', basic: 'Basic', pro: 'Pro', unlimited: 'Без
 const sources = { default: 'за замовчуванням', operator: 'призначено вручну', payment: 'за оплатою' };
 const actionNames = {
   plan: 'Тариф змінено', plan_expired: 'Тариф завершився', block: 'Заблоковано', unblock: 'Розблоковано',
-  payment: 'Оплата', device_revoked: 'Пристрій відкликано', account_deleted: 'Акаунт видалено',
+  payment: 'Оплата', allowance: 'Додано хвилини', device_revoked: 'Пристрій відкликано', account_deleted: 'Акаунт видалено',
 };
 const platforms = { macos: 'Mac', ios: 'iPhone', windows: 'Windows', android: 'Android' };
 const operations = { audio: 'Диктування', text: 'Текст' };
@@ -40,8 +40,8 @@ function terms(plan) {
   const tokens = plan.textTokens >= 1_000_000 ? `${number.format(plan.textTokens / 1_000_000)} млн` : `${number.format(plan.textTokens / 1000)} тис.`;
   return [
     plan.priceCents ? `$${(plan.priceCents / 100).toFixed(2)}/міс` : plan.id === 'free' ? 'безплатно' : 'не продається',
-    plan.audioSeconds === null ? 'диктування без ліміту' : `${number.format(plan.audioSeconds / 60)} хв ${plan.id === 'free' ? 'на день' : 'на місяць'}`,
-    plan.textTokens === null ? 'текст без ліміту' : `${tokens} токенів на місяць`,
+    plan.audioSeconds === null ? 'диктування без ліміту' : `${number.format(plan.audioSeconds / 60)} хв ${plan.id === 'free' ? 'разово, без поновлення' : 'на місяць'}`,
+    plan.textTokens === null ? 'текст без ліміту' : `${tokens} токенів ${plan.id === 'free' ? 'разово' : 'на місяць'}`,
     `до ${plan.devices} пристроїв`,
   ].join(' · ');
 }
@@ -167,8 +167,11 @@ export function createUsers({ root, api, unauthorized }) {
         (user.planUntil ? ` · до ${when(user.planUntil)}` : '')],
       ['Стан', user.blocked ? `Заблоковано: ${user.blocked}` : 'Активний'],
       ['Диктування сьогодні', minutes(user.usedToday.audioSeconds)],
-      ['Диктування за місяць', limit(user.used.audioSeconds, user.limits.audioSeconds, minutes)],
-      ['Текст за місяць', limit(user.used.textTokens, user.limits.textTokens, value => number.format(value))],
+      [user.period === 'once' ? 'Диктування з разового запасу' : 'Диктування за місяць',
+        limit(user.used.audioSeconds, user.limits.audioSeconds, minutes) +
+        (user.bonusAudioSeconds ? ` (з них додано ${minutes(user.bonusAudioSeconds)})` : '')],
+      [user.period === 'once' ? 'Текст із разового запасу' : 'Текст за місяць',
+        limit(user.used.textTokens, user.limits.textTokens, value => number.format(value))],
       ['Зареєстровано', when(user.created)], ['Остання активність', when(user.lastActive)],
     ];
     const table = (head, rows, empty) => (rows.length
@@ -199,6 +202,12 @@ export function createUsers({ root, api, unauthorized }) {
           amountCents: Math.round(Number(data.amount) * 100), currency: data.currency, method: data.method,
           reference: data.reference, note: data.note || 'Оплату зафіксовано', ...(data.plan && { plan: data.plan, until: end(data.until) }),
         })),
+
+        action('Безплатний запас', [
+          el('p', { text: 'Додає хвилини хмарного диктування до разового запасу Free. Діє, поки акаунт на Free.' }),
+          field('Хвилин', el('input', { name: 'minutes', type: 'number', min: '1', max: '10000', step: '1', required: true })),
+          reason(),
+        ], 'Додати хвилини', data => post('/allowance', { minutes: Number(data.minutes), reason: data.reason })),
 
         user.blocked
           ? action('Розблокування', [reason()], 'Розблокувати', data => post('/unblock', data))

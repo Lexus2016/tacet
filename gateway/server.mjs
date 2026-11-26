@@ -313,6 +313,7 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
         } else if (account) {
           const input = await readJson(req, 2 * 1024);
           if (req.method === 'POST' && action === 'plan' && !item) return send(res, 200, accounts.setPlan(account, input));
+          if (req.method === 'POST' && action === 'allowance' && !item) return send(res, 200, accounts.grantMinutes(account, input));
           if (req.method === 'POST' && action === 'block' && !item) return send(res, 200, accounts.block(account, input));
           if (req.method === 'POST' && action === 'unblock' && !item) return send(res, 200, accounts.unblock(account, input));
           if (req.method === 'POST' && action === 'payments' && !item) return send(res, 200, accounts.recordPayment(account, input));

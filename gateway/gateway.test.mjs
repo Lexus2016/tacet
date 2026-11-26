@@ -245,17 +245,18 @@ test('enforces one durable quota and the chosen device counts across desktop and
 
   const initial = await plan(gateway, mac);
   assert.equal(initial.plan, 'free');
-  assert.equal(initial.audioPeriod, 'day');
-  assert.equal(initial.audioResetsAt, '2026-11-26T00:00:00.000Z');
+  // The free plan is a one-time allowance: it has no audio renewal date.
+  assert.equal(initial.audioPeriod, 'once');
+  assert.equal(initial.audioResetsAt, null);
   assert.equal(initial.resetsAt, '2026-12-01T00:00:00.000Z');
   const freeLimit = initial.limits;
-  assert.equal(freeLimit.audioSeconds, 1800);
-  assert.equal(freeLimit.textTokens, 75_000);
+  assert.equal(freeLimit.audioSeconds, 6000);
+  assert.equal(freeLimit.textTokens, 300_000);
   assert.equal((await plan(gateway, secondPhone)).deviceAllowed, false);
   assert.equal((await set(gateway, other, 'unlimited')).status, 403);
   // One price table: everyone sees the same three plans; operator-only plans are never offered for sale.
   assert.deepEqual((await plan(gateway, other)).available.map(option => [option.id, option.priceCents, option.devices]),
-    [['free', 0, 2], ['basic', 599, 5], ['pro', 999, 8]]);
+    [['free', 0, 2], ['basic', 499, 5], ['pro', 999, 8]]);
   assert.deepEqual(initial.available.map(option => option.id), ['free', 'basic', 'pro', 'paused', 'unlimited']);
   assert.equal((await set(gateway, mac, 'constructor')).status, 400);
   assert.equal((await audio(gateway, secondPhone)).status, 403);
@@ -270,9 +271,6 @@ test('enforces one durable quota and the chosen device counts across desktop and
   assert.equal((await plan(gateway, mac)).used.audioSeconds, 21);
 
   await gateway.stop();
-  const legacyDB = new DatabaseSync(usagePath);
-  legacyDB.exec('DROP TABLE pilot_account_audio_daily');
-  legacyDB.close();
   gateway = await gateway.start();
   assert.equal((await plan(gateway, mac)).used.audioSeconds, 21);
 
@@ -286,11 +284,17 @@ test('enforces one durable quota and the chosen device counts across desktop and
   assert.equal((await plan(gateway, secondPhone)).deviceAllowed, true);
   assert.equal((await gateway.request('/v1/chat/completions', { method: 'POST', token: secondPhone, json: body })).status, 200);
   assert.equal((await plan(gateway, mac)).used.textTokens, 25);
+  // Paid usage is counted by month and does not touch the one-time free allowance.
+  const paid = await plan(gateway, mac);
+  assert.equal(paid.audioPeriod, 'month');
+  assert.equal(paid.audioResetsAt, paid.resetsAt);
+  assert.equal((await audio(gateway, mac)).status, 200);
+  assert.equal((await plan(gateway, mac)).used.audioSeconds, 23);
   const db = new DatabaseSync(usagePath);
-  db.prepare("UPDATE pilot_account_quota SET audio = ? WHERE account = 'pilot'").run(freeLimit.audioSeconds - 2);
-  db.prepare("UPDATE pilot_account_audio_daily SET audio = ? WHERE account = 'pilot'").run(freeLimit.audioSeconds - 2);
+  db.prepare("UPDATE free_allowance SET audio = ? WHERE scope = 'account' AND id = 'pilot'").run(freeLimit.audioSeconds - 2);
   db.close();
   await set(gateway, phone, 'free');
+  assert.equal((await plan(gateway, mac)).used.audioSeconds, freeLimit.audioSeconds - 2);
   const concurrent = await Promise.all([audio(gateway, phone), audio(gateway, mac)]);
   assert.deepEqual(concurrent.map(reply => reply.status).sort(), [200, 429]);
   assert.equal((await plan(gateway, mac)).used.audioSeconds, freeLimit.audioSeconds);
@@ -299,20 +303,16 @@ test('enforces one durable quota and the chosen device counts across desktop and
   await set(gateway, phone, 'free');
   await gateway.stop();
   const restarted = await gateway.start();
-  assert.equal((await plan(restarted, mac)).used.audioSeconds, freeLimit.audioSeconds + 2);
+  // Neither a restart, a new day nor a new month renews the free allowance.
+  assert.equal((await plan(restarted, mac)).used.audioSeconds, freeLimit.audioSeconds);
   assert.equal((await audio(restarted, phone)).status, 429);
   now = Date.UTC(2026, 10, 26);
-  assert.deepEqual((await plan(restarted, mac)).used, { audioSeconds: 0, textTokens: 25 });
-  assert.equal((await audio(restarted, phone)).status, 200);
-  await set(restarted, phone, 'basic');
-  const paid = await plan(restarted, mac);
-  assert.equal(paid.audioPeriod, 'month');
-  assert.equal(paid.audioResetsAt, paid.resetsAt);
-  assert.equal(paid.used.audioSeconds, freeLimit.audioSeconds + 4);
-  await set(restarted, phone, 'free');
-  assert.equal((await plan(restarted, mac)).used.audioSeconds, 2);
+  assert.equal((await audio(restarted, phone)).status, 429);
   now = Date.UTC(2026, 11, 1);
-  assert.equal((await plan(restarted, mac)).used.audioSeconds, 0);
+  assert.equal((await plan(restarted, mac)).used.audioSeconds, freeLimit.audioSeconds);
+  const refused = await audio(restarted, phone);
+  assert.deepEqual([refused.status, (await refused.json()).error.code], [429, 'plan_quota']);
+  await set(restarted, phone, 'basic');
   assert.equal((await audio(restarted, phone)).status, 200);
 });
 
