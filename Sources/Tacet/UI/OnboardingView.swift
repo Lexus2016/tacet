@@ -24,9 +24,11 @@ struct OnboardingView: View {
             Divider().opacity(0.4)
             VStack(alignment: .leading, spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 22) {
                         header
                         stepBody
+                            .environment(\.largeControls, true)
+                            .controlSize(.large)
                     }
                     .padding(.horizontal, 34)
                     .padding(.top, 26)
@@ -36,7 +38,18 @@ struct OnboardingView: View {
                 footer
             }
         }
-        .background(SoftWindowBackground())
+        .background {
+            ZStack {
+                SoftWindowBackground()
+                // A vivid glow gives the first screens depth and energy.
+                // Яскраве сяйво додає перших екранів глибини й енергії.
+                RadialGradient(colors: [Theme.accentStart.opacity(scheme == .dark ? 0.38 : 0.22), .clear],
+                               center: .topTrailing, startRadius: 20, endRadius: 560)
+                RadialGradient(colors: [Self.violet.opacity(scheme == .dark ? 0.30 : 0.16), .clear],
+                               center: .bottomLeading, startRadius: 20, endRadius: 520)
+            }
+            .ignoresSafeArea()
+        }
         .onAppear { enter(tour.step) }
         .onChange(of: tour.inbound) { _, item in
             guard let item else { return }
@@ -70,12 +83,14 @@ struct OnboardingView: View {
     private var rail: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Welcome to Tacet")
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: 28, weight: .heavy))
+                .padding(.horizontal, 10)
                 .padding(.bottom, 2)
             Text("Ten short steps. Each one is something you do, not something you read.")
-                .font(.system(size: 14))
+                .font(.system(size: 16.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
                 .padding(.bottom, 14)
             ForEach(Onboarding.Step.allCases) { step in
                 HStack(spacing: 10) {
@@ -83,52 +98,82 @@ struct OnboardingView: View {
                         Circle()
                             .fill(tour.finished.contains(step) ? Theme.success
                                   : step == tour.step ? Theme.accent : Theme.trackFill(scheme))
-                            .frame(width: 26, height: 26)
+                            .frame(width: 32, height: 32)
                         if tour.finished.contains(step) {
-                            Image(systemName: "checkmark").font(.system(size: 11.5, weight: .bold)).foregroundStyle(.white)
+                            Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
                         } else {
                             Text("\(step.rawValue + 1)")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14.5, weight: .semibold))
                                 .foregroundStyle(step == tour.step ? .white : .secondary)
                         }
                     }
                     Text(title(step))
-                        .font(.system(size: 15, weight: step == tour.step ? .semibold : .regular))
+                        .font(.system(size: 17.5, weight: step == tour.step ? .semibold : .regular))
                         .foregroundStyle(step == tour.step ? .primary : .secondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(step == tour.step ? Theme.accent.opacity(scheme == .dark ? 0.22 : 0.14) : .clear))
+                .animation(.easeOut(duration: 0.2), value: tour.step)
             }
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .frame(width: 310, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.top, 28)
+        .frame(width: 340, alignment: .leading)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            progressBar
             Text("Step \(tour.step.rawValue + 1) of \(Onboarding.Step.allCases.count)")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.accent)
+                .font(.system(size: 14.5, weight: .bold))
+                .foregroundStyle(LinearGradient(colors: [Theme.accentStart, Self.violet], startPoint: .leading, endPoint: .trailing))
                 .textCase(.uppercase)
-            Text(title(tour.step)).font(.system(size: 36, weight: .bold))
+                .tracking(1.2)
+            Text(title(tour.step))
+                .font(.system(size: 44, weight: .heavy))
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
             Text(summary(tour.step))
-                .font(.system(size: 16))
+                .font(.system(size: 19))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    static let violet = Color(red: 0.52, green: 0.38, blue: 0.98)
+
+    /// Overall progress: every finished step plus the current one once it is done.
+    /// Загальний прогрес: кожен завершений крок і поточний, щойно його виконано.
+    private var progressBar: some View {
+        let total = Double(Onboarding.Step.allCases.count)
+        let value = Double(tour.finished.count)
+        return GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.trackFill(scheme))
+                Capsule()
+                    .fill(LinearGradient(colors: [Theme.accentStart, Self.violet], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: max(10, proxy.size.width * value / total))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: tour.finished.count)
+            }
+        }
+        .frame(height: 8)
     }
 
     private var footer: some View {
         HStack(spacing: 12) {
             if tour.canContinue {
                 Label("Done", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
-                    .font(.system(size: 15.5, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
             } else {
                 Label(waiting(tour.step, attempts: tour.attempts), systemImage: "circle.dotted").foregroundStyle(.secondary)
-                    .font(.system(size: 15))
+                    .font(.system(size: 17.5))
             }
             Spacer()
             if tour.step != .key {
@@ -198,13 +243,13 @@ struct OnboardingView: View {
                    "Good morning!", "¡Buenos días!")
             if settings.languageMode != "auto" {
                 HStack {
-                    Text("A fixed language is selected, so Tacet will not detect it.").font(.system(size: 15))
+                    Text("A fixed language is selected, so Tacet will not detect it.").font(.system(size: 17.5))
                     Button("Detect automatically") { settings.languageMode = "auto" }.buttonStyle(SoftButtonStyle())
                 }
             }
             if !tour.languages.isEmpty {
                 HStack(spacing: 8) {
-                    Text("Heard so far:").font(.system(size: 15)).foregroundStyle(.secondary)
+                    Text("Heard so far:").font(.system(size: 17.5)).foregroundStyle(.secondary)
                     ForEach(tour.languages, id: \.self) { SoftChip(text: $0.uppercased()) }
                 }
             }
@@ -276,42 +321,55 @@ struct OnboardingView: View {
 
     private func say(_ lead: LocalizedStringKey, _ phrase: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(lead).font(.system(size: 15)).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "quote.opening").foregroundStyle(Theme.accent)
-                Text(phrase).font(.system(size: 22, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+            Text(lead).font(.system(size: 17.5)).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Image(systemName: "quote.opening").font(.system(size: 24, weight: .bold)).foregroundStyle(Theme.accentStart)
+                Text(phrase).font(.system(size: 32, weight: .bold)).fixedSize(horizontal: false, vertical: true)
             }
-            Text("Hold \(keyName), speak, release.").font(.system(size: 14)).foregroundStyle(.secondary)
+            Text("Hold \(keyName), speak, release.").font(.system(size: 16.5, weight: .medium)).foregroundStyle(.secondary)
         }
-        .padding(16)
+        .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).fill(Theme.accent.opacity(0.10)))
+        .background(spotlight)
     }
 
     private func sayTwo(_ lead: LocalizedStringKey, _ first: LocalizedStringKey, _ second: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(lead).font(.system(size: 15)).foregroundStyle(.secondary)
+            Text(lead).font(.system(size: 17.5)).foregroundStyle(.secondary)
             ForEach([(1, first), (2, second)], id: \.0) { number, phrase in
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
                     Text("\(number)")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Theme.accent))
-                    Text(phrase).font(.system(size: 22, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(LinearGradient(colors: [Theme.accentStart, Self.violet], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    Text(phrase).font(.system(size: 32, weight: .bold)).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text("Hold \(keyName), speak, release.").font(.system(size: 14)).foregroundStyle(.secondary)
+            Text("Hold \(keyName), speak, release.").font(.system(size: 16.5, weight: .medium)).foregroundStyle(.secondary)
         }
-        .padding(16)
+        .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).fill(Theme.accent.opacity(0.10)))
+        .background(spotlight)
+    }
+
+    /// The card behind the phrase to say: tinted, with a bright gradient edge.
+    /// Картка за фразою, яку треба сказати: з відтінком і яскравим градієнтним краєм.
+    private var spotlight: some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        return shape
+            .fill(LinearGradient(colors: [Theme.accentStart.opacity(scheme == .dark ? 0.26 : 0.16),
+                                          Self.violet.opacity(scheme == .dark ? 0.22 : 0.12)],
+                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(shape.stroke(LinearGradient(colors: [Theme.accentStart.opacity(0.9), Self.violet.opacity(0.9)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5))
+            .shadow(color: Self.violet.opacity(scheme == .dark ? 0.30 : 0.18), radius: 18, y: 6)
     }
 
     private func task(_ text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "hand.point.right.fill").foregroundStyle(Theme.accent)
-            Text(text).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
+            Image(systemName: "hand.point.right.fill").font(.system(size: 22)).foregroundStyle(Theme.accentStart)
+            Text(text).font(.system(size: 19.5, weight: .medium)).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -319,8 +377,8 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 12) {
             ForEach([(leftTitle, left, false), (rightTitle, right, true)], id: \.1) { title, text, strong in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(strong ? Theme.accent : .secondary)
-                    Text(text).font(.system(size: 15.5)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(title).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(strong ? Theme.accent : .secondary)
+                    Text(text).font(.system(size: 18)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -331,13 +389,13 @@ struct OnboardingView: View {
 
     private var field: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Practice field").font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
+            Text("Practice field").font(.system(size: 14.5, weight: .semibold)).foregroundStyle(.secondary)
             TextEditor(text: $practice)
-                .font(.system(size: 17))
+                .font(.system(size: 20.5))
                 .focused($practiceFocused)
                 .scrollContentBackground(.hidden)
                 .padding(10)
-                .frame(minHeight: 130, maxHeight: 200)
+                .frame(minHeight: 150, maxHeight: 230)
                 .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(Theme.trackFill(scheme)))
                 .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
                     .stroke(practiceFocused ? Theme.accent.opacity(0.7) : .clear, lineWidth: 1.5))

@@ -28,8 +28,8 @@ final class AppWindows {
         guard !Onboarding.shared.isComplete else { return }
         if onboardingWindow == nil {
             let window = Self.makeWindow(title: String(localized: "Welcome to Tacet"),
-                                         size: NSSize(width: 1040, height: 720),
-                                         minimum: NSSize(width: 900, height: 640)) {
+                                         size: NSSize(width: 1180, height: 800),
+                                         minimum: NSSize(width: 1000, height: 700)) {
                 OnboardingView().environmentObject(DictationController.shared)
             }
             onboardingWindow = window

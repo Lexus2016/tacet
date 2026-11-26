@@ -87,12 +87,23 @@ struct SoftWindowBackground: View {
 
 // MARK: - Card
 
+private struct LargeControlsKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    /// Roomier type in cards, rows and buttons, for first-run screens. / Просторіший шрифт у картках, рядках і кнопках для екранів першого запуску.
+    var largeControls: Bool {
+        get { self[LargeControlsKey.self] }
+        set { self[LargeControlsKey.self] = newValue }
+    }
+}
+
 struct SoftCard<Content: View>: View {
     let title: String?
     let systemImage: String?
     private let content: Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.largeControls) private var large
 
     init(title: String? = nil,
          systemImage: String? = nil,
@@ -108,11 +119,11 @@ struct SoftCard<Content: View>: View {
                 HStack(spacing: 7) {
                     if let systemImage {
                         Image(systemName: systemImage)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: large ? 15 : 11, weight: .semibold))
                             .foregroundStyle(Theme.accent)
                     }
                     Text(LocalizedStringKey(title))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: large ? 18 : 13, weight: .bold))
                         .foregroundStyle(.primary)
                 }
                 .padding(.leading, 4)
@@ -139,6 +150,7 @@ struct SoftRow<Control: View>: View {
     var subtitle: String?
     var icon: String?
     private let control: Control
+    @Environment(\.largeControls) private var large
 
     init(_ title: String,
          subtitle: String? = nil,
@@ -154,17 +166,17 @@ struct SoftRow<Control: View>: View {
         HStack(spacing: 12) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: large ? 15 : 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 18)
+                    .frame(width: large ? 22 : 18)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 14))
+                    .font(.system(size: large ? 18 : 14, weight: large ? .medium : .regular))
                 if let subtitle {
                     Text(LocalizedStringKey(subtitle))
-                        .font(.system(size: 12))
+                        .font(.system(size: large ? 15 : 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -174,7 +186,7 @@ struct SoftRow<Control: View>: View {
 
             control
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, large ? 9 : 5)
     }
 }
 
@@ -299,9 +311,10 @@ struct SoftButtonStyle: ButtonStyle {
     /// Larger type and padding for first-run screens. / Більший шрифт і відступи для екранів першого запуску.
     var large = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.largeControls) private var environmentLarge
 
     func makeBody(configuration: Configuration) -> some View {
-        SoftButtonBody(configuration: configuration, destructive: destructive, large: large, scheme: scheme)
+        SoftButtonBody(configuration: configuration, destructive: destructive, large: large || environmentLarge, scheme: scheme)
     }
 
     private struct SoftButtonBody: View {
@@ -313,10 +326,10 @@ struct SoftButtonStyle: ButtonStyle {
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
             configuration.label
-                .font(.system(size: large ? 15 : 12, weight: .medium))
+                .font(.system(size: large ? 17 : 12, weight: .medium))
                 .foregroundStyle(destructive ? Theme.danger : Color.primary)
-                .padding(.horizontal, large ? 18 : 12)
-                .padding(.vertical, large ? 9 : 6)
+                .padding(.horizontal, large ? 22 : 12)
+                .padding(.vertical, large ? 11 : 6)
                 .background {
                     shape
                         .fill(Theme.cardFill(scheme))
@@ -346,10 +359,10 @@ struct SoftProminentButtonStyle: ButtonStyle {
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
             configuration.label
-                .font(.system(size: large ? 15 : 12, weight: .semibold))
+                .font(.system(size: large ? 17 : 12, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, large ? 22 : 14)
-                .padding(.vertical, large ? 9 : 6)
+                .padding(.horizontal, large ? 30 : 14)
+                .padding(.vertical, large ? 11 : 6)
                 .background {
                     shape
                         .fill(LinearGradient(colors: [Theme.accentStart, Theme.accentEnd],
