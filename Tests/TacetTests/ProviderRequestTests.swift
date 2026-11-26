@@ -72,9 +72,10 @@ final class ProviderRequestTests: XCTestCase {
             XCTAssertLessThanOrEqual(text.count, 95, text)
         }
         XCTAssertTrue(ParakeetRecognizer.supports("uk"))
-        // Chinese is served by the second Solo model; Hindi has no on-device model yet.
+        // Chinese is served by the second Solo model, Hindi by the system's dictation on OS 26 or later.
         XCTAssertTrue(ParakeetRecognizer.supports("zh"))
-        XCTAssertFalse(ParakeetRecognizer.supports("hi"))
+        if #available(macOS 26.0, *) { XCTAssertTrue(ParakeetRecognizer.supports("hi")) }
+        XCTAssertFalse(ParakeetRecognizer.supports("ar"))
     }
 
     func testOnDeviceResultReportsWhyTheCloudWasNotUsed() {

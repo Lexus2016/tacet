@@ -29,12 +29,14 @@ actor ParakeetRecognizer: SpeechRecognizer {
     /// Чи може Tacet Solo розпізнати цю мову (код ISO 639-1) котроюсь зі своїх моделей.
     nonisolated static func supports(_ language: String) -> Bool {
         Language(rawValue: language) != nil || SenseVoiceEngine.languages.contains(language)
+            || AppleDictationEngine.languages.contains(language)
     }
 
     /// Whether the model that serves this language is on disk; nil means the main model.
     /// Чи є на диску модель, що обслуговує цю мову; nil означає основну модель.
     nonisolated func isConfigured(for language: String?) -> Bool {
         if let language, SenseVoiceEngine.languages.contains(language) { return SenseVoiceEngine.shared.isReady() }
+        if let language, AppleDictationEngine.languages.contains(language) { return AppleDictationEngine.isReady(language) }
         return isConfigured()
     }
 
@@ -91,6 +93,7 @@ actor ParakeetRecognizer: SpeechRecognizer {
     /// їх тієї ж миті.
     func removeModel() async {
         await SenseVoiceEngine.shared.remove()
+        AppleDictationEngine.forget()
         loadTask?.cancel()
         loadTask = nil
         manager = nil
@@ -98,6 +101,14 @@ actor ParakeetRecognizer: SpeechRecognizer {
     }
 
     func transcribe(_ clip: AudioClip, language: String?) async throws -> Transcript {
+        if let language, AppleDictationEngine.languages.contains(language) {
+            let started = Date()
+            let text = try await AppleDictationEngine.transcribe(clip, language: language)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw RecognitionError.empty }
+            return Transcript(text: text, language: language, engine: id, score: 1,
+                              latency: Date().timeIntervalSince(started))
+        }
         if let language, SenseVoiceEngine.languages.contains(language) {
             let started = Date()
             let text = try await SenseVoiceEngine.shared.transcribe(clip.samples)

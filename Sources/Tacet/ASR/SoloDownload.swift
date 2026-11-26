@@ -23,8 +23,12 @@ final class SoloDownload: ObservableObject {
     }
 
     private var needsChinese: Bool { !languages.isDisjoint(with: SenseVoiceEngine.languages) }
+    /// Languages served by the system's own dictation, whose assets the system downloads.
+    /// Мови, які обслуговує системне диктування; його ресурси завантажує сама система.
+    private var systemLanguages: [String] { languages.intersection(AppleDictationEngine.languages).sorted() }
     private var isComplete: Bool {
         ParakeetRecognizer.shared.isConfigured() && (!needsChinese || SenseVoiceEngine.shared.isReady())
+            && systemLanguages.allSatisfy(AppleDictationEngine.isReady)
     }
 
     private init() { phase = isComplete ? .ready : .absent }
@@ -83,6 +87,9 @@ final class SoloDownload: ObservableObject {
                     await ParakeetRecognizer.shared.unload()
                 }
                 if needsChinese, !SenseVoiceEngine.shared.isReady() { try await SenseVoiceEngine.shared.download() }
+                for language in systemLanguages where !AppleDictationEngine.isReady(language) {
+                    try await AppleDictationEngine.download(language)
+                }
                 phase = isComplete ? .ready : .absent
             } catch {
                 phase = isComplete ? .ready : .absent
