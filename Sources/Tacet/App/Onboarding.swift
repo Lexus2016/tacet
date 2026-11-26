@@ -93,12 +93,36 @@ final class Onboarding: ObservableObject {
         // A clean phrase may need no correction; the second try completes the step either way.
         // Чиста фраза може не потребувати виправлень; друга спроба завершує крок у будь-якому разі.
         case .correct: if delivery.text != delivery.raw || attempts >= 2 { finished.insert(.correct) }
-        case .languages: if languages.count >= 2 || attempts >= 3 { finished.insert(.languages) }
+        // Recognition names one language per recording, so «Доброго ранку! Good morning!» in one go counted as Ukrainian only and the step never passed
+        // (owner, 26 Nov 2026). Two writing systems in one text count as two languages.
+        // Розпізнавання дає одну мову на запис; дві писемності в одному тексті зараховуються як дві мови.
+        case .languages: if languages.count >= 2 || Self.writingSystems(in: delivery.text).count >= 2 || attempts >= 3 { finished.insert(.languages) }
         case .translate: if delivery.translated { finished.insert(.translate) }
         case .edit, .translateSelection: if delivery.edited { finished.insert(step) }
         case .paste: if !delivery.pasted { finished.insert(.paste) }
         case .history, .indicator: break
         }
+    }
+
+    /// The writing systems whose letters appear in the text: Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Han/Kana, Hangul, Thai.
+    /// Писемності, літери яких є в тексті.
+    nonisolated static func writingSystems(in text: String) -> Set<String> {
+        var found = Set<String>()
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            switch scalar.value {
+            case 0x0041...0x024F, 0x1E00...0x1EFF: found.insert("latin")
+            case 0x0370...0x03FF: found.insert("greek")
+            case 0x0400...0x052F: found.insert("cyrillic")
+            case 0x0590...0x05FF: found.insert("hebrew")
+            case 0x0600...0x06FF, 0x0750...0x077F: found.insert("arabic")
+            case 0x0900...0x097F: found.insert("devanagari")
+            case 0x0E00...0x0E7F: found.insert("thai")
+            case 0x3040...0x30FF, 0x4E00...0x9FFF, 0x3400...0x4DBF: found.insert("cjk")
+            case 0xAC00...0xD7AF, 0x1100...0x11FF: found.insert("hangul")
+            default: break
+            }
+        }
+        return found
     }
 
     func note(_ step: Step) {

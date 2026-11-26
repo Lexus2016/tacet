@@ -300,6 +300,22 @@ final class OnboardingTests: XCTestCase {
         return (Onboarding(defaults: defaults), defaults, name)
     }
 
+    // «Доброго ранку! Good morning!» said in one go reached the tour as Ukrainian only (owner, 26 Nov 2026).
+    func testOneDictationInTwoWritingSystemsPassesTheLanguagesStep() {
+        let (tour, defaults, name) = tour()
+        defer { defaults.removePersistentDomain(forName: name) }
+        tour.recordingStarted(); tour.advance()
+        tour.delivered(.init(text: "Hello", raw: "hello")); tour.advance()
+        tour.delivered(.init(text: "On Wednesday.", raw: "on wednesday")); tour.advance()
+        XCTAssertEqual(tour.step, .languages)
+        tour.delivered(.init(text: "Доброго ранку!", raw: "доброго ранку", language: "uk"))
+        XCTAssertFalse(tour.canContinue, "One language is not enough")
+        tour.delivered(.init(text: "Доброго ранку! Good morning!", raw: "доброго ранку good morning", language: "uk"))
+        XCTAssertTrue(tour.canContinue)
+        XCTAssertEqual(Onboarding.writingSystems(in: "Доброго ранку! Good morning! 123"), ["cyrillic", "latin"])
+        XCTAssertEqual(Onboarding.writingSystems(in: "Guten Morgen, Welt"), ["latin"])
+    }
+
     func testEveryStepNeedsItsOwnActionAndTheTourLocksDictationUntilTheEnd() {
         let (tour, defaults, name) = tour()
         defer { defaults.removePersistentDomain(forName: name) }
