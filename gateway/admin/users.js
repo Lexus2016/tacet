@@ -13,6 +13,7 @@ const platforms = { macos: 'Mac', ios: 'iPhone', windows: 'Windows', android: 'A
 const operations = { audio: 'Диктування', text: 'Текст' };
 const failures = {
   400: 'Перевірте введені дані.', 404: 'Запис не знайдено.', 401: 'Сеанс завершився.',
+  409: 'Платіж із таким номером уже зафіксовано.',
 };
 
 function el(tag, props = {}, ...children) {
@@ -179,7 +180,8 @@ export function createUsers({ root, api, unauthorized }) {
 
         user.email && action('Видалення акаунта', [
           el('p', { text: 'Видаляє акаунт, пристрої й використання. Оплати та журнал дій лишаються. Дію не можна скасувати.' }),
-          field('Введіть пошту акаунта для підтвердження', el('input', { name: 'confirm', required: true, autocomplete: 'off' })), reason(),
+          field('Введіть пошту акаунта для підтвердження', el('input', { name: 'confirm', required: true, autocomplete: 'off' })),
+          reason('Причина (без імені й пошти користувача)'),
         ], 'Видалити акаунт', data => post('/delete', data), true)),
 
       el('h3', { text: 'Пристрої' }),

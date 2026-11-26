@@ -224,6 +224,17 @@ test('the owner console lists users and applies plans, blocks, payments and remo
   const summary = (await admin('/summary')).body;
   assert.deepEqual([summary.accounts, summary.plans.basic, summary.plans.free, summary.blocked], [2, 1, 1, 0]);
   assert.deepEqual(summary.payments, [{ currency: 'USD', amountCents: 599, count: 1 }]);
+  // A repeated submission of the same payment number is refused and changes nothing.
+  assert.equal((await admin(`/${account}/payments`, { amountCents: 599, currency: 'USD', method: 'Bank transfer', reference: 'INV-1' })).status, 409);
+  assert.equal((await admin(`/${account}`)).body.payments.length, 1);
+  assert.equal((await admin('?sort=constructor')).status, 200);
+  assert.equal((await admin(`/${account}/plan`, { plan: 'pro', until: Number.MAX_SAFE_INTEGER, reason: 'test' })).status, 400);
+  // An ended plan shows as free in the console even before the account's next request.
+  const other = listed.users.find(user => user.email === 'second@example.com').account;
+  await admin(`/${other}/plan`, { plan: 'pro', until: app.time() + 60_000, reason: 'Short trial' });
+  assert.equal((await admin(`/${other}`)).body.plan, 'pro');
+  app.advance(120_000);
+  assert.deepEqual([(await admin(`/${other}`)).body.plan, (await admin('/summary')).body.plans.pro], ['free', undefined]);
 
   // Blocking takes effect on the next request and stops new sign-ins; unblocking restores both.
   assert.equal((await admin(`/${account}/block`, {})).status, 400);
@@ -252,6 +263,7 @@ test('the owner console lists users and applies plans, blocks, payments and remo
   const db = new DatabaseSync(app.usagePath, { readOnly: true });
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM account_payments WHERE account = ?').get(account).count, 1);
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM admin_actions WHERE account = ? AND action = 'account_deleted'").get(account).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM admin_actions WHERE account = ? AND reason <> '' AND action <> 'account_deleted'").get(account).count, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM login_accounts').get().count, 1);
   db.close();
   assert.equal((await admin('/unknown-account')).status, 404);

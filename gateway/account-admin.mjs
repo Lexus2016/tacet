@@ -3,6 +3,7 @@ import { catalog } from './account-plans.mjs';
 import { GatewayError } from './routing.mjs';
 
 const day = 24 * 60 * 60 * 1000;
+const money = (cents, currency) => `${(cents / 100).toFixed(2)} ${currency}`;
 const sorts = {
   active: 'COALESCE(s.last_active, 0) DESC', created: 'COALESCE(s.created, 0) DESC',
   audio: 'audio DESC', text: 'text DESC', email: "COALESCE(a.email, k.account)",
@@ -57,8 +58,15 @@ export function openAccountAdmin({ path, now = Date.now }) {
     db.prepare(`WITH ${known} SELECT ${columns} ${joins} ${filter} ORDER BY ${order}, k.account`)]));
   const one = db.prepare(`WITH ${known} SELECT ${columns} ${joins} WHERE k.account = ?`);
   const readState = db.prepare('SELECT blocked, plan_until FROM account_state WHERE account = ?');
+  // A row created by an operator action has no known dates (0) until the account is next seen.
+  // Рядок, створений дією оператора, не має відомих дат (0), доки акаунт не з'явиться знову.
   const touch = db.prepare(`INSERT INTO account_state (account, created, last_active) VALUES (?, ?, ?)
-    ON CONFLICT(account) DO UPDATE SET last_active = excluded.last_active`);
+    ON CONFLICT(account) DO UPDATE SET last_active = excluded.last_active,
+      created = CASE WHEN created = 0 THEN excluded.created ELSE created END`);
+  const addState = db.prepare('INSERT OR IGNORE INTO account_state (account, created, last_active) VALUES (?, 0, 0)');
+  const findPayment = db.prepare("SELECT 1 FROM account_payments WHERE account = ? AND reference = ? AND reference <> ''");
+  const scrubPayments = db.prepare("UPDATE account_payments SET note = '' WHERE account = ?");
+  const scrubActions = db.prepare("UPDATE admin_actions SET reason = '' WHERE account = ?");
   const setBlocked = db.prepare('UPDATE account_state SET blocked = ? WHERE account = ?');
   const setPlanState = db.prepare('UPDATE account_state SET plan_source = ?, plan_until = ? WHERE account = ?');
   const savePlan = db.prepare(`INSERT INTO pilot_account_plan VALUES (?, ?)
@@ -76,10 +84,11 @@ export function openAccountAdmin({ path, now = Date.now }) {
       CAST(ROUND(SUM(audio_seconds)) AS INTEGER) AS audioSeconds, SUM(input_tokens + output_tokens) AS tokens,
       SUM(reported_cost_usd) AS costUSD
     FROM usage_daily WHERE account = ? AND day >= ? GROUP BY day, platform, operation ORDER BY day DESC, platform, operation`);
-  const planCounts = db.prepare(`WITH ${known} SELECT p.plan, COUNT(*) AS count, SUM(s.blocked IS NOT NULL) AS blocked,
+  const planCounts = db.prepare(`WITH ${known} SELECT
+      CASE WHEN s.plan_until IS NOT NULL AND s.plan_until <= ? THEN 'free' ELSE p.plan END AS plan, COUNT(*) AS count, SUM(s.blocked IS NOT NULL) AS blocked,
       SUM(COALESCE(s.created, 0) > ?) AS recent, SUM(COALESCE(s.last_active, 0) > ?) AS active
     FROM known k LEFT JOIN pilot_account_plan p ON p.account = k.account
-    LEFT JOIN account_state s ON s.account = k.account GROUP BY p.plan`);
+    LEFT JOIN account_state s ON s.account = k.account GROUP BY 1`);
   const monthUsage = db.prepare('SELECT COALESCE(SUM(audio), 0) AS audio, COALESCE(SUM(text), 0) AS text FROM pilot_account_quota WHERE month = ?');
   const monthCost = db.prepare(`SELECT COALESCE(SUM(reported_cost_usd), 0) AS cost, COALESCE(SUM(cost_samples), 0) AS samples,
     COALESCE(SUM(attempts), 0) AS attempts FROM usage_daily WHERE day >= ? AND day < ?`);
@@ -113,7 +122,13 @@ export function openAccountAdmin({ path, now = Date.now }) {
     return { id: date.toISOString().slice(0, 7), start, end: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
   }
 
-  function present(row) {
+  // A plan past its end date counts as free everywhere, also before the account's next request.
+  // Тариф після дати завершення всюди вважається безплатним, ще до наступного запиту акаунта.
+  const ended = (row, time) => Boolean(row.plan_until && row.plan_until <= time);
+
+  function present(row, time = now()) {
+    const expired = ended(row, time);
+    if (expired) row = { ...row, plan: 'free', plan_source: 'default', plan_until: null };
     const plan = Object.hasOwn(catalog, row.plan) ? row.plan : 'free';
     return {
       account: row.account, email: row.email, plan, limits: catalog[plan],
@@ -131,20 +146,22 @@ export function openAccountAdmin({ path, now = Date.now }) {
 
   // The state row is created on first use, so an update always has a row to change.
   // Рядок стану створюється під час першого використання, тож оновленню завжди є що змінити.
-  function ensure(account, time) {
-    if (!readState.get(account)) touch.run(account, time, time);
+  function ensure(account) {
+    addState.run(account);
   }
 
   function until(value, time) {
     if (value === null || value === undefined || value === '') return null;
     const parsed = typeof value === 'number' ? value : Date.parse(value);
-    if (!Number.isSafeInteger(parsed) || parsed <= time) throw new GatewayError(400, 'invalid_admin_input', 'Enter a future end date');
+    if (!Number.isSafeInteger(parsed) || parsed <= time || parsed > time + 3660 * day) {
+      throw new GatewayError(400, 'invalid_admin_input', 'Enter an end date within the next ten years');
+    }
     return parsed;
   }
 
   function assign(account, plan, end, source, reason, time) {
     if (typeof plan !== 'string' || !Object.hasOwn(catalog, plan)) throw new GatewayError(400, 'invalid_plan', 'Unknown plan');
-    ensure(account, time);
+    ensure(account);
     savePlan.run(account, plan);
     setPlanState.run(plan === 'free' ? 'default' : source, plan === 'free' ? null : end, account);
     log.run(time, account, 'plan', JSON.stringify({ plan, until: plan === 'free' ? null : end, source }), reason);
@@ -158,7 +175,6 @@ export function openAccountAdmin({ path, now = Date.now }) {
     guard(account) {
       const time = now();
       const state = readState.get(account);
-      if (state?.blocked) throw new GatewayError(403, 'account_blocked', 'This account is blocked. Contact Tacet support.');
       if (state?.plan_until && state.plan_until <= time) {
         transaction(() => {
           savePlan.run(account, 'free');
@@ -166,6 +182,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
           log.run(time, account, 'plan_expired', JSON.stringify({ plan: 'free' }), 'The plan reached its end date');
         });
       }
+      if (state?.blocked) throw new GatewayError(403, 'account_blocked', 'This account is blocked. Contact Tacet support.');
       if (!state || time - (seen.get(account) ?? 0) >= 60_000) {
         if (seen.size > 10_000) seen.clear();
         seen.set(account, time);
@@ -180,8 +197,8 @@ export function openAccountAdmin({ path, now = Date.now }) {
       const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
       const status = ['blocked', 'active'].includes(input.status) ? input.status : '';
       const plan = typeof input.plan === 'string' && Object.hasOwn(catalog, input.plan) ? input.plan : '';
-      const rows = (lists[input.sort] ?? lists.active).all(month(now()).id, query, pattern, pattern, status, status)
-        .map(present).filter(row => !plan || row.plan === plan);
+      const rows = (Object.hasOwn(lists, input.sort) ? lists[input.sort] : lists.active).all(month(now()).id, query, pattern, pattern, status, status)
+        .map(row => present(row)).filter(row => !plan || row.plan === plan);
       const offset = Math.max(0, Number.parseInt(input.offset, 10) || 0);
       return { total: rows.length, offset, users: rows.slice(offset, offset + 100) };
     },
@@ -205,7 +222,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
       const days = [new Date(current.start).toISOString().slice(0, 10), new Date(current.end).toISOString().slice(0, 10)];
       const plans = {};
       const totals = { accounts: 0, blocked: 0, newThisWeek: 0, activeThisWeek: 0 };
-      for (const row of planCounts.all(time - 7 * day, time - 7 * day)) {
+      for (const row of planCounts.all(time, time - 7 * day, time - 7 * day)) {
         const plan = Object.hasOwn(catalog, row.plan) ? row.plan : 'free';
         plans[plan] = (plans[plan] ?? 0) + row.count;
         totals.accounts += row.count;
@@ -238,7 +255,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
       find(account);
       const reason = text(input?.reason, 'reason', 200);
       transaction(() => {
-        ensure(account, time);
+        ensure(account);
         setBlocked.run(reason, account);
         log.run(time, account, 'block', '{}', reason);
       });
@@ -250,7 +267,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
       find(account);
       const reason = text(input?.reason, 'reason', 200);
       transaction(() => {
-        ensure(account, time);
+        ensure(account);
         setBlocked.run(null, account);
         log.run(time, account, 'unblock', '{}', reason);
       });
@@ -273,12 +290,19 @@ export function openAccountAdmin({ path, now = Date.now }) {
       const note = text(input?.note, 'note', 200, false);
       const paid = input?.time === undefined || input.time === null || input.time === '' ? time
         : typeof input.time === 'number' ? input.time : Date.parse(input.time);
-      if (!Number.isSafeInteger(paid) || paid > time + day) throw new GatewayError(400, 'invalid_admin_input', 'Enter a valid payment date');
+      if (!Number.isSafeInteger(paid) || paid > time + day || paid < time - 3660 * day) {
+        throw new GatewayError(400, 'invalid_admin_input', 'Enter a valid payment date');
+      }
       const end = input?.plan ? until(input.until, time) : null;
       transaction(() => {
+        // The same payment number is recorded once, so a repeated submission cannot double the money.
+        // Той самий номер платежу фіксується раз, тож повторне надсилання не подвоює суму.
+        if (findPayment.get(account, reference)) {
+          throw new GatewayError(409, 'duplicate_payment', 'This payment reference is already recorded');
+        }
         addPayment.run(account, paid, amount, currency, method, reference, note, time);
         log.run(time, account, 'payment', JSON.stringify({ amountCents: amount, currency, method, reference }), note || 'Payment recorded');
-        if (input?.plan) assign(account, input.plan, end, 'payment', note || 'Payment recorded', time);
+        if (input?.plan) assign(account, input.plan, end, 'payment', `Payment ${reference || money(amount, currency)}`, time);
       });
       return this.detail(account);
     },
@@ -297,7 +321,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
     },
 
     // Removes the account and its usage. Payments and the action log stay as accounting records,
-    // linked only to the opaque account identifier.
+    // linked only to the opaque account identifier, with earlier notes and reasons cleared.
     // Видаляє акаунт і його використання. Оплати й журнал дій лишаються як облікові записи,
     // пов'язані лише з непрозорим ідентифікатором акаунта.
     remove(account, input) {
@@ -308,6 +332,10 @@ export function openAccountAdmin({ path, now = Date.now }) {
       const reason = text(input?.reason, 'reason', 200);
       transaction(() => {
         for (const statement of removals) statement.run(account);
+        // Free text typed by the operator may name the person; amounts, dates and references stay.
+        // Вільний текст оператора може називати людину; суми, дати й номери платежів лишаються.
+        scrubPayments.run(account);
+        scrubActions.run(account);
         log.run(time, account, 'account_deleted', '{}', reason);
       });
       seen.delete(account);
