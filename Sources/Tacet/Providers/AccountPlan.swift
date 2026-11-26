@@ -232,11 +232,6 @@ struct AccountPlanView: View {
             try Task.checkCancellation()
             guard generation == refreshGeneration else { return }
             if incoming != info { info = incoming }
-            // A renewed or upgraded allowance returns dictation to the cloud at once.
-            // Поновлений або розширений ліміт одразу повертає диктування в хмару.
-            if incoming.plan != "paused", incoming.audioRemaining != 0 {
-                CloudAvailability.shared.noteAllowanceAvailable()
-            }
         } catch is CancellationError {
         } catch {
             if visible { self.error = error.localizedDescription }
@@ -305,8 +300,7 @@ struct OnDeviceDictationView: View {
 
     private func remove() {
         Task {
-            await ParakeetRecognizer.shared.unload()
-            try? FileManager.default.removeItem(at: ParakeetRecognizer.shared.modelDirectory)
+            await ParakeetRecognizer.shared.removeModel()
             phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
         }
     }

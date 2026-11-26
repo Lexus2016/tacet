@@ -43,20 +43,24 @@ final class TranscriptionPipeline {
         let voiceCheck = startVoiceLanguageCheck(clip: clip, settings: settings)
 
         defer { voiceCheck?.cancel() }
+        // The on-device model covers European languages only; a forced language it cannot
+        // transcribe keeps the dictation cloud-only.
+        // Модель на пристрої покриває лише європейські мови; примусова мова, якої вона не
+        // розпізнає, лишає диктування суто хмарним.
         let localReady = settings.engineOrder.contains(EngineID.parakeet) && parakeet.isConfigured()
+            && settings.languageOverride.map(ParakeetRecognizer.supports) != false
         for engineID in settings.engineOrder {
             if Task.isCancelled { break }
-            // With the on-device model ready, do not upload audio the cloud is known to refuse
-            // and do not wait for a timeout while offline.
-            // Коли модель на пристрої готова, не вивантажуємо аудіо, якому хмара точно відмовить,
-            // і не чекаємо на тайм-аут без мережі.
-            if localReady, EngineID.isGateway(engineID), let reason = cloud.blocked() {
-                attempts.append(Attempt(engine: engineID, error: reason.announcement, latency: 0,
-                                        audioQuotaExhausted: reason == .quota, unreachable: reason == .unreachable))
+            if engineID == EngineID.parakeet, !localReady {
+                attempts.append(Attempt(engine: engineID, error: parakeet.configurationIssue() ?? "Language not supported",
+                                        latency: 0))
                 continue
             }
             guard let recognizer = makeRecognizer(engineID, engines: engines) else {
                 attempts.append(Attempt(engine: engineID, error: "Unknown engine", latency: 0))
+                // A misconfigured gateway is a fault, not a reason to dictate on the device.
+                // Неправильно налаштований шлюз — це збій, а не привід диктувати на пристрої.
+                if EngineID.isGateway(engineID) { break }
                 continue
             }
 
@@ -67,6 +71,16 @@ final class TranscriptionPipeline {
                 // Without a connected account there is no on-device dictation either.
                 // Без підключеного акаунта диктування на пристрої теж немає.
                 if EngineID.isGateway(engineID) { break }
+                continue
+            }
+
+            // Checked only after the account is known to be connected: with no network path and
+            // the on-device model ready, do not wait for a timeout.
+            // Перевіряємо лише після того, як акаунт точно підключений: без мережевого шляху й з
+            // готовою моделлю на пристрої не чекаємо на тайм-аут.
+            if localReady, EngineID.isGateway(engineID), let reason = cloud.blocked() {
+                attempts.append(Attempt(engine: engineID, error: reason.announcement, latency: 0,
+                                        unreachable: true))
                 continue
             }
 
@@ -110,11 +124,9 @@ final class TranscriptionPipeline {
                 }
 
                 attempts.append(Attempt(engine: engineID, error: nil, latency: Date().timeIntervalSince(started)))
-                if EngineID.isGateway(engineID) { cloud.noteAllowanceAvailable() }
                 return .success(PipelineResult(transcript: transcript, attempts: attempts))
             } catch {
                 let reason = LocalFallback.reason(for: error)
-                if reason == .quota { cloud.noteQuotaExhausted() }
                 attempts.append(Attempt(engine: engineID,
                                         error: Self.describe(error),
                                         latency: Date().timeIntervalSince(started),
@@ -138,6 +150,7 @@ final class TranscriptionPipeline {
                                    engines: EngineConfiguration) async -> Result<PipelineResult, PipelineFailure> {
         let chunks = clip.chunked(seconds: seconds)
         var texts: [String] = []
+        var usedEngines: Set<String> = []
         var first: Transcript?
         var attempts: [Attempt] = []
         var failures = 0
@@ -158,6 +171,7 @@ final class TranscriptionPipeline {
             switch result {
             case .success(let output):
                 texts.append(output.transcript.text)
+                usedEngines.insert(output.transcript.engine)
                 if first == nil { first = output.transcript }
                 attempts.append(contentsOf: output.attempts)
             case .failure(let failure):
@@ -174,9 +188,13 @@ final class TranscriptionPipeline {
         let separator = (first.language == "zh" || first.language == "ja") ? "" : " "
         let joined = texts.joined(separator: separator)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // One part from the device makes the whole text on-device text: it must not be sent on
+        // to the cloud for correction or translation as if the cloud had produced it.
+        // Одна частина з пристрою робить увесь текст локальним: його не можна надсилати в хмару
+        // на виправлення чи переклад так, ніби його створила хмара.
         let transcript = Transcript(text: joined,
                                     language: first.language,
-                                    engine: first.engine,
+                                    engine: usedEngines.contains(EngineID.parakeet) ? EngineID.parakeet : first.engine,
                                     score: first.score,
                                     latency: first.latency)
         return .success(PipelineResult(transcript: transcript,

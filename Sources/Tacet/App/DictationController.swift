@@ -469,7 +469,7 @@ final class DictationController: ObservableObject {
             // On-device results skip every cloud text step and say why, once per switch.
             // Результат із пристрою оминає всі хмарні кроки з текстом і раз на перехід пояснює чому.
             let local = output.localFallback
-            if let note = localNotice.note(for: local) { notes.append(note) }
+            let notice = localNotice.pending(for: local).map { (text: $0, fallback: local) }
 
             if output.partial {
                 let completed = output.totalParts - output.failedParts
@@ -478,7 +478,7 @@ final class DictationController: ObservableObject {
                               latency: Date().timeIntervalSince(started), appName: appName,
                               cleanupEngine: nil, existingEntryID: existingEntryID, allowPaste: false,
                               allowClipboard: false, inBackground: inBackground, focus: focus,
-                              note: (notes + [note]).joined(separator: "; "), partial: true)
+                              note: (notes + [note]).joined(separator: "; "), partial: true, notice: notice)
                 return
             }
 
@@ -560,7 +560,8 @@ final class DictationController: ObservableObject {
                           allowClipboard: allowClipboard && selectionAllowsPaste,
                           inBackground: inBackground,
                           focus: focus,
-                          note: notes.isEmpty ? nil : notes.joined(separator: "; "))
+                          note: notes.isEmpty ? nil : notes.joined(separator: "; "),
+                          notice: notice)
 
         case .failure(let failure):
             recordFailure(failure,
@@ -651,7 +652,8 @@ final class DictationController: ObservableObject {
                          inBackground: Bool,
                          focus: SelectionReader.Focus?,
                          note: String?,
-                         partial: Bool = false) async {
+                         partial: Bool = false,
+                         notice: (text: String, fallback: LocalFallback?)? = nil) async {
         // A background attempt must not revive a deleted history entry.
         // Фоновий повтор не має відновлювати видалений запис історії.
         if let existingEntryID, store.entry(id: existingEntryID) == nil {
@@ -731,9 +733,19 @@ final class DictationController: ObservableObject {
         } else {
             message = String(localized: "Recovered — open History to copy")
         }
-        status(message)
         let failedToDeliver = partial || (!pasted && !copied && (allowPaste || focus != nil))
-        HUDController.shared.finish(error: settings.showHUD && failedToDeliver ? message : nil)
+        if let notice, !failedToDeliver {
+            // The text arrived; say which mode produced it. The notice counts as shown only here,
+            // so a failed or background delivery leaves it for the next dictation.
+            // Текст доставлено; кажемо, який режим його дав. Повідомлення вважається показаним
+            // лише тут, тож невдала чи фонова доставка лишає його наступному диктуванню.
+            status(notice.text)
+            if settings.showHUD { HUDController.shared.finish(notice: notice.text) } else { HUDController.shared.hide() }
+            localNotice.shown(notice.fallback)
+        } else {
+            status(message)
+            HUDController.shared.finish(error: settings.showHUD && failedToDeliver ? message : nil)
+        }
 
         phase = .idle
         lastFailure = nil
@@ -790,7 +802,8 @@ final class DictationController: ObservableObject {
         lastFailure = message
         status(String(localized: "Failed: \(message)"))
         let alert: String
-        if let reason = failure.attempts.cloudFailure, !ParakeetRecognizer.shared.isConfigured() {
+        if let reason = failure.attempts.cloudFailure, !ParakeetRecognizer.shared.isConfigured(),
+           settings.languageOverride.map(ParakeetRecognizer.supports) != false {
             alert = reason.downloadHint
         } else if failure.audioQuotaExhausted {
             alert = String(localized: "Dictation limit reached. See Plan and usage.")

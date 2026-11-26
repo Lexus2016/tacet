@@ -105,13 +105,9 @@ enum MobileRecognition {
             return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
         }
         do {
-            let result = try await transcribeInCloud(clip, languageHint: languageHint)
-            CloudAvailability.shared.noteAllowanceAvailable()
-            return result
+            return try await transcribeInCloud(clip, languageHint: languageHint)
         } catch {
-            let reason = fallbackReason(for: error)
-            if reason == .quota { CloudAvailability.shared.noteQuotaExhausted() }
-            guard let reason, localReady, !Task.isCancelled else { throw error }
+            guard let reason = fallbackReason(for: error), localReady, !Task.isCancelled else { throw error }
             return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
         }
     }
@@ -131,7 +127,11 @@ enum MobileRecognition {
 
     private static func transcribeLocally(_ clip: AudioClip, languageHint: String?,
                                           reason: LocalFallback) async throws -> Result {
-        let result = try await validatedTranscription {
+        // Room for a first load in a fresh process; with the cloud's own 25 s this stays inside the
+        // 55 s the keyboard waits for a result.
+        // Запас на перше завантаження у свіжому процесі; разом із 25 с хмари це вкладається у 55 с,
+        // які клавіатура чекає на результат.
+        let result = try await validatedTranscription(timeout: 28) {
             let transcript = try await ParakeetRecognizer.shared.transcribe(clip, language: languageHint)
             return Result(text: transcript.text, language: transcript.language, local: reason)
         }
@@ -139,8 +139,10 @@ enum MobileRecognition {
     }
 
     private static func transcribeInCloud(_ clip: AudioClip, languageHint: String?) async throws -> Result {
+        // A missing endpoint is a configuration fault, not an unreachable service.
+        // Відсутня адреса — це помилка налаштування, а не недосяжний сервіс.
         guard let spec = ProviderCatalog.spec(EngineID.hostedGateway),
-              let url = spec.endpoint("audio/transcriptions") else { throw MobileDictationError.unavailable }
+              let url = spec.endpoint("audio/transcriptions") else { throw MobileDictationError.gatewayNotProvisioned }
         let engine = CloudRecognizer(configuration: .init(
             id: spec.id, displayName: spec.name, baseURL: url,
             model: ProviderCatalog.defaultASRModel(for: spec.id), spec: spec,

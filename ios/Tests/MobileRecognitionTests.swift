@@ -54,6 +54,7 @@ final class MobileRecognitionTests: XCTestCase {
         XCTAssertNil(MobileRecognition.fallbackReason(for: RecognitionError.noSpeech))
         XCTAssertNil(MobileRecognition.fallbackReason(for: MobileDictationError.gatewayNotProvisioned))
         XCTAssertNil(MobileRecognition.fallbackReason(for: CancellationError()))
+        XCTAssertNil(MobileRecognition.fallbackReason(for: URLError(.cancelled)))
     }
 
     func testGatewayIsSharedByRecognitionAndTextProcessing() throws {

@@ -35,17 +35,21 @@ actor ParakeetRecognizer: SpeechRecognizer {
         isConfigured() ? nil : "Model not downloaded"
     }
 
-    /// Loads the model into memory without downloading. Called by the pipeline
-    /// on the first dictation and by Settings after a download.
-    func warmUp() async throws {
+    /// Loads the model into memory. Only the explicit download from Settings may fetch it:
+    /// a dictation loads strictly from disk and fails if the files are gone.
+    /// Завантажує модель у пам'ять. Отримати її з мережі може лише явне завантаження з налаштувань:
+    /// диктування читає суто з диска й завершується помилкою, якщо файлів немає.
+    func warmUp(download: Bool = false) async throws {
         if manager != nil { return }
         if let loadTask {
             manager = try await loadTask.value
             return
         }
 
+        let directory = modelDirectory
         let task = Task { () throws -> AsrManager in
-            let models = try await AsrModels.downloadAndLoad(version: .v3)
+            let models = download ? try await AsrModels.downloadAndLoad(version: .v3)
+                : try AsrModels.loadLocal(from: directory, version: .v3)
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
             return manager
@@ -70,11 +74,25 @@ actor ParakeetRecognizer: SpeechRecognizer {
 
     /// Explicit download from Settings. Returns the size on disk once ready.
     func downloadIfNeeded() async throws {
-        try await warmUp()
+        try await warmUp(download: true)
+    }
+
+    /// Frees the model and deletes its files inside the actor, so a dictation cannot be loading
+    /// them at the same moment.
+    /// Звільняє модель і вилучає її файли всередині актора, щоб диктування не могло завантажувати
+    /// їх тієї ж миті.
+    func removeModel() {
+        loadTask?.cancel()
+        loadTask = nil
+        manager = nil
+        try? FileManager.default.removeItem(at: modelDirectory)
     }
 
     func transcribe(_ clip: AudioClip, language: String?) async throws -> Transcript {
-        try await warmUp()
+        // Loading would fetch a missing model; a dictation must never start that download.
+        // Завантаження в пам'ять підтягнуло б відсутню модель; диктування не має запускати це завантаження.
+        guard isConfigured() else { throw RecognitionError.notConfigured(displayName) }
+        try await warmUp(download: false)
         guard let manager else {
             throw RecognitionError.failed("Parakeet is not loaded.")
         }

@@ -42,6 +42,7 @@ final class MobileDictationSession: ObservableObject {
             session = UUID()
             deadline = Date().addingTimeInterval(TimeInterval(Self.duration))
             try publish()
+            prewarmOnDeviceModelIfLikelyNeeded()
             timer = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .milliseconds(160)) } catch { return }
@@ -154,6 +155,9 @@ final class MobileDictationSession: ObservableObject {
     private func finishRecording() {
         guard let request = currentRequest else { return }
         let recording = audio.finish()
+        // Do not let the idle timer drop the model in the middle of this dictation.
+        // Не даємо таймеру простою вивантажити модель посеред цього диктування.
+        modelUnload?.cancel()
         phase = .processing
         phaseUntil = .distantFuture
         lastPublish = .distantPast
@@ -166,16 +170,28 @@ final class MobileDictationSession: ObservableObject {
         let target = translatesToLayout ? layout?.rawValue ?? language : nil
         let languageHint = target != nil || selection != nil ? nil : language
         recognition = Task {
+            // The on-device model can only replace recognition; a later cloud step that fails
+            // must not suggest downloading it.
+            // Модель на пристрої замінює лише розпізнавання; збій пізнішого хмарного кроку
+            // не має пропонувати її завантаження.
+            var recognised = false
             do {
                 let clip = try await Task.detached(priority: .userInitiated) {
                     try recording.makeClip()
                 }.value
                 defer { try? FileManager.default.removeItem(at: clip.url) }
                 try Task.checkCancellation()
+                // With translation on, the layout names the target, so the spoken language is unknown.
+                // Коли ввімкнено переклад, розкладка задає цільову мову, тож мова мовлення невідома.
                 let transcript = try await MobileRecognition.transcribe(clip, languageHint: languageHint,
-                                                                        spokenLanguage: language)
+                                                                        spokenLanguage: target == nil ? language : nil)
+                recognised = true
+                UserDefaults.standard.set(transcript.local != nil, forKey: MobilePreferences.lastDictationOnDevice)
                 try Task.checkCancellation()
-                let note = localNotice.note(for: transcript.local)
+                // The notice counts as shown only when a result actually carries it.
+                // Повідомлення вважається показаним лише тоді, коли результат справді його несе.
+                let note = localNotice.pending(for: transcript.local)
+                let shown: LocalFallback?? = .some(transcript.local)
                 if transcript.local != nil {
                     scheduleModelUnload()
                     // On-device results skip every cloud text step.
@@ -183,7 +199,7 @@ final class MobileDictationSession: ObservableObject {
                     if selection != nil {
                         complete(request: request, phase: .error, text: LocalFallback.editsNeedCloud)
                     } else {
-                        complete(request: request, phase: .result, text: transcript.text, warning: note)
+                        complete(request: request, phase: .result, text: transcript.text, warning: note, shown: shown)
                     }
                     return
                 }
@@ -192,16 +208,35 @@ final class MobileDictationSession: ObservableObject {
                     let replacement = try await output.editSelection(
                         selection, instruction: transcript.text
                     )
-                    complete(request: request, phase: .result, text: replacement)
+                    complete(request: request, phase: .result, text: replacement, warning: note, shown: shown)
                     return
                 }
                 let result = await output.prepare(transcript, target: target)
                 complete(request: request, phase: .result, text: result.text,
-                         warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : note)
+                         warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : note,
+                         shown: result.translationFailed ? nil : shown)
             } catch {
+                scheduleModelUnload()
                 complete(request: request, phase: .error,
-                         text: MobileRecognition.failureMessage(for: error, spokenLanguage: language))
+                         text: recognised ? error.localizedDescription
+                             : MobileRecognition.failureMessage(for: error, spokenLanguage: target == nil ? language : nil))
             }
+        }
+    }
+
+    /// The first load in a fresh process takes about 18 s on an iPhone 15 Pro (later reloads 0.3 s).
+    /// Pay it when the session starts, if the device is offline or the last dictation already ran
+    /// on the device, instead of inside the first dictation.
+    /// Перше завантаження у свіжому процесі триває близько 18 с на iPhone 15 Pro (наступні — 0,3 с).
+    /// Витрачаємо цей час на початку сесії, якщо пристрій без мережі або попереднє диктування вже
+    /// йшло на пристрої, а не всередині першого диктування.
+    private func prewarmOnDeviceModelIfLikelyNeeded() {
+        guard ParakeetRecognizer.shared.isConfigured(),
+              CloudAvailability.shared.blocked() != nil
+                || UserDefaults.standard.bool(forKey: MobilePreferences.lastDictationOnDevice) else { return }
+        Task {
+            try? await ParakeetRecognizer.shared.warmUp()
+            scheduleModelUnload()
         }
     }
 
@@ -215,8 +250,10 @@ final class MobileDictationSession: ObservableObject {
         }
     }
 
-    private func complete(request: UUID, phase: DictationBridge.Status.Phase, text: String, warning: String? = nil) {
+    private func complete(request: UUID, phase: DictationBridge.Status.Phase, text: String, warning: String? = nil,
+                          shown: LocalFallback?? = nil) {
         guard !Task.isCancelled, currentRequest == request else { return }
+        if let shown { localNotice.shown(shown) }
         recognition = nil
         requestSelection = nil
         self.phase = phase

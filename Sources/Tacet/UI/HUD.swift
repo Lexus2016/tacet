@@ -303,6 +303,17 @@ final class HUDController {
              autoHide: 2.8)
     }
 
+    /// A successful dictation that still has something to say, such as a switch to the on-device
+    /// model: shown briefly without the warning look of an error.
+    /// Успішне диктування, якому є що сказати, наприклад перехід на модель на пристрої:
+    /// показуємо коротко й без вигляду помилки.
+    func finish(notice: String) {
+        stopTicking()
+        startedAt = nil
+        model.subtitle = nil
+        show(title: notice, symbol: "info.circle.fill", tint: Theme.accent, level: false, autoHide: 3.5)
+    }
+
     /// Shows the current style for a couple of seconds, so the picker in
     /// Settings is not a blind choice.
     func preview() {

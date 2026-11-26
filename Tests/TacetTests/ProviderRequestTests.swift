@@ -4,32 +4,32 @@ import XCTest
 
 final class ProviderRequestTests: XCTestCase {
 
-    func testCloudAvailabilityRemembersQuotaUntilRecheckAndClearsOnAllowance() {
+    func testCloudIsSkippedOnlyWhileThereIsNoNetworkPath() {
         let cloud = CloudAvailability(monitoring: false)
-        let now = Date(timeIntervalSince1970: 1_000)
-        XCTAssertNil(cloud.blocked(now: now))
-        cloud.noteQuotaExhausted(now: now)
-        XCTAssertEqual(cloud.blocked(now: now.addingTimeInterval(CloudAvailability.quotaRecheck - 1)), .quota)
-        XCTAssertNil(cloud.blocked(now: now.addingTimeInterval(CloudAvailability.quotaRecheck + 1)))
-        cloud.noteQuotaExhausted(now: now)
-        cloud.noteAllowanceAvailable()
-        XCTAssertNil(cloud.blocked(now: now))
+        XCTAssertNil(cloud.blocked())
         cloud.setOnline(false)
-        XCTAssertEqual(cloud.blocked(now: now), .unreachable)
+        XCTAssertEqual(cloud.blocked(), .unreachable)
         cloud.setOnline(true)
-        XCTAssertNil(cloud.blocked(now: now))
+        XCTAssertNil(cloud.blocked())
     }
 
-    func testLocalFallbackNoticeExplainsOncePerSwitchAndAnnouncesTheReturn() {
+    func testLocalFallbackNoticeAdvancesOnlyWhenItWasShown() {
         var notice = LocalFallbackNotice()
-        XCTAssertNil(notice.note(for: nil))
-        XCTAssertEqual(notice.note(for: .quota), LocalFallback.quota.announcement)
-        XCTAssertTrue(notice.isLocal)
-        XCTAssertEqual(notice.note(for: .quota), LocalFallback.reminder)
-        XCTAssertEqual(notice.note(for: .unreachable), LocalFallback.unreachable.announcement)
-        XCTAssertEqual(notice.note(for: nil), LocalFallback.restored)
+        XCTAssertNil(notice.pending(for: nil))
+        // Not shown (the result displayed something else): the explanation is still owed.
+        XCTAssertEqual(notice.pending(for: .quota), LocalFallback.quota.announcement)
+        XCTAssertEqual(notice.pending(for: .quota), LocalFallback.quota.announcement)
         XCTAssertFalse(notice.isLocal)
-        XCTAssertNil(notice.note(for: nil))
+        notice.shown(.quota)
+        XCTAssertTrue(notice.isLocal)
+        XCTAssertEqual(notice.pending(for: .quota), LocalFallback.reminder)
+        XCTAssertEqual(notice.pending(for: .unreachable), LocalFallback.unreachable.announcement)
+        // The cloud is back, but the notice was not shown yet: it stays owed.
+        XCTAssertEqual(notice.pending(for: nil), LocalFallback.restored)
+        XCTAssertEqual(notice.pending(for: nil), LocalFallback.restored)
+        notice.shown(nil)
+        XCTAssertFalse(notice.isLocal)
+        XCTAssertNil(notice.pending(for: nil))
     }
 
     func testOnlyQuotaAndAnUnreachableServiceAllowTheOnDeviceModel() {
@@ -42,6 +42,9 @@ final class ProviderRequestTests: XCTestCase {
         XCTAssertNil(LocalFallback.reason(for: RecognitionError.missingKey("Tacet")))
         XCTAssertNil(LocalFallback.reason(for: RecognitionError.noSpeech))
         XCTAssertNil(LocalFallback.reason(for: CancellationError()))
+        XCTAssertNil(LocalFallback.reason(for: URLError(.cancelled)))
+        XCTAssertNil(LocalFallback.reason(for: URLError(.userAuthenticationRequired)))
+        XCTAssertEqual(LocalFallback.reason(for: URLError(.timedOut)), .unreachable)
         // A refused key is a failed gateway attempt, but not a reason to offer the on-device model.
         XCTAssertNil([Attempt(engine: EngineID.hostedGateway, error: "HTTP 401", latency: 0)].cloudFailure)
         // Messages must fit the two-line keyboard strip and Mac indicator.

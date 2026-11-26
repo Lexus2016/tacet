@@ -415,16 +415,25 @@ final class KeyboardController: UIInputViewController {
         // Centre the strip's content in the strip's actual height, whatever height the system gave the view.
         // Центруємо вміст смуги за її фактичною висотою, яку б висоту система не дала view.
         let strip = keys.frame.minY + rowPadding
+        placeLocalBadge()
         let center: CGFloat? = view.bounds.width > 480 ? nil
             : (strip * PortraitMetrics.stripCenter / PortraitMetrics.top * 2).rounded() / 2
         guard strip > 0, center != stripCenter || strip != stripHeight else { return }
         stripHeight = strip
         stripCenter = center
+        placeLocalBadge()
         for case let slot as SuggestionKey in suggestionBar.arrangedSubviews { slot.titleCenter = center }
         dictationWave.centerLine = center
         for constraint in dividerCenters { constraint.constant = center ?? (strip - 3) / 2 }
         renderedDictation = nil
         renderState()
+    }
+
+    /// Runs on every layout pass: the button has no size when it is first rendered.
+    /// Виконується на кожному проході розмітки: під час першого рендеру кнопка ще не має розміру.
+    private func placeLocalBadge() {
+        localBadge.frame = CGRect(x: dictationButton.bounds.midX + 7,
+                                  y: (stripCenter ?? dictationButton.bounds.midY) - 13, width: 6, height: 6)
     }
 
     /// Portrait: the last row's key face ends at the view's bottom edge, like the system keyboard.
@@ -1787,8 +1796,7 @@ final class KeyboardController: UIInputViewController {
             dictationButton.addSubview(localBadge)
         }
         localBadge.isHidden = !state.local
-        localBadge.frame = CGRect(x: dictationButton.bounds.midX + 7,
-                                  y: (stripCenter ?? dictationButton.bounds.midY) - 13, width: 6, height: 6)
+        placeLocalBadge()
         dictationButton.accessibilityValue = state.local ? String(localized: "On-device mode") : nil
         dictationButton.accessibilityLabel = title
         dictationButton.accessibilityHint = !state.hasSession

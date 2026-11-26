@@ -45,6 +45,15 @@ enum LocalFallback: String, Sendable, Equatable {
         String(localized: "Voice edits need the Tacet cloud. The selected text was kept.")
     }
 
+    /// Network failures that mean the service could not be reached. A cancelled request, a refused
+    /// certificate or a bad URL are not among them.
+    /// Мережеві збої, які означають, що сервіс недосяжний. Скасований запит, відхилений сертифікат
+    /// чи хибна адреса до них не належать.
+    private static let unreachableCodes: Set<URLError.Code> = [
+        .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost,
+        .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed,
+    ]
+
     /// Only an exhausted allowance or an unreachable service hands a dictation to the device.
     /// Silence, a rejected key, a disconnected account or a cancelled request never do, so the
     /// on-device model cannot stand in for a missing subscription.
@@ -54,48 +63,53 @@ enum LocalFallback: String, Sendable, Equatable {
     static func reason(for error: Error) -> LocalFallback? {
         switch error {
         case RecognitionError.gatewayAudioQuota: .quota
-        case RecognitionError.timedOut, is URLError: .unreachable
+        case RecognitionError.timedOut: .unreachable
         case RecognitionError.http(let status, _) where status >= 500: .unreachable
+        case let failure as URLError where unreachableCodes.contains(failure.code): .unreachable
         default: nil
         }
     }
 }
 
-/// Tracks which message an on-device dictation should carry, so the long explanation appears
-/// once per switch and not on every dictation.
-/// Стежить, яке повідомлення додати до диктування на пристрої, щоб довге пояснення з'являлося
-/// раз на кожен перехід, а не щоразу.
+/// Decides which notice an on-device dictation carries, so the explanation appears once per
+/// switch. The state advances only when a notice was actually shown: a result that displayed
+/// something else, or was cancelled, leaves it for the next dictation.
+/// Визначає, яке повідомлення додати до диктування на пристрої, щоб пояснення з'являлося раз на
+/// перехід. Стан змінюється лише після справжнього показу: результат, що показав щось інше або
+/// був скасований, лишає повідомлення наступному диктуванню.
 struct LocalFallbackNotice: Sendable {
     private(set) var announced: LocalFallback?
 
     var isLocal: Bool { announced != nil }
 
-    /// The note for a finished dictation; `fallback` is nil when the cloud served it.
-    /// Примітка до завершеного диктування; `fallback` дорівнює nil, коли його виконала хмара.
-    mutating func note(for fallback: LocalFallback?) -> String? {
-        defer { announced = fallback }
+    /// The notice a finished dictation should show; `fallback` is nil when the cloud served it.
+    /// Повідомлення для завершеного диктування; `fallback` дорівнює nil, коли його виконала хмара.
+    func pending(for fallback: LocalFallback?) -> String? {
         guard let fallback else { return announced == nil ? nil : LocalFallback.restored }
         return announced == fallback ? LocalFallback.reminder : fallback.announcement
     }
+
+    /// Call once the notice from `pending(for:)` reached the user.
+    /// Викликаємо, коли повідомлення з `pending(for:)` дійшло до користувача.
+    mutating func shown(_ fallback: LocalFallback?) {
+        announced = fallback
+    }
 }
 
-/// Remembers when the cloud cannot serve a dictation, so the next one goes straight to the
-/// on-device model instead of uploading audio only to be refused, or waiting for a timeout.
-/// Пам'ятає, коли хмара не може виконати диктування, щоб наступне одразу йшло на модель на
-/// пристрої, а не вивантажувало аудіо заради відмови й не чекало на тайм-аут.
+/// Tells whether the device has a network path, so an offline dictation goes straight to the
+/// on-device model instead of waiting for a timeout. Nothing is remembered between dictations:
+/// with a path available the cloud is always asked first, so a renewed or upgraded plan takes
+/// effect on the very next dictation.
+/// Повідомляє, чи має пристрій мережевий шлях, щоб диктування без мережі одразу йшло на модель на
+/// пристрої, а не чекало на тайм-аут. Між диктуваннями нічого не запам'ятовується: коли шлях є,
+/// спершу завжди питаємо хмару, тож поновлений чи розширений тариф діє вже з наступного диктування.
 final class CloudAvailability: @unchecked Sendable {
     static let shared = CloudAvailability(monitoring: true)
 
-    /// A refused dictation is retried in the cloud after this long when the renewal time is unknown,
-    /// so a plan change made elsewhere is picked up soon.
-    /// Якщо час поновлення невідомий, після відмови знову пробуємо хмару через цей проміжок,
-    /// щоб швидко помітити зміну тарифу, зроблену деінде.
-    static let quotaRecheck: TimeInterval = 300
-
     private let lock = NSLock()
     private let monitor: NWPathMonitor?
-    private var online = true
-    private var quotaUntil: Date?
+    private var forcedOnline: Bool?
+    private var evaluated = false
 
     init(monitoring: Bool) {
         guard monitoring else {
@@ -104,36 +118,26 @@ final class CloudAvailability: @unchecked Sendable {
         }
         let monitor = NWPathMonitor()
         self.monitor = monitor
-        monitor.pathUpdateHandler = { [weak self] path in self?.setOnline(path.status != .unsatisfied) }
+        // Until the system has evaluated the path once, assume it exists.
+        // Доки система не оцінила шлях уперше, вважаємо, що він є.
+        monitor.pathUpdateHandler = { [weak self] _ in self?.lock.withLock { self?.evaluated = true } }
         monitor.start(queue: DispatchQueue(label: "ua.rawira.tacet.reachability", qos: .utility))
     }
 
     deinit { monitor?.cancel() }
 
-    /// Non-nil while the cloud should be skipped. / Не nil, доки хмару слід оминати.
-    func blocked(now: Date = Date()) -> LocalFallback? {
-        lock.withLock {
-            if !online { return .unreachable }
-            guard let until = quotaUntil else { return nil }
-            if until > now { return .quota }
-            quotaUntil = nil
-            return nil
-        }
+    /// Non-nil while there is no network path at all. Read from the live path on every call, so a
+    /// missed update cannot leave the cloud blocked.
+    /// Не nil, доки мережевого шляху немає взагалі. Читаємо поточний шлях під час кожного виклику,
+    /// тож пропущене оновлення не може лишити хмару заблокованою.
+    func blocked() -> LocalFallback? {
+        let (forced, evaluated) = lock.withLock { (forcedOnline, evaluated) }
+        let online = forced ?? (!evaluated || monitor?.currentPath.status != .unsatisfied)
+        return online ? nil : .unreachable
     }
 
-    func setOnline(_ value: Bool) {
-        lock.withLock { online = value }
-    }
-
-    /// The gateway refused a dictation for lack of allowance. / Шлюз відмовив у диктуванні через ліміт.
-    func noteQuotaExhausted(renews: Date? = nil, now: Date = Date()) {
-        let recheck = now.addingTimeInterval(Self.quotaRecheck)
-        lock.withLock { quotaUntil = renews.map { min($0, recheck) } ?? recheck }
-    }
-
-    /// The cloud served a dictation, or the plan shows allowance again.
-    /// Хмара виконала диктування, або тариф знову показує доступний ліміт.
-    func noteAllowanceAvailable() {
-        lock.withLock { quotaUntil = nil }
+    /// Overrides the system path, for tests. / Перекриває системний шлях, для тестів.
+    func setOnline(_ value: Bool?) {
+        lock.withLock { forcedOnline = value }
     }
 }

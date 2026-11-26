@@ -4,6 +4,7 @@ enum MobilePreferences {
     static let locale = "ios.speechLocale"
     static let defaultLocale = "en-US"
     static let translateToLayout = "ios.translateToLayout"
+    static let lastDictationOnDevice = "ios.lastDictationOnDevice"
 }
 
 struct EnableTacetDictation: AppIntent {
