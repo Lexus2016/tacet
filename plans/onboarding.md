@@ -8,6 +8,7 @@
 
 - Онбординг обов’язковий, без кнопки «Пропустити».
 - Доки користувач не увійшов в акаунт і не пройшов онбординг, застосунком користуватися не можна: спершу вхід за поштою, потім онбординг, і лише тоді основний екран та диктування.
+- Виняток, погоджений власником: звичайний набір на клавіатурі iPhone працює і без входу, як вимагає Apple. До входу й онбордингу заблоковані голосові функції та обробка тексту: диктування, виправлення, переклад і правки.
 - Диктування й обробка тексту під час онбордингу не рахуються у ліміти тарифу.
 - Онбординг показує всі режими роботи, корисні користувачеві; перелік нижче складено за кодом і документацією, і він є контрольним списком.
 
@@ -49,11 +50,10 @@
 
 ## Відкриті питання
 
-- Клавіатура iPhone: звичайний набір літер має працювати і без входу, бо Apple вимагає, щоб клавіатура лишалася придатною без мережі та повного доступу, і перевіряє це на рецензії. Блокувати до входу й онбордингу слід диктування, виправлення, переклад і правки, а не сам набір. Потребує підтвердження власника.
 
 - Тринадцять обов’язкових кроків подовжують шлях до першого використання. Межу тривалості визначити після перевірки з п. 7.
 - README для Mac досі описує провайдерів і порядок рушіїв, яких у застосунку вже немає; оновити разом з онбордингом.
 
 ## English
 
-The app cannot be used until the user has signed in and completed onboarding: sign-in first, then onboarding, then the main screen and dictation (open point: plain typing on the iPhone keyboard must keep working without sign-in, as App Review requires). Onboarding is mandatory with no skip, its dictation and text requests do not count against plan allowances, and it must show every mode useful to the user. The checklist above has thirteen modes: six shared (dictation, automatic correction, per-dictation language, translation while dictating, voice edit of a selection, translation of a selection), four Mac-only (dictation key, pasting, history, indicator and sounds) and three iPhone-only (enabling the keyboard, the dictation session, keyboard features). On-device mode and Plan and usage are left out by decision: the user meets them while working. Each step is completed by doing the action in a practice field. The gateway needs a separately counted, server-capped onboarding allowance so the exemption is not a way around the plan. Persist progress, add a step for every new capability, and test with first-time users.
+The app cannot be used until the user has signed in and completed onboarding: sign-in first, then onboarding, then the main screen and dictation (agreed exception: plain typing on the iPhone keyboard keeps working without sign-in, as App Review requires; voice and text-processing features stay locked). Onboarding is mandatory with no skip, its dictation and text requests do not count against plan allowances, and it must show every mode useful to the user. The checklist above has thirteen modes: six shared (dictation, automatic correction, per-dictation language, translation while dictating, voice edit of a selection, translation of a selection), four Mac-only (dictation key, pasting, history, indicator and sounds) and three iPhone-only (enabling the keyboard, the dictation session, keyboard features). On-device mode and Plan and usage are left out by decision: the user meets them while working. Each step is completed by doing the action in a practice field. The gateway needs a separately counted, server-capped onboarding allowance so the exemption is not a way around the plan. Persist progress, add a step for every new capability, and test with first-time users.
