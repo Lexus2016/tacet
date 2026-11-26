@@ -148,6 +148,19 @@ export function createUsers({ root, api, unauthorized }) {
   function renderDetail(user) {
     const post = (path, data) => call('POST', `/${user.account}${path}`, data);
     const planOptions = user.plans.map(plan => [plan.id, `${planNames[plan.id] ?? plan.id} — ${terms(plan)}`]);
+    // The closed list cuts a long label, so the chosen plan's conditions are repeated under it.
+    // Закритий список обрізає довгий підпис, тож умови вибраного тарифу повторено під ним.
+    const planField = (label, options, value) => {
+      const control = select('plan', options, value);
+      const hint = el('span', { class: 'hint' });
+      const show = () => {
+        const plan = user.plans.find(plan => plan.id === control.value);
+        hint.textContent = plan ? terms(plan) : '';
+      };
+      control.addEventListener('change', show);
+      show();
+      return el('label', { class: 'field' }, el('span', { text: label }), control, hint);
+    };
     const facts = [
       ['Акаунт', user.account],
       ['Тариф', `${planNames[user.plan] ?? user.plan} · ${sources[user.planSource] ?? user.planSource}` +
@@ -170,7 +183,7 @@ export function createUsers({ root, api, unauthorized }) {
 
       el('div', { class: 'actions-grid' },
         action('Тариф', [
-          field('Тариф', select('plan', planOptions, user.plan)),
+          planField('Тариф', planOptions, user.plan),
           field('Діє до (порожньо — безстроково)', el('input', { type: 'date', name: 'until' })), reason(),
         ], 'Застосувати', data => post('/plan', { plan: data.plan, until: end(data.until), reason: data.reason })),
 
@@ -179,7 +192,7 @@ export function createUsers({ root, api, unauthorized }) {
           field('Валюта', el('input', { name: 'currency', value: 'USD', maxlength: 3, required: true })),
           field('Спосіб', el('input', { name: 'method', required: true, maxlength: 40, placeholder: 'переказ, картка…' })),
           field('Номер платежу', el('input', { name: 'reference', maxlength: 120 })),
-          field('Увімкнути тариф', select('plan', [['', 'не змінювати'], ...planOptions.filter(([id]) => id !== 'paused')], '')),
+          planField('Увімкнути тариф', [['', 'не змінювати'], ...planOptions.filter(([id]) => id !== 'paused')], ''),
           field('Діє до', el('input', { type: 'date', name: 'until' })),
           el('input', { name: 'note', maxlength: 200, placeholder: 'Примітка', 'aria-label': 'Примітка' }),
         ], 'Зафіксувати оплату', data => post('/payments', {

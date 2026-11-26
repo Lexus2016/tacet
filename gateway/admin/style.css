@@ -96,6 +96,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .action h3 { margin: 0 0 4px; }
 .action p { font-size: 13px; }
 .field { display: grid; gap: 4px; }
+/* A control never grows past its card: a select is otherwise as wide as its longest option. */
+.action, .field { min-width: 0; }
+.action input, .action select, .action button { width: 100%; min-width: 0; max-width: 100%; }
+.action select { text-overflow: ellipsis; }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.4; }
 .danger { color: #ffd9db; background: #5a2b36; border-color: #7a3a47; }
 .danger:hover:not(:disabled) { background: #70323f; }
 
