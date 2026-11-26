@@ -80,7 +80,8 @@ final class CloudRecognizer: SpeechRecognizer {
 
         return Transcript(
             text: text,
-            language: LanguagePolicy.normalize(decoded.language) ?? TextLanguage.detect(text) ?? language,
+            language: TextLanguage.consistent(LanguagePolicy.normalize(decoded.language), with: text)
+                ?? TextLanguage.detect(text) ?? language,
             engine: id,
             score: Self.confidence(from: segments),
             latency: latency

@@ -105,52 +105,13 @@ final class Onboarding: ObservableObject {
         }
     }
 
-    /// The language to show for a dictation. Recognition gives one label per recording and can get it
-    /// wrong on a short phrase («Good morning» came back as Russian); when the label's writing system
-    /// does not occur in the text, the text decides.
-    /// Мова для показу. Розпізнавання дає одну мітку на запис і може помилитися на короткій фразі
-    /// («Good morning» повернулося як російська); якщо писемності мітки в тексті немає, вирішує текст.
+    /// Forwarders: the logic lives in `TextLanguage`, where every recognition result passes through it.
+    /// Переспрямування: логіка живе в `TextLanguage`, куди потрапляє кожен результат розпізнавання.
     nonisolated static func heardLanguage(reported: String?, text: String) -> String? {
-        let scripts = writingSystems(in: text)
-        guard let reported, !scripts.isEmpty else { return reported }
-        if scripts.contains(writingSystem(of: reported)) { return reported }
-        return TextLanguage.detect(text) ?? (scripts == ["latin"] ? "en" : nil)
+        TextLanguage.consistent(reported, with: text)
     }
 
-    nonisolated static func writingSystem(of language: String) -> String {
-        switch language.lowercased().prefix(2) {
-        case "ru", "uk", "bg", "sr", "be", "mk", "kk", "mn": "cyrillic"
-        case "el": "greek"
-        case "ar", "fa", "ur": "arabic"
-        case "he": "hebrew"
-        case "hi", "mr", "ne": "devanagari"
-        case "th": "thai"
-        case "zh", "ja": "cjk"
-        case "ko": "hangul"
-        default: "latin"
-        }
-    }
-
-    /// The writing systems whose letters appear in the text: Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Han/Kana, Hangul, Thai.
-    /// Писемності, літери яких є в тексті.
-    nonisolated static func writingSystems(in text: String) -> Set<String> {
-        var found = Set<String>()
-        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
-            switch scalar.value {
-            case 0x0041...0x024F, 0x1E00...0x1EFF: found.insert("latin")
-            case 0x0370...0x03FF: found.insert("greek")
-            case 0x0400...0x052F: found.insert("cyrillic")
-            case 0x0590...0x05FF: found.insert("hebrew")
-            case 0x0600...0x06FF, 0x0750...0x077F: found.insert("arabic")
-            case 0x0900...0x097F: found.insert("devanagari")
-            case 0x0E00...0x0E7F: found.insert("thai")
-            case 0x3040...0x30FF, 0x4E00...0x9FFF, 0x3400...0x4DBF: found.insert("cjk")
-            case 0xAC00...0xD7AF, 0x1100...0x11FF: found.insert("hangul")
-            default: break
-            }
-        }
-        return found
-    }
+    nonisolated static func writingSystems(in text: String) -> Set<String> { TextLanguage.writingSystems(in: text) }
 
     func note(_ step: Step) {
         guard !isComplete, self.step == step else { return }
