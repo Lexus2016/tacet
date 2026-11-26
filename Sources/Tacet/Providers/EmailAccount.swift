@@ -63,7 +63,7 @@ struct EmailAccountClient: Sendable {
     }
 
     enum Failure: LocalizedError, Equatable {
-        case invalidEmail, invalidCode, rateLimited, unavailable, deviceNotFound, deviceLimit, unauthorized, malformed, storage
+        case invalidEmail, invalidCode, rateLimited, unavailable, deviceNotFound, deviceLimit, unauthorized, malformed, storage, blocked
 
         var errorDescription: String? {
             switch self {
@@ -76,6 +76,7 @@ struct EmailAccountClient: Sendable {
             case .unauthorized: String(localized: "Your Tacet sign-in expired. Sign out and sign in again.")
             case .malformed: String(localized: "Tacet returned an unexpected account response.")
             case .storage: String(localized: "The Tacet sign-in could not be updated in Keychain.")
+            case .blocked: String(localized: "This Tacet account is blocked. Contact Tacet support.")
             }
         }
     }
@@ -215,6 +216,7 @@ struct EmailAccountClient: Sendable {
         case "code_rate_limit": throw Failure.rateLimited
         case "device_not_found": throw Failure.deviceNotFound
         case "device_limit": throw Failure.deviceLimit
+        case "account_blocked": throw Failure.blocked
         case "unauthorized": throw Failure.unauthorized
         default:
             if status == 429 { throw Failure.rateLimited }

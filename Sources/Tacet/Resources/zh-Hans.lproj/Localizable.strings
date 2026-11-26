@@ -129,3 +129,4 @@
 "No connection: dictating on this device, without correction or translation." = "无法连接：正在本设备上听写，不含纠正和翻译。";
 "Limit reached. Download the on-device model in Plan and usage to keep dictating." = "额度已用完。请在“套餐与用量”中下载设备模型以继续听写。";
 "No connection. Download the on-device model in Plan and usage to dictate offline." = "无法连接。请在“套餐与用量”中下载设备模型以离线听写。";
+"This Tacet account is blocked. Contact Tacet support." = "此 Tacet 账户已被封禁。请联系 Tacet 支持。";

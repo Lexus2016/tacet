@@ -1,3 +1,5 @@
+import { createUsers } from './users.js';
+
 const login = document.querySelector('#login');
 const opening = document.querySelector('#opening');
 const loginForm = document.querySelector('#login-form');
@@ -36,7 +38,7 @@ let busy = false;
 let session = 0;
 let polling = false;
 
-async function api(method, data, path = '/admin/api/routes') {
+async function api(method, data, path = 'api/routes') {
   const response = await fetch(path, {
     method,
     credentials: 'same-origin',
@@ -145,8 +147,24 @@ function load(snapshot) {
   render();
 }
 
+const tabs = document.querySelector('#tabs');
+const views = { routes: document.querySelector('#routes-view'), users: document.querySelector('#users-view') };
+const users = createUsers({
+  root: document.querySelector('#users'), api,
+  unauthorized: () => showLogin('Сеанс завершився. Увійдіть знову.'),
+});
+
+function showView(name) {
+  for (const [id, view] of Object.entries(views)) view.hidden = id !== name;
+  for (const tab of tabs.querySelectorAll('button')) tab.setAttribute('aria-pressed', String(tab.dataset.view === name));
+  if (name === 'users') users.show();
+}
+
+for (const tab of tabs.querySelectorAll('button')) tab.addEventListener('click', () => showView(tab.dataset.view));
+
 function showDashboard(snapshot) {
   load(snapshot);
+  tabs.hidden = !snapshot.accounts;
   session++;
   opening.hidden = login.hidden = true;
   dashboard.hidden = connection.hidden = false;
@@ -156,6 +174,8 @@ function showLogin(message = '') {
   session++;
   current = draft = undefined;
   busy = false;
+  users.reset();
+  showView('routes');
   groups.replaceChildren();
   dashboard.hidden = connection.hidden = opening.hidden = true;
   login.hidden = false;
@@ -170,7 +190,7 @@ loginForm.addEventListener('submit', async event => {
   button.disabled = true;
   loginError.hidden = true;
   try {
-    showDashboard(await api('POST', { key: password.value }, '/admin/api/session'));
+    showDashboard(await api('POST', { key: password.value }, 'api/session'));
     password.value = '';
     document.querySelector('#logout').focus();
   } catch (error) {
@@ -185,7 +205,7 @@ document.querySelector('#logout').addEventListener('click', async event => {
   const button = event.currentTarget;
   button.disabled = true;
   try {
-    await api('DELETE', undefined, '/admin/api/session');
+    await api('DELETE', undefined, 'api/session');
     showLogin();
     password.focus();
   } catch {

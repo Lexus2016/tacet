@@ -163,6 +163,8 @@ final class CloudRecognizer: SpeechRecognizer {
             return .failed(String(localized: "Tacet is busy. Try dictating again in a moment."))
         case (403, "plan_paused"):
             return .failed(String(localized: "Dictation is paused. Check your Tacet plan."))
+        case (403, "account_blocked"):
+            return .failed(String(localized: "This Tacet account is blocked. Contact Tacet support."))
         case (403, "device_limit"):
             return .failed(String(localized: "This device exceeds the plan device limit."))
         case (400, _), (413, _), (415, _), (422, _):

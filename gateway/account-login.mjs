@@ -12,6 +12,7 @@ const isOpaque = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.tes
 const isUUID = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const platforms = new Set(['macos', 'ios', 'windows', 'android']);
 const badCode = () => new GatewayError(401, 'invalid_code', 'The code is invalid or has expired');
+const blockedAccount = () => new GatewayError(403, 'account_blocked', 'This account is blocked. Contact Tacet support.');
 const unknownDevice = () => new GatewayError(404, 'device_not_found', 'This device is no longer connected');
 const unavailable = () => new GatewayError(503, 'login_unavailable', 'Could not send the sign-in code');
 
@@ -32,7 +33,7 @@ function deviceFields(input) {
   return { id: input.deviceID.toLowerCase(), name, platform: input.platform };
 }
 
-export function openAccountLogin({ path, sendCode, secret, now = Date.now, allowedEmails }) {
+export function openAccountLogin({ path, sendCode, secret, now = Date.now, allowedEmails, isBlocked = () => false }) {
   if (!path || typeof sendCode !== 'function' || typeof secret !== 'string' || Buffer.byteLength(secret) < 32) {
     throw new TypeError('Email login needs a database, mail delivery and a secret / Для входу потрібні база, пошта й секрет');
   }
@@ -167,6 +168,8 @@ export function openAccountLogin({ path, sendCode, secret, now = Date.now, allow
           account = `acct_${randomUUID()}`;
           addAccount.run(account, challenge.email);
         }
+        // A blocked account gets no new device keys. / Заблокований акаунт не отримує нових ключів пристроїв.
+        if (isBlocked(account)) throw blockedAccount();
         const existing = devices(account, device.id);
         if (existing.some(entry => entry.current) || existing.length < limit(account)) return connect(account, device, time);
         const ticket = opaque();
@@ -188,6 +191,7 @@ export function openAccountLogin({ path, sendCode, secret, now = Date.now, allow
         const accountEmail = accountByID.get(verified.account)?.email;
         if (!accountEmail || !eligible(accountEmail)) throw badCode();
         const { account, device: id, name, platform } = verified;
+        if (isBlocked(account)) throw blockedAccount();
         const existing = devices(account, id);
         if (!getDevice.get(account, input.replaceDeviceID.toLowerCase())) throw unknownDevice();
         if (!existing.some(entry => entry.current)) {

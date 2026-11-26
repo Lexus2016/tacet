@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Шлюз Tacet</title>
-    <link rel="stylesheet" href="/admin/style.css">
-    <script type="module" src="/admin/app.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="app.js"></script>
   </head>
   <body>
     <header class="bar">
@@ -29,18 +29,31 @@
 
       <div id="dashboard" hidden>
         <div class="intro">
-          <div>
+          <nav class="tabs" id="tabs" aria-label="Розділи" hidden>
+            <button type="button" data-view="routes" aria-pressed="true">Маршрути</button>
+            <button type="button" data-view="users" aria-pressed="false">Користувачі</button>
+          </nav>
+          <button id="logout" type="button">Вийти</button>
+        </div>
+        <section id="routes-view">
+          <div class="heading">
             <h1>Маршрути</h1>
             <p>Шлюз пробує увімкнені маршрути зверху вниз.</p>
           </div>
-          <button id="logout" type="button">Вийти</button>
-        </div>
-        <div id="groups" class="groups"></div>
-        <div class="actions">
-          <p id="status" role="status" aria-live="polite"></p>
-          <button id="reload" type="button">Перечитати</button>
-          <button id="save" class="primary" type="button" disabled>Зберегти зміни</button>
-        </div>
+          <div id="groups" class="groups"></div>
+          <div class="actions">
+            <p id="status" role="status" aria-live="polite"></p>
+            <button id="reload" type="button">Перечитати</button>
+            <button id="save" class="primary" type="button" disabled>Зберегти зміни</button>
+          </div>
+        </section>
+        <section id="users-view" hidden>
+          <div class="heading">
+            <h1>Користувачі</h1>
+            <p>Акаунти, використання й ручні рішення. Кожна зміна потрапляє в журнал дій.</p>
+          </div>
+          <div id="users"></div>
+        </section>
       </div>
     </main>
 

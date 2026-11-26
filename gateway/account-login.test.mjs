@@ -60,7 +60,8 @@ async function fixture(t, extra = {}) {
     return request('/auth/verify', { data: { ...await challenge(email), ...target } });
   }
 
-  return { outbox, usagePath, restart, request, challenge, advance, device, connect };
+  return { outbox, usagePath, restart, request, challenge, advance, device, connect, time: () => time,
+    get origin() { return base.slice(0, -3); } };
 }
 
 test('email login joins platforms, shares quota, rejects reuse and restores sessions after a restart', async t => {
@@ -169,4 +170,90 @@ test('a short selection can be edited within the remaining text allowance', asyn
   assert.equal((await send(4096)).body.error.code, 'plan_quota');
   assert.equal((await send(530)).body.choices[0].message.content, 'Вітаю!');
   assert.equal((await f.request('/account/plan', { token })).body.used.textTokens, 72_015);
+});
+
+test('the owner console lists users and applies plans, blocks, payments and removal', async t => {
+  const app = await fixture(t);
+  const first = (await app.connect('First@Example.com', app.device('Laptop', 'macos'))).body.token;
+  const phone = app.device('Phone', 'ios');
+  await app.connect('first@example.com', phone);
+  const second = (await app.connect('second@example.com', app.device())).body.token;
+  assert.equal((await app.request('/models', { token: first })).status, 200);
+  assert.equal((await app.request('/models', { token: second })).status, 200);
+
+  const admin = async (path, data) => {
+    const response = await fetch(`${app.origin}/admin/api/users${path}`, {
+      method: data ? 'POST' : 'GET',
+      headers: { authorization: 'Bearer test-administrator-key-only', ...(data && { 'content-type': 'application/json' }) },
+      body: data && JSON.stringify(data),
+    });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.equal((await fetch(`${app.origin}/admin/api/users`)).status, 401);
+  assert.equal((await app.request('/models', { token: first })).status, 200);
+
+  const listed = (await admin('')).body;
+  assert.equal(listed.total, 2);
+  assert.deepEqual(listed.users.map(user => [user.email, user.plan, user.devices, user.blocked]).sort(),
+    [['first@example.com', 'free', 2, null], ['second@example.com', 'free', 1, null]]);
+  assert.equal((await admin('?query=SECOND')).body.total, 1);
+  assert.equal((await admin('?query=%25')).body.total, 0);
+  const account = listed.users.find(user => user.email === 'first@example.com').account;
+  assert.ok(listed.users.every(user => user.created && user.lastActive));
+
+  // A plan with an end date applies at once and falls back to free when it ends.
+  const end = app.time() + 3 * 24 * 60 * 60 * 1000;
+  assert.equal((await admin(`/${account}/plan`, { plan: 'unlimited', until: end })).status, 400);
+  assert.equal((await admin(`/${account}/plan`, { plan: 'gold', reason: 'test' })).status, 400);
+  assert.equal((await admin(`/${account}/plan`, { plan: 'pro', until: app.time() - 1, reason: 'test' })).status, 400);
+  const granted = (await admin(`/${account}/plan`, { plan: 'unlimited', until: end, reason: 'Owner access' })).body;
+  assert.deepEqual([granted.plan, granted.planSource, granted.planUntil], ['unlimited', 'operator', end]);
+  const seen = (await app.request('/account/plan', { token: first })).body;
+  assert.equal(seen.plan, 'unlimited');
+  assert.deepEqual(seen.available.map(option => option.id), ['free', 'basic', 'pro']);
+  app.advance(4 * 24 * 60 * 60 * 1000);
+  assert.equal((await app.request('/account/plan', { token: first })).body.plan, 'free');
+  assert.deepEqual((await admin(`/${account}`)).body.actions.map(entry => entry.action), ['plan_expired', 'plan']);
+
+  // A payment is recorded and can switch the plan in the same step.
+  assert.equal((await admin(`/${account}/payments`, { amountCents: 0, currency: 'USD', method: 'card' })).status, 400);
+  const paid = (await admin(`/${account}/payments`, { amountCents: 599, currency: 'usd', method: 'Bank transfer',
+    reference: 'INV-1', plan: 'basic', until: app.time() + 31 * 24 * 60 * 60 * 1000 })).body;
+  assert.deepEqual([paid.plan, paid.planSource, paid.payments.length, paid.payments[0].amountCents, paid.payments[0].currency],
+    ['basic', 'payment', 1, 599, 'USD']);
+  const summary = (await admin('/summary')).body;
+  assert.deepEqual([summary.accounts, summary.plans.basic, summary.plans.free, summary.blocked], [2, 1, 1, 0]);
+  assert.deepEqual(summary.payments, [{ currency: 'USD', amountCents: 599, count: 1 }]);
+
+  // Blocking takes effect on the next request and stops new sign-ins; unblocking restores both.
+  assert.equal((await admin(`/${account}/block`, {})).status, 400);
+  assert.equal((await admin(`/${account}/block`, { reason: 'Abuse report' })).body.blocked, 'Abuse report');
+  const refused = await app.request('/models', { token: first });
+  assert.deepEqual([refused.status, refused.body.error.code], [403, 'account_blocked']);
+  assert.equal((await app.request('/account/devices', { token: first })).status, 403);
+  assert.equal((await app.request('/models', { token: second })).status, 200);
+  assert.equal((await app.connect('first@example.com', app.device('Tablet', 'ios'))).status, 403);
+  assert.equal((await admin('?status=blocked')).body.total, 1);
+  assert.equal((await admin(`/${account}/unblock`, { reason: 'Resolved' })).body.blocked, null);
+  assert.equal((await app.request('/models', { token: first })).status, 200);
+
+  // A revoked device loses access; the rest of the account keeps working.
+  const devices = (await admin(`/${account}`)).body.deviceList;
+  const laptop = devices.find(device => device.name === 'Laptop');
+  assert.equal((await admin(`/${account}/devices/${laptop.id}`, { reason: 'Lost laptop' })).body.deviceList.length, devices.length - 1);
+  assert.equal((await app.request('/models', { token: first })).status, 401);
+  assert.equal((await admin(`/${account}/devices/${laptop.id}`, { reason: 'Again' })).status, 404);
+
+  // Deletion needs the email typed back; payments and the action log remain as records.
+  assert.equal((await admin(`/${account}/delete`, { confirm: 'wrong@example.com', reason: 'User request' })).status, 400);
+  assert.deepEqual((await admin(`/${account}/delete`, { confirm: 'first@example.com', reason: 'User request' })).body, { ok: true });
+  assert.equal((await admin(`/${account}`)).status, 404);
+  assert.equal((await admin('')).body.total, 1);
+  const db = new DatabaseSync(app.usagePath, { readOnly: true });
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM account_payments WHERE account = ?').get(account).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM admin_actions WHERE account = ? AND action = 'account_deleted'").get(account).count, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM login_accounts').get().count, 1);
+  db.close();
+  assert.equal((await admin('/unknown-account')).status, 404);
+  assert.equal((await admin('/a/b/c/d')).status, 404);
 });

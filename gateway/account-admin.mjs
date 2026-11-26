@@ -1,0 +1,319 @@
+import { DatabaseSync } from 'node:sqlite';
+import { catalog } from './account-plans.mjs';
+import { GatewayError } from './routing.mjs';
+
+const day = 24 * 60 * 60 * 1000;
+const sorts = {
+  active: 'COALESCE(s.last_active, 0) DESC', created: 'COALESCE(s.created, 0) DESC',
+  audio: 'audio DESC', text: 'text DESC', email: "COALESCE(a.email, k.account)",
+};
+
+function text(value, name, max, required = true) {
+  const result = typeof value === 'string' ? value.trim() : '';
+  if ((required && !result) || result.length > max || /[\u0000-\u001f\u007f]/.test(result)) {
+    throw new GatewayError(400, 'invalid_admin_input', `Enter a valid ${name}`);
+  }
+  return result;
+}
+
+// Operator tools over the account database: who the users are, what they use, and the manual
+// decisions about them. Every change is written to an append-only action log.
+// Інструменти оператора над базою акаунтів: хто користувачі, що вони використовують, і ручні
+// рішення щодо них. Кожна зміна потрапляє в журнал дій, який лише доповнюється.
+export function openAccountAdmin({ path, now = Date.now }) {
+  const db = new DatabaseSync(path);
+  db.exec(`
+    PRAGMA busy_timeout = 3000;
+    CREATE TABLE IF NOT EXISTS account_state (
+      account TEXT PRIMARY KEY, created INTEGER NOT NULL, last_active INTEGER NOT NULL,
+      blocked TEXT, plan_source TEXT NOT NULL DEFAULT 'default', plan_until INTEGER
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS admin_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, account TEXT NOT NULL,
+      action TEXT NOT NULL, detail TEXT NOT NULL, reason TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS admin_actions_account ON admin_actions(account, id);
+    CREATE TABLE IF NOT EXISTS account_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, time INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL, currency TEXT NOT NULL, method TEXT NOT NULL,
+      reference TEXT NOT NULL, note TEXT NOT NULL, recorded INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS account_payments_account ON account_payments(account, time);
+  `);
+
+  const known = `known(account) AS (
+    SELECT id FROM login_accounts UNION SELECT account FROM pilot_account_plan
+    UNION SELECT account FROM pilot_account_quota UNION SELECT account FROM account_state)`;
+  const columns = `k.account, a.email, p.plan, s.created, s.last_active, s.blocked, s.plan_source, s.plan_until,
+    (SELECT COUNT(*) FROM login_devices d WHERE d.account = k.account) AS devices,
+    COALESCE(q.audio, 0) AS audio, COALESCE(q.text, 0) AS text`;
+  const joins = `FROM known k LEFT JOIN login_accounts a ON a.id = k.account
+    LEFT JOIN pilot_account_plan p ON p.account = k.account
+    LEFT JOIN account_state s ON s.account = k.account
+    LEFT JOIN pilot_account_quota q ON q.account = k.account AND q.month = ?`;
+  const filter = `WHERE (? = '' OR a.email LIKE ? ESCAPE '\\' OR k.account LIKE ? ESCAPE '\\')
+    AND (? = '' OR (? = 'blocked') = (s.blocked IS NOT NULL))`;
+  const lists = Object.fromEntries(Object.entries(sorts).map(([name, order]) => [name,
+    db.prepare(`WITH ${known} SELECT ${columns} ${joins} ${filter} ORDER BY ${order}, k.account`)]));
+  const one = db.prepare(`WITH ${known} SELECT ${columns} ${joins} WHERE k.account = ?`);
+  const readState = db.prepare('SELECT blocked, plan_until FROM account_state WHERE account = ?');
+  const touch = db.prepare(`INSERT INTO account_state (account, created, last_active) VALUES (?, ?, ?)
+    ON CONFLICT(account) DO UPDATE SET last_active = excluded.last_active`);
+  const setBlocked = db.prepare('UPDATE account_state SET blocked = ? WHERE account = ?');
+  const setPlanState = db.prepare('UPDATE account_state SET plan_source = ?, plan_until = ? WHERE account = ?');
+  const savePlan = db.prepare(`INSERT INTO pilot_account_plan VALUES (?, ?)
+    ON CONFLICT(account) DO UPDATE SET plan = excluded.plan`);
+  const log = db.prepare('INSERT INTO admin_actions (time, account, action, detail, reason) VALUES (?, ?, ?, ?, ?)');
+  const actions = db.prepare('SELECT time, action, detail, reason FROM admin_actions WHERE account = ? ORDER BY id DESC LIMIT 100');
+  const addPayment = db.prepare(`INSERT INTO account_payments
+    (account, time, amount_cents, currency, method, reference, note, recorded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const payments = db.prepare(`SELECT time, amount_cents AS amountCents, currency, method, reference, note
+    FROM account_payments WHERE account = ? ORDER BY time DESC, id DESC LIMIT 100`);
+  const devices = db.prepare('SELECT id, name, platform, last_login AS lastLogin FROM login_devices WHERE account = ? ORDER BY last_login DESC, id');
+  const removeDevice = db.prepare('DELETE FROM login_devices WHERE account = ? AND id = ?');
+  const dailyAudio = db.prepare('SELECT audio FROM pilot_account_audio_daily WHERE account = ? AND day = ?');
+  const usageDays = db.prepare(`SELECT day, platform, operation, SUM(attempts) AS attempts, SUM(completed) AS completed,
+      CAST(ROUND(SUM(audio_seconds)) AS INTEGER) AS audioSeconds, SUM(input_tokens + output_tokens) AS tokens,
+      SUM(reported_cost_usd) AS costUSD
+    FROM usage_daily WHERE account = ? AND day >= ? GROUP BY day, platform, operation ORDER BY day DESC, platform, operation`);
+  const planCounts = db.prepare(`WITH ${known} SELECT p.plan, COUNT(*) AS count, SUM(s.blocked IS NOT NULL) AS blocked,
+      SUM(COALESCE(s.created, 0) > ?) AS recent, SUM(COALESCE(s.last_active, 0) > ?) AS active
+    FROM known k LEFT JOIN pilot_account_plan p ON p.account = k.account
+    LEFT JOIN account_state s ON s.account = k.account GROUP BY p.plan`);
+  const monthUsage = db.prepare('SELECT COALESCE(SUM(audio), 0) AS audio, COALESCE(SUM(text), 0) AS text FROM pilot_account_quota WHERE month = ?');
+  const monthCost = db.prepare(`SELECT COALESCE(SUM(reported_cost_usd), 0) AS cost, COALESCE(SUM(cost_samples), 0) AS samples,
+    COALESCE(SUM(attempts), 0) AS attempts FROM usage_daily WHERE day >= ? AND day < ?`);
+  const monthPayments = db.prepare(`SELECT currency, SUM(amount_cents) AS amountCents, COUNT(*) AS count
+    FROM account_payments WHERE time >= ? AND time < ? GROUP BY currency ORDER BY currency`);
+  const removals = [
+    'DELETE FROM login_codes WHERE email = (SELECT email FROM login_accounts WHERE id = ?)',
+    'DELETE FROM login_tickets WHERE account = ?', 'DELETE FROM login_devices WHERE account = ?',
+    'DELETE FROM pilot_account_plan WHERE account = ?', 'DELETE FROM pilot_account_quota WHERE account = ?',
+    'DELETE FROM pilot_account_audio_daily WHERE account = ?', 'DELETE FROM usage_daily WHERE account = ?',
+    'DELETE FROM account_state WHERE account = ?', 'DELETE FROM login_accounts WHERE id = ?',
+  ].map(sql => db.prepare(sql));
+
+  const seen = new Map();
+
+  function transaction(work) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const value = work();
+      db.exec('COMMIT');
+      return value;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  function month(time) {
+    const date = new Date(time);
+    const start = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+    return { id: date.toISOString().slice(0, 7), start, end: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
+  }
+
+  function present(row) {
+    const plan = Object.hasOwn(catalog, row.plan) ? row.plan : 'free';
+    return {
+      account: row.account, email: row.email, plan, limits: catalog[plan],
+      planSource: row.plan_source ?? 'default', planUntil: row.plan_until,
+      blocked: row.blocked, created: row.created, lastActive: row.last_active, devices: row.devices,
+      used: { audioSeconds: row.audio, textTokens: row.text },
+    };
+  }
+
+  function find(account) {
+    const row = typeof account === 'string' ? one.get(month(now()).id, account) : undefined;
+    if (!row) throw new GatewayError(404, 'unknown_account', 'Account not found');
+    return row;
+  }
+
+  // The state row is created on first use, so an update always has a row to change.
+  // Рядок стану створюється під час першого використання, тож оновленню завжди є що змінити.
+  function ensure(account, time) {
+    if (!readState.get(account)) touch.run(account, time, time);
+  }
+
+  function until(value, time) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = typeof value === 'number' ? value : Date.parse(value);
+    if (!Number.isSafeInteger(parsed) || parsed <= time) throw new GatewayError(400, 'invalid_admin_input', 'Enter a future end date');
+    return parsed;
+  }
+
+  function assign(account, plan, end, source, reason, time) {
+    if (typeof plan !== 'string' || !Object.hasOwn(catalog, plan)) throw new GatewayError(400, 'invalid_plan', 'Unknown plan');
+    ensure(account, time);
+    savePlan.run(account, plan);
+    setPlanState.run(plan === 'free' ? 'default' : source, plan === 'free' ? null : end, account);
+    log.run(time, account, 'plan', JSON.stringify({ plan, until: plan === 'free' ? null : end, source }), reason);
+  }
+
+  return {
+    // Called for every identified request: refuses a blocked account, ends an expired plan and
+    // records activity (at most once a minute per account).
+    // Викликається для кожного розпізнаного запиту: відмовляє заблокованому акаунту, завершує
+    // прострочений тариф і фіксує активність (не частіше ніж раз на хвилину на акаунт).
+    guard(account) {
+      const time = now();
+      const state = readState.get(account);
+      if (state?.blocked) throw new GatewayError(403, 'account_blocked', 'This account is blocked. Contact Tacet support.');
+      if (state?.plan_until && state.plan_until <= time) {
+        transaction(() => {
+          savePlan.run(account, 'free');
+          setPlanState.run('default', null, account);
+          log.run(time, account, 'plan_expired', JSON.stringify({ plan: 'free' }), 'The plan reached its end date');
+        });
+      }
+      if (!state || time - (seen.get(account) ?? 0) >= 60_000) {
+        if (seen.size > 10_000) seen.clear();
+        seen.set(account, time);
+        touch.run(account, time, time);
+      }
+    },
+
+    isBlocked: account => Boolean(readState.get(account)?.blocked),
+
+    list(input = {}) {
+      const query = typeof input.query === 'string' ? input.query.trim().toLowerCase().slice(0, 100) : '';
+      const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+      const status = ['blocked', 'active'].includes(input.status) ? input.status : '';
+      const plan = typeof input.plan === 'string' && Object.hasOwn(catalog, input.plan) ? input.plan : '';
+      const rows = (lists[input.sort] ?? lists.active).all(month(now()).id, query, pattern, pattern, status, status)
+        .map(present).filter(row => !plan || row.plan === plan);
+      const offset = Math.max(0, Number.parseInt(input.offset, 10) || 0);
+      return { total: rows.length, offset, users: rows.slice(offset, offset + 100) };
+    },
+
+    detail(account) {
+      const time = now();
+      const today = new Date(time).toISOString().slice(0, 10);
+      return {
+        ...present(find(account)),
+        usedToday: { audioSeconds: dailyAudio.get(account, today)?.audio ?? 0 },
+        deviceList: devices.all(account),
+        usage: usageDays.all(account, new Date(time - 30 * day).toISOString().slice(0, 10)),
+        payments: payments.all(account), actions: actions.all(account),
+        plans: Object.entries(catalog).map(([id, limits]) => ({ id, ...limits })),
+      };
+    },
+
+    summary() {
+      const time = now();
+      const current = month(time);
+      const days = [new Date(current.start).toISOString().slice(0, 10), new Date(current.end).toISOString().slice(0, 10)];
+      const plans = {};
+      const totals = { accounts: 0, blocked: 0, newThisWeek: 0, activeThisWeek: 0 };
+      for (const row of planCounts.all(time - 7 * day, time - 7 * day)) {
+        const plan = Object.hasOwn(catalog, row.plan) ? row.plan : 'free';
+        plans[plan] = (plans[plan] ?? 0) + row.count;
+        totals.accounts += row.count;
+        totals.blocked += row.blocked;
+        totals.newThisWeek += row.recent;
+        totals.activeThisWeek += row.active;
+      }
+      const used = monthUsage.get(current.id);
+      const cost = monthCost.get(...days);
+      return {
+        ...totals, plans, month: current.id, used: { audioSeconds: used.audio, textTokens: used.text },
+        // Providers do not report a cost for every request, so this is a lower bound.
+        // Провайдери повідомляють вартість не для кожного запиту, тож це нижня межа.
+        providerCost: { usd: cost.cost, reportedRequests: cost.samples, requests: cost.attempts },
+        payments: monthPayments.all(current.start, current.end),
+      };
+    },
+
+    setPlan(account, input) {
+      const time = now();
+      find(account);
+      const reason = text(input?.reason, 'reason', 200);
+      const end = until(input?.until, time);
+      transaction(() => assign(account, input?.plan, end, 'operator', reason, time));
+      return this.detail(account);
+    },
+
+    block(account, input) {
+      const time = now();
+      find(account);
+      const reason = text(input?.reason, 'reason', 200);
+      transaction(() => {
+        ensure(account, time);
+        setBlocked.run(reason, account);
+        log.run(time, account, 'block', '{}', reason);
+      });
+      return this.detail(account);
+    },
+
+    unblock(account, input) {
+      const time = now();
+      find(account);
+      const reason = text(input?.reason, 'reason', 200);
+      transaction(() => {
+        ensure(account, time);
+        setBlocked.run(null, account);
+        log.run(time, account, 'unblock', '{}', reason);
+      });
+      return this.detail(account);
+    },
+
+    // Records money received. With a plan it also activates that plan until the given date.
+    // Фіксує отримані гроші. Якщо вказано тариф, одразу вмикає його до заданої дати.
+    recordPayment(account, input) {
+      const time = now();
+      find(account);
+      const amount = input?.amountCents;
+      if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 100_000_00) {
+        throw new GatewayError(400, 'invalid_admin_input', 'Enter a valid amount');
+      }
+      const currency = text(input?.currency, 'currency', 3).toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currency)) throw new GatewayError(400, 'invalid_admin_input', 'Enter a three-letter currency');
+      const method = text(input?.method, 'payment method', 40);
+      const reference = text(input?.reference, 'reference', 120, false);
+      const note = text(input?.note, 'note', 200, false);
+      const paid = input?.time === undefined || input.time === null || input.time === '' ? time
+        : typeof input.time === 'number' ? input.time : Date.parse(input.time);
+      if (!Number.isSafeInteger(paid) || paid > time + day) throw new GatewayError(400, 'invalid_admin_input', 'Enter a valid payment date');
+      const end = input?.plan ? until(input.until, time) : null;
+      transaction(() => {
+        addPayment.run(account, paid, amount, currency, method, reference, note, time);
+        log.run(time, account, 'payment', JSON.stringify({ amountCents: amount, currency, method, reference }), note || 'Payment recorded');
+        if (input?.plan) assign(account, input.plan, end, 'payment', note || 'Payment recorded', time);
+      });
+      return this.detail(account);
+    },
+
+    revokeDevice(account, device, input) {
+      const time = now();
+      find(account);
+      const reason = text(input?.reason, 'reason', 200);
+      transaction(() => {
+        if (typeof device !== 'string' || !removeDevice.run(account, device.toLowerCase()).changes) {
+          throw new GatewayError(404, 'unknown_device', 'Device not found');
+        }
+        log.run(time, account, 'device_revoked', JSON.stringify({ device: device.toLowerCase() }), reason);
+      });
+      return this.detail(account);
+    },
+
+    // Removes the account and its usage. Payments and the action log stay as accounting records,
+    // linked only to the opaque account identifier.
+    // Видаляє акаунт і його використання. Оплати й журнал дій лишаються як облікові записи,
+    // пов'язані лише з непрозорим ідентифікатором акаунта.
+    remove(account, input) {
+      const time = now();
+      const row = find(account);
+      if (!row.email) throw new GatewayError(400, 'invalid_admin_input', 'Only email accounts can be deleted here');
+      if (input?.confirm !== row.email) throw new GatewayError(400, 'confirmation_required', 'Type the account email to confirm');
+      const reason = text(input?.reason, 'reason', 200);
+      transaction(() => {
+        for (const statement of removals) statement.run(account);
+        log.run(time, account, 'account_deleted', '{}', reason);
+      });
+      seen.delete(account);
+      return { ok: true };
+    },
+
+    close: () => db.close(),
+  };
+}

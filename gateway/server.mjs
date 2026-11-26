@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { isIP } from 'node:net';
 import { createAdminSessions } from './admin-session.mjs';
 import { openAccountLogin } from './account-login.mjs';
+import { openAccountAdmin } from './account-admin.mjs';
 import { openAccountPlans } from './account-plans.mjs';
 import { openClientUsage } from './client-usage.mjs';
 import { ConfigConflict, openRouteStore } from './routes.mjs';
@@ -12,6 +13,7 @@ import { createRouter, GatewayError } from './routing.mjs';
 const assets = new Map([
   ['/admin/', ['index.html', 'text/html; charset=utf-8']],
   ['/admin/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/admin/users.js', ['users.js', 'text/javascript; charset=utf-8']],
   ['/admin/style.css', ['style.css', 'text/css; charset=utf-8']],
 ].map(([path, [file, type]]) => [path, [readFileSync(new URL(`./admin/${file}`, import.meta.url)), type]]));
 
@@ -181,12 +183,21 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
   const managed = Boolean(emailLogin);
   const usage = openClientUsage({ registryPath, databasePath: usagePath, clientToken, adminToken, managed, now });
   const accountPlans = openAccountPlans({ path: usagePath, pilotAccounts, managed, now });
-  const login = emailLogin && openAccountLogin({ ...emailLogin, path: usagePath, now });
+  let accounts;
+  const login = emailLogin && openAccountLogin({ ...emailLogin, path: usagePath, now,
+    isBlocked: account => Boolean(accounts?.isBlocked(account)) });
+  // The user console needs the account tables, so it exists only where email sign-in does.
+  // Адмінці користувачів потрібні таблиці акаунтів, тож вона є лише там, де є вхід за поштою.
+  accounts = login && accountPlans ? openAccountAdmin({ path: usagePath, now }) : undefined;
   const trustedLoginProxies = new Set(emailLogin?.trustedProxies);
-  const identify = req => login?.identify(req.headers.authorization) ?? usage.identify(req.headers.authorization);
+  const identify = req => {
+    const client = login?.identify(req.headers.authorization) ?? usage.identify(req.headers.authorization);
+    if (client?.account) accounts?.guard(client.account);
+    return client;
+  };
   const router = createRouter({ store, credentials, fetchUpstream, now, cooldown, timeouts });
   const sessions = createAdminSessions({ secure: !localAdmin, now });
-  const snapshot = () => ({ ...store.get(), health: router.health(), configured, connections });
+  const snapshot = () => ({ ...store.get(), health: router.health(), configured, connections, accounts: Boolean(accounts) });
   let inFlight = 0;
   let audioBytesInFlight = 0;
   let expandedTextInFlight = 0;
@@ -231,6 +242,7 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
           (req.method === 'DELETE' && path?.startsWith('/v1/account/devices/')))) {
         const client = login.identify(req.headers.authorization);
         if (!client) throw new GatewayError(401, 'unauthorized', 'Device sign-in is required');
+        accounts?.guard(client.account);
         return send(res, 200, req.method === 'GET' ? login.devices(client) : login.revoke(client, path.split('/').at(-1)));
       }
 
@@ -285,6 +297,31 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
         }
       }
 
+      if (accounts && (path === '/admin/api/users' || path?.startsWith('/admin/api/users/'))) {
+        const change = req.method !== 'GET';
+        if (!allowed(req, adminToken)) {
+          if (!sessions.has(req)) throw new GatewayError(401, 'unauthorized', 'Administrator session required');
+          if (change) requireAdminHeader(req);
+        }
+        const parts = path.slice('/admin/api/users'.length).split('/').slice(1);
+        if (parts.length > 3 || parts.some(part => !/^[A-Za-z0-9_.-]{1,80}$/.test(part))) throw new GatewayError(404, 'not_found', 'Not found');
+        const [account, action, item] = parts;
+        if (!change) {
+          if (!account) return send(res, 200, accounts.list(Object.fromEntries(new URL(req.url, 'http://gateway').searchParams)));
+          if (account === 'summary' && !action) return send(res, 200, accounts.summary());
+          if (!action) return send(res, 200, accounts.detail(account));
+        } else if (account) {
+          const input = await readJson(req, 2 * 1024);
+          if (req.method === 'POST' && action === 'plan' && !item) return send(res, 200, accounts.setPlan(account, input));
+          if (req.method === 'POST' && action === 'block' && !item) return send(res, 200, accounts.block(account, input));
+          if (req.method === 'POST' && action === 'unblock' && !item) return send(res, 200, accounts.unblock(account, input));
+          if (req.method === 'POST' && action === 'payments' && !item) return send(res, 200, accounts.recordPayment(account, input));
+          if (req.method === 'POST' && action === 'devices' && item) return send(res, 200, accounts.revokeDevice(account, item, input));
+          if (req.method === 'POST' && action === 'delete' && !item) return send(res, 200, accounts.remove(account, input));
+        }
+        throw new GatewayError(404, 'not_found', 'Not found');
+      }
+
       const kind = { '/v1/chat/completions': 'text', '/v1/audio/transcriptions': 'audio' }[path];
       if (req.method === 'POST' && ['text', 'audio'].includes(kind)) {
         const client = identify(req);
@@ -332,5 +369,6 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
   if (usage.close) server.once('close', usage.close);
   if (accountPlans) server.once('close', accountPlans.close);
   if (login) server.once('close', login.close);
+  if (accounts) server.once('close', accounts.close);
   return server;
 }
