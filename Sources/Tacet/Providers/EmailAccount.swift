@@ -26,6 +26,8 @@ struct EmailAccountClient: Sendable {
         let deviceID: UUID
         let deviceName: String
         let platform: String
+        /// This Mac used Tacet before accounts existed. / На цьому Mac користувалися Tacet до появи акаунтів.
+        var transition = false
 
         static let platformName: String = {
             #if os(macOS)
@@ -42,7 +44,7 @@ struct EmailAccountClient: Sendable {
             #else
             let name = Self.validName(UIDevice.current.name, fallback: "iPhone")
             #endif
-            return .init(deviceID: id, deviceName: name, platform: platformName)
+            return .init(deviceID: id, deviceName: name, platform: platformName, transition: EarlierUse.reported)
         }
 
         static func validName(_ name: String, fallback: String) -> String {
@@ -120,10 +122,14 @@ struct EmailAccountClient: Sendable {
 
     func verify(challengeID: String, code: String, installation: Installation) async throws -> Verification {
         guard Self.isValidCode(code) else { throw Failure.invalidCode }
-        let payload = try JSONEncoder().encode([
-            "challengeID": challengeID, "code": code, "deviceID": installation.deviceID.uuidString,
-            "deviceName": installation.deviceName, "platform": installation.platform,
-        ])
+        struct Body: Encodable {
+            let challengeID, code, deviceID, deviceName, platform: String
+            let transition: Bool?
+        }
+        let payload = try JSONEncoder().encode(Body(
+            challengeID: challengeID, code: code, deviceID: installation.deviceID.uuidString,
+            deviceName: installation.deviceName, platform: installation.platform,
+            transition: installation.transition ? true : nil))
         let (data, status) = try await request("auth/verify", method: "POST", body: payload)
         if status == 409 {
             let limit = try decode(DeviceLimit.self, data: data)
@@ -131,8 +137,11 @@ struct EmailAccountClient: Sendable {
             return .replacementRequired(ticket: limit.ticket, devices: limit.devices)
         }
         try check(status, data: data)
+        if (try? decode(Gift.self, data: data))?.gift == true { EarlierUse.noteGift() }
         return .connected(try token(from: data))
     }
+
+    private struct Gift: Decodable { let gift: Bool? }
 
     func replace(ticket: String, deviceID: UUID) async throws -> String {
         let payload = try JSONEncoder().encode(["ticket": ticket, "replaceDeviceID": deviceID.uuidString])

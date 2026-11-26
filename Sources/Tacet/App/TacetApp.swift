@@ -31,6 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dictation = DictationController.shared
         dictation?.recoverAtLaunch()
+        #if os(macOS)
+        EarlierUse.recordOnce(hadActivity: HistoryStore.shared.count() > 0 || ProviderCatalog.all.contains {
+            !EngineID.isGateway($0.id) && ProviderCatalog.key(for: $0) != nil
+        })
+        #endif
         // Tacet Solo is part of the product: fetch its model in the background once an account is connected.
         // Tacet Solo — частина продукту: завантажуємо його модель у фоні, щойно акаунт підключено.
         Task {

@@ -240,7 +240,12 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
         return send(res, 200, await login.start(input?.email, source));
       }
       if (login && req.method === 'POST' && path === '/v1/auth/verify') {
-        const result = login.verify(await readJson(req, 2048));
+        const input = await readJson(req, 2048);
+        const result = login.verify(input);
+        if (result.token && accounts && input?.transition === true && input.platform === 'macos') {
+          const client = login.identify(`Bearer ${result.token}`);
+          if (client) result.gift = accounts.welcomeBack(client.account, client.device);
+        }
         return send(res, result.ticket ? 409 : 200, result);
       }
       if (login && req.method === 'POST' && path === '/v1/auth/device') {

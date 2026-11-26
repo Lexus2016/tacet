@@ -182,6 +182,23 @@ test('a short selection can be edited within the remaining text allowance', asyn
   assert.equal((await f.request('/chat/completions', { token, data: { messages: cjk, max_tokens: 64 } })).status, 413);
 });
 
+test('an earlier Mac user gets one month of Basic once per device, then returns to Free', async t => {
+  const f = await fixture(t);
+  const mac = { ...f.device('Old Mac'), transition: true };
+  const first = await f.connect('veteran@example.test', mac);
+  assert.equal(first.body.gift, true);
+  const plan = async token => (await f.request('/account/plan', { token })).body;
+  assert.deepEqual([(await plan(first.body.token)).plan, (await plan(first.body.token)).limits.audioSeconds], ['basic', 36000]);
+  // The same device under another email, and a phone, get no second gift.
+  assert.equal((await f.connect('other@example.test', mac)).body.gift, false);
+  assert.equal((await f.connect('phone@example.test', { ...f.device('iPhone', 'ios'), transition: true })).body.gift, undefined);
+  // A newcomer who does not report earlier use stays on Free.
+  const fresh = await f.connect('new@example.test', f.device('New Mac'));
+  assert.equal((await plan(fresh.body.token)).plan, 'free');
+  f.advance(31 * 24 * 60 * 60_000);
+  assert.equal((await plan(first.body.token)).plan, 'free');
+});
+
 test('the free allowance is one-time, follows the device to a new email and can be extended by the owner', async t => {
   const f = await fixture(t);
   const laptop = f.device();

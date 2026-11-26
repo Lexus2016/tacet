@@ -40,6 +40,7 @@ export function openAccountAdmin({ path, now = Date.now }) {
       reference TEXT NOT NULL, note TEXT NOT NULL, recorded INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS account_payments_account ON account_payments(account, time);
+    CREATE TABLE IF NOT EXISTS transition_gifts (device TEXT PRIMARY KEY, account TEXT NOT NULL, time INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS free_allowance (
       scope TEXT NOT NULL, id TEXT NOT NULL, audio INTEGER NOT NULL DEFAULT 0, text INTEGER NOT NULL DEFAULT 0,
       bonus_audio INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (scope, id)
@@ -78,6 +79,8 @@ export function openAccountAdmin({ path, now = Date.now }) {
   const savePlan = db.prepare(`INSERT INTO pilot_account_plan VALUES (?, ?)
     ON CONFLICT(account) DO UPDATE SET plan = excluded.plan`);
   const log = db.prepare('INSERT INTO admin_actions (time, account, action, detail, reason) VALUES (?, ?, ?, ?, ?)');
+  const addGift = db.prepare('INSERT OR IGNORE INTO transition_gifts (device, account, time) VALUES (?, ?, ?)');
+  const currentPlan = db.prepare('SELECT plan FROM pilot_account_plan WHERE account = ?');
   const actions = db.prepare('SELECT time, action, detail, reason FROM admin_actions WHERE account = ? ORDER BY id DESC LIMIT 100');
   const addPayment = db.prepare(`INSERT INTO account_payments
     (account, time, amount_cents, currency, method, reference, note, recorded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -259,6 +262,22 @@ export function openAccountAdmin({ path, now = Date.now }) {
         providerCost: { usd: cost.cost, reportedRequests: cost.samples, requests: cost.attempts },
         payments: monthPayments.all(current.start, current.end),
       };
+    },
+
+    // People who used the Mac app before accounts existed get one month of Basic when they first
+    // sign in: once per device, and only while the account is on the free plan. The app reports
+    // the earlier use itself, so this is a courtesy, not a security boundary.
+    // Ті, хто користувався застосунком для Mac до появи акаунтів, отримують місяць Basic під час
+    // першого входу: раз на пристрій і лише поки акаунт на безплатному тарифі. Про попереднє
+    // користування повідомляє сам застосунок, тож це люб'язність, а не межа безпеки.
+    welcomeBack(account, device) {
+      const time = now();
+      return transaction(() => {
+        const plan = currentPlan.get(account)?.plan ?? 'free';
+        if (plan !== 'free' || addGift.run(device, account, time).changes === 0) return false;
+        assign(account, 'basic', time + 30 * day, 'gift', 'A month of Basic for moving from the earlier Mac version', time);
+        return true;
+      });
     },
 
     setPlan(account, input) {

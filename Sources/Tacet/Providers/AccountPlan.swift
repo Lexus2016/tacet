@@ -108,6 +108,9 @@ struct AccountPlanView: View {
                             paidPlanMenu(info)
                         }
                     }
+                    if info.plan == "basic", let end = EarlierUse.giftEnd() {
+                        LabeledContent("Gift for moving to the new Tacet") { Text(end, format: .dateTime.day().month().year()) }
+                    }
                     if let reset = info.renewalDate {
                         LabeledContent("Renews") { Text(reset, format: .dateTime.day().month().year().hour().minute()) }
                     }
