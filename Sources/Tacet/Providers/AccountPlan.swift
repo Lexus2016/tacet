@@ -150,6 +150,7 @@ struct AccountPlanView: View {
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             if pending { ProgressView().controlSize(.small) }
             if info == nil && !pending { Button("Check now") { select(nil) } }
+            OnDeviceDictationView()
         }
         .disabled(pending)
         .task {
@@ -231,6 +232,11 @@ struct AccountPlanView: View {
             try Task.checkCancellation()
             guard generation == refreshGeneration else { return }
             if incoming != info { info = incoming }
+            // A renewed or upgraded allowance returns dictation to the cloud at once.
+            // Поновлений або розширений ліміт одразу повертає диктування в хмару.
+            if incoming.plan != "paused", incoming.audioRemaining != 0 {
+                CloudAvailability.shared.noteAllowanceAvailable()
+            }
         } catch is CancellationError {
         } catch {
             if visible { self.error = error.localizedDescription }
@@ -243,6 +249,65 @@ struct AccountPlanView: View {
         case "paused": String(localized: "Paused")
         case "unlimited": String(localized: "Unlimited") + " · " + (info.available.first { $0.id == "unlimited" }?.title ?? "")
         default: info.available.first { $0.id == info.plan }?.title ?? info.plan
+        }
+    }
+}
+
+/// Download and removal of the on-device dictation model, the fallback for an exhausted
+/// allowance or an unreachable service. The model is never fetched without this explicit step.
+/// Завантаження й вилучення моделі диктування на пристрої — запасного варіанта на випадок
+/// вичерпаного ліміту чи недосяжного сервісу. Без цього явного кроку модель не завантажується.
+struct OnDeviceDictationView: View {
+    private enum Phase { case absent, downloading, ready }
+
+    @State private var phase: Phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Text("On-device dictation").font(.subheadline.weight(.semibold))
+            Text("When the allowance runs out or Tacet cannot be reached, dictation continues on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits stay in the cloud.")
+                .font(.footnote).foregroundStyle(.secondary)
+            switch phase {
+            case .absent:
+                Button("Download the model (about 460 MB)") { download() }
+            case .downloading:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Downloading the model…").font(.footnote)
+                }
+            case .ready:
+                HStack {
+                    Label("Model ready", systemImage: "checkmark.circle")
+                    Spacer()
+                    Button("Remove the model", role: .destructive) { remove() }
+                }
+            }
+            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+        }
+    }
+
+    private func download() {
+        phase = .downloading
+        error = nil
+        Task {
+            do {
+                try await ParakeetRecognizer.shared.downloadIfNeeded()
+                await ParakeetRecognizer.shared.unload()
+                phase = .ready
+            } catch {
+                phase = .absent
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func remove() {
+        Task {
+            await ParakeetRecognizer.shared.unload()
+            try? FileManager.default.removeItem(at: ParakeetRecognizer.shared.modelDirectory)
+            phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
         }
     }
 }

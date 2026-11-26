@@ -10,6 +10,8 @@ Use **123** for numbers and punctuation, and **#+=** for additional symbols. A p
 
 The selected Tacet keyboard layout sets the speech language for direct dictation. To speak one language and type another, enable **Translate to the keyboard language** under **Keyboard**. Tacet detects your spoken language, translates when needed, and inserts the result in the layout language selected when you tapped the microphone. If translation fails, it inserts your original dictation and shows a warning.
 
+When the dictation allowance runs out or Tacet cannot be reached, dictation continues on the iPhone if you downloaded the on-device model under **Plan and usage** (about 460 MB, 25 European languages). Accuracy is lower, and correction, translation and voice edits wait for the cloud; an orange dot on the keyboard microphone marks this mode.
+
 Keyboard spelling and word completion run locally for the active layout. See the [completion vocabulary attribution](Keyboard/Completions/ATTRIBUTION.txt).
 
 To edit selected text, select it in the current app, start dictation, and say a command such as “Translate this into Ukrainian.” Tacet sends the selection and the instruction through the gateway. If the command fails, Tacet leaves the selection intact.
@@ -31,5 +33,7 @@ The 15-minute session keeps the microphone available until it expires or you end
 Для звичайного диктування Tacet слухає мову вибраної розкладки. Щоб говорити однією мовою, а отримувати текст іншою, увімкніть **Перекладати мовою клавіатури** в розділі **Клавіатура**. Tacet визначить мову мовлення й за потреби перекладе текст мовою розкладки, активної в момент натискання мікрофона. Якщо перекласти не вдасться, Tacet вставить вихідний диктант і покаже попередження.
 
 Щоб відредагувати текст, виділіть його в поточному застосунку, запустіть диктування та скажіть, наприклад, «Переклади це українською». Tacet надсилає виділення й команду через шлюз. Якщо команда не виконається, виділений текст збережеться.
+
+Коли ліміт диктування вичерпано або Tacet недосяжний, диктування продовжується на iPhone, якщо ви завантажили модель у розділі **Тариф і використання** (близько 460 МБ, 25 європейських мов). Точність нижча, а виправлення, переклад і голосові правки чекають на хмару; цей режим позначає помаранчева крапка на мікрофоні клавіатури.
 
 Правопис і доповнення слів працюють локально для поточної розкладки. [Джерело словника та ліцензія](Keyboard/Completions/ATTRIBUTION.txt).

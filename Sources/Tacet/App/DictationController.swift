@@ -34,6 +34,7 @@ final class DictationController: ObservableObject {
     private let pipeline = TranscriptionPipeline()
     private let cleanupPipeline = CleanupPipeline()
     private let translator = Translator()
+    private var localNotice = LocalFallbackNotice()
     private let selectionEditor = SelectionEditor()
     private let hotkey = HotkeyManager()
     private let pasteHotkey = HotkeyManager(identifier: 2)
@@ -465,6 +466,10 @@ final class DictationController: ObservableObject {
             let sourceLanguage = TextLanguage.source(in: text, reported: output.transcript.language)
             var cleanupEngine: String?
             var notes: [String] = []
+            // On-device results skip every cloud text step and say why, once per switch.
+            // Результат із пристрою оминає всі хмарні кроки з текстом і раз на перехід пояснює чому.
+            let local = output.localFallback
+            if let note = localNotice.note(for: local) { notes.append(note) }
 
             if output.partial {
                 let completed = output.totalParts - output.failedParts
@@ -473,14 +478,14 @@ final class DictationController: ObservableObject {
                               latency: Date().timeIntervalSince(started), appName: appName,
                               cleanupEngine: nil, existingEntryID: existingEntryID, allowPaste: false,
                               allowClipboard: false, inBackground: inBackground, focus: focus,
-                              note: note, partial: true)
+                              note: (notes + [note]).joined(separator: "; "), partial: true)
                 return
             }
 
             let configuration = settings.cleanupConfiguration
 
             let editingSelection = allowPaste && settings.selectionEditing && selection != .none
-            if !editingSelection, settings.isCleanupConfigured,
+            if local == nil, !editingSelection, settings.isCleanupConfigured,
                text.split(whereSeparator: \.isWhitespace).count >= 3 {
                 let cleaned = await cleanupPipeline.clean(text, sourceLanguage: sourceLanguage, configuration: configuration)
                 guard !Task.isCancelled else { return }
@@ -492,7 +497,7 @@ final class DictationController: ObservableObject {
 
             // Translation runs after cleanup: the model gets clean text and the
             // transcript keeps its original wording in History.
-            if !editingSelection, settings.hostedGatewayEnabled, settings.outputLanguage != "auto" {
+            if local == nil, !editingSelection, settings.hostedGatewayEnabled, settings.outputLanguage != "auto" {
                 if sourceLanguage != settings.outputLanguage {
                     let outcome = await translator.translate(text,
                                                               to: settings.outputLanguage,
@@ -509,6 +514,8 @@ final class DictationController: ObservableObject {
 
             if allowPaste, settings.selectionEditing {
                 switch selection {
+                case .text where local != nil:
+                    notes.append(LocalFallback.editsNeedCloud)
                 case .text(let selectedText, _):
                     do {
                         if settings.hostedGatewayEnabled,

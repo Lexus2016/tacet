@@ -16,6 +16,8 @@ final class MobileDictationSession: ObservableObject {
     private var phase: DictationBridge.Status.Phase = .ready
     private var text: String?
     private var warning: String?
+    private var localNotice = LocalFallbackNotice()
+    private var modelUnload: Task<Void, Never>?
     private var requestLayout: KeyboardLayout?
     private var requestSelection: String?
     private var phaseUntil = Date.distantFuture
@@ -170,8 +172,21 @@ final class MobileDictationSession: ObservableObject {
                 }.value
                 defer { try? FileManager.default.removeItem(at: clip.url) }
                 try Task.checkCancellation()
-                let transcript = try await MobileRecognition.transcribe(clip, languageHint: languageHint)
+                let transcript = try await MobileRecognition.transcribe(clip, languageHint: languageHint,
+                                                                        spokenLanguage: language)
                 try Task.checkCancellation()
+                let note = localNotice.note(for: transcript.local)
+                if transcript.local != nil {
+                    scheduleModelUnload()
+                    // On-device results skip every cloud text step.
+                    // Результат із пристрою оминає всі хмарні кроки з текстом.
+                    if selection != nil {
+                        complete(request: request, phase: .error, text: LocalFallback.editsNeedCloud)
+                    } else {
+                        complete(request: request, phase: .result, text: transcript.text, warning: note)
+                    }
+                    return
+                }
                 let output = MobileTextOutput()
                 if let selection {
                     let replacement = try await output.editSelection(
@@ -182,10 +197,20 @@ final class MobileDictationSession: ObservableObject {
                 }
                 let result = await output.prepare(transcript, target: target)
                 complete(request: request, phase: .result, text: result.text,
-                         warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : nil)
+                         warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : note)
             } catch {
                 complete(request: request, phase: .error, text: error.localizedDescription)
             }
+        }
+    }
+
+    /// The on-device model holds about a gigabyte while loaded; free it after a quiet minute.
+    /// Завантажена модель на пристрої тримає близько гігабайта; звільняємо її після хвилини тиші.
+    private func scheduleModelUnload() {
+        modelUnload?.cancel()
+        modelUnload = Task {
+            do { try await Task.sleep(for: .seconds(60)) } catch { return }
+            await ParakeetRecognizer.shared.unload()
         }
     }
 
@@ -206,7 +231,7 @@ final class MobileDictationSession: ObservableObject {
         let heartbeat = now.addingTimeInterval(4)
         try DictationBridge.publish(.init(session: session, request: currentRequest, phase: phase,
                                            expires: phase == .ready ? min(deadline, heartbeat) : heartbeat,
-                                           text: text, warning: warning))
+                                           text: text, warning: warning, local: localNotice.isLocal ? true : nil))
         lastPublish = now
     }
 }

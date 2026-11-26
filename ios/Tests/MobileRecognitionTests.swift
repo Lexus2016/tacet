@@ -43,6 +43,19 @@ final class MobileRecognitionTests: XCTestCase {
         XCTAssertTrue(plan.deviceAllowed)
     }
 
+    func testOnlyQuotaAndAnUnreachableServiceHandDictationToTheDevice() {
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: RecognitionError.gatewayAudioQuota(daily: true)), .quota)
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: RecognitionError.gatewayAudioQuota(daily: false)), .quota)
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: URLError(.notConnectedToInternet)), .unreachable)
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: RecognitionError.timedOut("Tacet")), .unreachable)
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: RecognitionError.http(status: 503, message: "")), .unreachable)
+        XCTAssertEqual(MobileRecognition.fallbackReason(for: MobileDictationError.unavailable), .unreachable)
+        XCTAssertNil(MobileRecognition.fallbackReason(for: RecognitionError.http(status: 401, message: "")))
+        XCTAssertNil(MobileRecognition.fallbackReason(for: RecognitionError.noSpeech))
+        XCTAssertNil(MobileRecognition.fallbackReason(for: MobileDictationError.gatewayNotProvisioned))
+        XCTAssertNil(MobileRecognition.fallbackReason(for: CancellationError()))
+    }
+
     func testGatewayIsSharedByRecognitionAndTextProcessing() throws {
         let provider = try XCTUnwrap(ProviderCatalog.spec(EngineID.hostedGateway))
         XCTAssertEqual(provider.endpoint("audio/transcriptions")?.absoluteString,

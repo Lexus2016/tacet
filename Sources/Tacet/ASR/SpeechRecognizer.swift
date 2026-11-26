@@ -65,6 +65,15 @@ struct Attempt: Sendable {
     var audioQuotaExhausted = false
 }
 
+extension Array where Element == Attempt {
+    /// Why the cloud did not serve this dictation, when a gateway attempt failed.
+    /// Чому хмара не виконала це диктування, якщо спроба через шлюз не вдалася.
+    var cloudFailure: LocalFallback? {
+        if contains(where: \.audioQuotaExhausted) { return .quota }
+        return contains { EngineID.isGateway($0.engine) && $0.error != nil } ? .unreachable : nil
+    }
+}
+
 struct PipelineResult: Sendable {
     let transcript: Transcript
     let attempts: [Attempt]
@@ -72,6 +81,12 @@ struct PipelineResult: Sendable {
     var partial: Bool = false
     var totalParts: Int = 1
     var failedParts: Int = 0
+
+    /// Set when the on-device model produced the text because the cloud could not.
+    /// Задано, коли текст дала модель на пристрої, бо хмара не змогла.
+    var localFallback: LocalFallback? {
+        transcript.engine == EngineID.parakeet ? attempts.cloudFailure ?? .unreachable : nil
+    }
 }
 
 struct PipelineFailure: Error, Sendable {

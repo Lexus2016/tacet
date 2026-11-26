@@ -117,3 +117,13 @@
 "Text allowance renews" = "पाठ की सीमा का नवीनीकरण";
 "Daily dictation allowance used" = "बोलकर लिखने की दैनिक सीमा पूरी हो गई है";
 "The daily dictation allowance has been used." = "बोलकर लिखने की दैनिक सीमा पूरी हो गई है।";
+"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "डिक्टेशन की सीमा पूरी हो गई। Tacet अब इसी डिवाइस पर डिक्टेशन करता है: सटीकता कम है, और सुधार, अनुवाद और आवाज़ से संपादन तब तक बंद हैं जब तक सीमा नवीनीकृत न हो या प्लान न बदले।";
+"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Tacet से कनेक्शन नहीं है। डिक्टेशन इसी डिवाइस पर चल रहा है: सटीकता कम है, और सुधार, अनुवाद और आवाज़ से संपादन कनेक्शन लौटने तक बंद हैं।";
+"On-device mode" = "डिवाइस मोड";
+"Cloud dictation is back." = "क्लाउड डिक्टेशन फिर से चालू है।";
+"Voice edits need the Tacet cloud. The selected text was kept." = "आवाज़ से संपादन के लिए Tacet क्लाउड चाहिए। चुना हुआ टेक्स्ट वैसा ही रखा गया।";
+"On-device dictation" = "डिवाइस पर डिक्टेशन";
+"When the allowance runs out or Tacet cannot be reached, dictation continues on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits stay in the cloud." = "जब सीमा पूरी हो जाए या Tacet तक पहुँच न हो, तो डिक्टेशन इसी डिवाइस पर 25 यूरोपीय भाषाओं में जारी रहता है। सटीकता कम है, और सुधार, अनुवाद और आवाज़ से संपादन क्लाउड में ही रहते हैं।";
+"Download the model (about 460 MB)" = "मॉडल डाउनलोड करें (लगभग 460 MB)";
+"Downloading the model…" = "मॉडल डाउनलोड हो रहा है…";
+"Remove the model" = "मॉडल हटाएँ";

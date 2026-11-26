@@ -4,6 +4,95 @@ import XCTest
 
 final class ProviderRequestTests: XCTestCase {
 
+    func testCloudAvailabilityRemembersQuotaUntilRecheckAndClearsOnAllowance() {
+        let cloud = CloudAvailability(monitoring: false)
+        let now = Date(timeIntervalSince1970: 1_000)
+        XCTAssertNil(cloud.blocked(now: now))
+        cloud.noteQuotaExhausted(now: now)
+        XCTAssertEqual(cloud.blocked(now: now.addingTimeInterval(CloudAvailability.quotaRecheck - 1)), .quota)
+        XCTAssertNil(cloud.blocked(now: now.addingTimeInterval(CloudAvailability.quotaRecheck + 1)))
+        cloud.noteQuotaExhausted(now: now)
+        cloud.noteAllowanceAvailable()
+        XCTAssertNil(cloud.blocked(now: now))
+        cloud.setOnline(false)
+        XCTAssertEqual(cloud.blocked(now: now), .unreachable)
+        cloud.setOnline(true)
+        XCTAssertNil(cloud.blocked(now: now))
+    }
+
+    func testLocalFallbackNoticeExplainsOncePerSwitchAndAnnouncesTheReturn() {
+        var notice = LocalFallbackNotice()
+        XCTAssertNil(notice.note(for: nil))
+        XCTAssertEqual(notice.note(for: .quota), LocalFallback.quota.announcement)
+        XCTAssertTrue(notice.isLocal)
+        XCTAssertEqual(notice.note(for: .quota), LocalFallback.reminder)
+        XCTAssertEqual(notice.note(for: .unreachable), LocalFallback.unreachable.announcement)
+        XCTAssertEqual(notice.note(for: nil), LocalFallback.restored)
+        XCTAssertFalse(notice.isLocal)
+        XCTAssertNil(notice.note(for: nil))
+    }
+
+    func testOnlyQuotaAndAnUnreachableServiceAllowTheOnDeviceModel() {
+        XCTAssertEqual(LocalFallback.reason(for: RecognitionError.gatewayAudioQuota(daily: true)), .quota)
+        XCTAssertEqual(LocalFallback.reason(for: URLError(.notConnectedToInternet)), .unreachable)
+        XCTAssertEqual(LocalFallback.reason(for: RecognitionError.timedOut("Tacet")), .unreachable)
+        XCTAssertEqual(LocalFallback.reason(for: RecognitionError.http(status: 502, message: "")), .unreachable)
+        XCTAssertNil(LocalFallback.reason(for: RecognitionError.http(status: 401, message: "")))
+        XCTAssertNil(LocalFallback.reason(for: RecognitionError.http(status: 429, message: "")))
+        XCTAssertNil(LocalFallback.reason(for: RecognitionError.missingKey("Tacet")))
+        XCTAssertNil(LocalFallback.reason(for: RecognitionError.noSpeech))
+        XCTAssertNil(LocalFallback.reason(for: CancellationError()))
+        XCTAssertTrue(ParakeetRecognizer.supports("uk"))
+        XCTAssertFalse(ParakeetRecognizer.supports("zh"))
+    }
+
+    func testOnDeviceResultReportsWhyTheCloudWasNotUsed() {
+        let local = Transcript(text: "привіт", language: "uk", engine: EngineID.parakeet, score: 1, latency: 0)
+        let quota = [Attempt(engine: EngineID.hostedGateway, error: "limit", latency: 0, audioQuotaExhausted: true),
+                     Attempt(engine: EngineID.parakeet, error: nil, latency: 0)]
+        XCTAssertEqual(PipelineResult(transcript: local, attempts: quota).localFallback, .quota)
+        let failed = [Attempt(engine: EngineID.hostedGateway, error: "timed out", latency: 0),
+                      Attempt(engine: EngineID.parakeet, error: nil, latency: 0)]
+        XCTAssertEqual(PipelineResult(transcript: local, attempts: failed).localFallback, .unreachable)
+        let cloud = Transcript(text: "привіт", language: "uk", engine: EngineID.hostedGateway, score: 1, latency: 0)
+        XCTAssertNil(PipelineResult(transcript: cloud,
+                                    attempts: [Attempt(engine: EngineID.hostedGateway, error: nil, latency: 0)]).localFallback)
+    }
+
+    /// End to end with the real on-device model: with the cloud marked unreachable, the pipeline
+    /// skips the gateway without a request and the device produces the text. Skipped when the
+    /// model is not downloaded or macOS cannot synthesise the sample.
+    func testPipelineDictatesOnDeviceWhenTheCloudIsUnreachable() async throws {
+        try XCTSkipUnless(ParakeetRecognizer.shared.isConfigured(), "On-device model is not downloaded")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tacet-fallback-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let say = Process()
+        say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        say.arguments = ["-v", "Samantha", "-o", url.path, "--data-format=LEI16@16000",
+                         "Hello, this is a short test of dictation on this device."]
+        try say.run()
+        say.waitUntilExit()
+        try XCTSkipUnless(say.terminationStatus == 0 && FileManager.default.fileExists(atPath: url.path),
+                          "Speech synthesis is unavailable")
+        let clip = try AudioClip.load(url: url)
+
+        let cloud = CloudAvailability(monitoring: false)
+        cloud.setOnline(false)
+        let settings = PipelineSettings(languageOverride: "en",
+                                        engineOrder: AppSettings.engineOrder(localModelReady: true),
+                                        dualLanguageCheck: false, cloudTimeout: 5)
+        let engines = EngineConfiguration(openAIBaseURL: "https://example.invalid/v1", cloudTimeout: 5, asrModels: [:])
+        let started = Date()
+        let result = await TranscriptionPipeline(cloud: cloud).transcribe(clip, settings: settings, engines: engines)
+        let output = try result.get()
+        print("ON-DEVICE E2E: \(String(format: "%.2f", Date().timeIntervalSince(started))) s, text: \(output.transcript.text)")
+        XCTAssertEqual(output.transcript.engine, EngineID.parakeet)
+        XCTAssertEqual(output.localFallback, .unreachable)
+        XCTAssertEqual(output.attempts.first?.latency, 0)
+        XCTAssertTrue(output.transcript.text.lowercased().contains("test"), output.transcript.text)
+        await ParakeetRecognizer.shared.unload()
+    }
+
     @MainActor
     func testManagedMacKeepsLegacyPreferencesWithoutSelectingTheirRoutes() throws {
         let domain = "tacet.gateway.tests.\(UUID().uuidString)"
@@ -20,7 +109,10 @@ final class ProviderRequestTests: XCTestCase {
         XCTAssertFalse(settings.hostedGatewayEnabled)
         XCTAssertNotNil(settings.gatewayActivationIssue)
         XCTAssertFalse(settings.isCleanupConfigured)
-        XCTAssertEqual(settings.activeEngineOrder, [EngineID.hostedGateway])
+        // The cloud always leads; the on-device model follows only once it is downloaded.
+        XCTAssertEqual(settings.activeEngineOrder.first, EngineID.hostedGateway)
+        XCTAssertEqual(AppSettings.engineOrder(localModelReady: false), [EngineID.hostedGateway])
+        XCTAssertEqual(AppSettings.engineOrder(localModelReady: true), [EngineID.hostedGateway, EngineID.parakeet])
         XCTAssertEqual(settings.cleanupConfiguration.target?.endpoint.absoluteString,
                        "https://tacetapi.murable.ai/v1/chat/completions")
         XCTAssertEqual(defaults.stringArray(forKey: "engineOrder"), oldOrder)

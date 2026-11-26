@@ -42,6 +42,9 @@ enum DictationBridge {
         let expires: Date
         let text: String?
         var warning: String? = nil
+        /// True while dictation runs on the device instead of the cloud.
+        /// True, доки диктування виконується на пристрої, а не в хмарі.
+        var local: Bool? = nil
     }
 
     private struct Wake: Codable {

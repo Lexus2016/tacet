@@ -235,6 +235,7 @@ final class KeyboardController: UIInputViewController {
     private struct DictationButtonState: Equatable {
         let request: Request.State?
         let hasSession: Bool
+        let local: Bool
     }
 
     private static var wakeRequest: WakeRequest?
@@ -244,6 +245,7 @@ final class KeyboardController: UIInputViewController {
     private let dictationButton = UIButton(configuration: .plain())
     private let dictationWave = DictationWave()
     private let micDivider = UIView()
+    private let localBadge = UIView()
     private var stripCenter: CGFloat? = PortraitMetrics.stripCenter
     private let statusLabel = UILabel()
     private let keyPreview = UILabel()
@@ -1727,7 +1729,8 @@ final class KeyboardController: UIInputViewController {
     }
 
     private func renderState() {
-        let state = DictationButtonState(request: pending?.state, hasSession: status != nil)
+        let state = DictationButtonState(request: pending?.state, hasSession: status != nil,
+                                         local: status?.local == true)
         if renderedDictation != state {
             renderedDictation = state
             renderDictationButton(state)
@@ -1775,6 +1778,18 @@ final class KeyboardController: UIInputViewController {
         config.showsActivityIndicator = waiting
         config.baseForegroundColor = state.request == .recording ? .systemRed : Palette.micIdle
         dictationButton.configuration = config
+        // A small dot marks dictation running on the device instead of the cloud.
+        // Маленька крапка позначає диктування на пристрої, а не в хмарі.
+        if localBadge.superview == nil {
+            localBadge.backgroundColor = .systemOrange
+            localBadge.layer.cornerRadius = 3
+            localBadge.isUserInteractionEnabled = false
+            dictationButton.addSubview(localBadge)
+        }
+        localBadge.isHidden = !state.local
+        localBadge.frame = CGRect(x: dictationButton.bounds.midX + 7,
+                                  y: (stripCenter ?? dictationButton.bounds.midY) - 13, width: 6, height: 6)
+        dictationButton.accessibilityValue = state.local ? String(localized: "On-device mode") : nil
         dictationButton.accessibilityLabel = title
         dictationButton.accessibilityHint = !state.hasSession
             ? String(localized: "Opens Tacet to enable dictation.") : nil

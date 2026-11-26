@@ -25,6 +25,12 @@ actor ParakeetRecognizer: SpeechRecognizer {
         AsrModels.modelsExist(at: modelDirectory, version: .v3)
     }
 
+    /// Whether the model can transcribe this ISO 639-1 language.
+    /// Чи може модель розпізнати цю мову (код ISO 639-1).
+    nonisolated static func supports(_ language: String) -> Bool {
+        Language(rawValue: language) != nil
+    }
+
     nonisolated func configurationIssue() -> String? {
         isConfigured() ? nil : "Model not downloaded"
     }

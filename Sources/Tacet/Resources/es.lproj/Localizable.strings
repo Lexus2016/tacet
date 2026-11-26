@@ -117,3 +117,13 @@
 "Text allowance renews" = "El texto se renueva";
 "Daily dictation allowance used" = "Límite diario de dictado agotado";
 "The daily dictation allowance has been used." = "Se agotó el límite diario de dictado.";
+"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "Límite de dictado alcanzado. Tacet dicta ahora en este dispositivo: la precisión es menor, y la corrección, la traducción y las ediciones por voz están desactivadas hasta que se renueve la asignación o cambie el plan.";
+"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Sin conexión con Tacet. Dictando en este dispositivo: la precisión es menor, y la corrección, la traducción y las ediciones por voz están desactivadas hasta que vuelva la conexión.";
+"On-device mode" = "Modo en el dispositivo";
+"Cloud dictation is back." = "El dictado en la nube vuelve a funcionar.";
+"Voice edits need the Tacet cloud. The selected text was kept." = "Las ediciones por voz necesitan la nube de Tacet. El texto seleccionado se conservó.";
+"On-device dictation" = "Dictado en el dispositivo";
+"When the allowance runs out or Tacet cannot be reached, dictation continues on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits stay in the cloud." = "Cuando se agota la asignación o no se puede contactar con Tacet, el dictado continúa en este dispositivo en 25 idiomas europeos. La precisión es menor, y la corrección, la traducción y las ediciones por voz siguen en la nube.";
+"Download the model (about 460 MB)" = "Descargar el modelo (unos 460 MB)";
+"Downloading the model…" = "Descargando el modelo…";
+"Remove the model" = "Eliminar el modelo";

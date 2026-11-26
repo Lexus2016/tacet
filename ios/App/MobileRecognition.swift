@@ -86,10 +86,51 @@ enum MobileRecognition {
     struct Result: Equatable, Sendable {
         let text: String
         var language: String? = nil
+        /// Set when the on-device model produced the text because the cloud could not.
+        /// Задано, коли текст дала модель на пристрої, бо хмара не змогла.
+        var local: LocalFallback? = nil
     }
 
-    static func transcribe(_ clip: AudioClip, languageHint: String?) async throws -> Result {
+    /// The cloud first. The on-device model takes over only when its model is downloaded and the
+    /// cloud refuses for lack of allowance or cannot be reached.
+    /// Спершу хмара. Модель на пристрої підхоплює лише тоді, коли вона завантажена, а хмара
+    /// відмовляє через ліміт або недосяжна.
+    static func transcribe(_ clip: AudioClip, languageHint: String?, spokenLanguage: String? = nil) async throws -> Result {
         guard MobileGateway.isProvisioned else { throw MobileDictationError.gatewayNotProvisioned }
+        // The on-device model covers European languages only; other layouts stay cloud-only.
+        // Модель на пристрої покриває лише європейські мови; інші розкладки лишаються хмарними.
+        let localReady = ParakeetRecognizer.shared.isConfigured()
+            && spokenLanguage.map(ParakeetRecognizer.supports) != false
+        if localReady, let reason = CloudAvailability.shared.blocked() {
+            return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
+        }
+        do {
+            let result = try await transcribeInCloud(clip, languageHint: languageHint)
+            CloudAvailability.shared.noteAllowanceAvailable()
+            return result
+        } catch {
+            let reason = fallbackReason(for: error)
+            if reason == .quota { CloudAvailability.shared.noteQuotaExhausted() }
+            guard let reason, localReady, !Task.isCancelled else { throw error }
+            return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
+        }
+    }
+
+    static func fallbackReason(for error: Error) -> LocalFallback? {
+        if case MobileDictationError.unavailable = error { return .unreachable }
+        return LocalFallback.reason(for: error)
+    }
+
+    private static func transcribeLocally(_ clip: AudioClip, languageHint: String?,
+                                          reason: LocalFallback) async throws -> Result {
+        let result = try await validatedTranscription {
+            let transcript = try await ParakeetRecognizer.shared.transcribe(clip, language: languageHint)
+            return Result(text: transcript.text, language: transcript.language, local: reason)
+        }
+        return Result(text: result.text, language: result.language, local: reason)
+    }
+
+    private static func transcribeInCloud(_ clip: AudioClip, languageHint: String?) async throws -> Result {
         guard let spec = ProviderCatalog.spec(EngineID.hostedGateway),
               let url = spec.endpoint("audio/transcriptions") else { throw MobileDictationError.unavailable }
         let engine = CloudRecognizer(configuration: .init(

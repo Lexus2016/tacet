@@ -230,7 +230,15 @@ final class AppSettings: ObservableObject {
 
     // MARK: Derived
 
-    var activeEngineOrder: [String] { [EngineID.hostedGateway] }
+    /// The cloud first; the on-device model only as a fallback, and only once its model is on disk.
+    /// Спершу хмара; модель на пристрої — лише як запасний варіант і лише після завантаження.
+    var activeEngineOrder: [String] {
+        Self.engineOrder(localModelReady: ParakeetRecognizer.shared.isConfigured())
+    }
+
+    nonisolated static func engineOrder(localModelReady: Bool) -> [String] {
+        localModelReady ? [EngineID.hostedGateway, EngineID.parakeet] : [EngineID.hostedGateway]
+    }
 
     var gatewayActivationIssue: String? {
         guard hostedGatewayEnabled else { return String(localized: "Enable cloud dictation in Connection settings.") }

@@ -13,6 +13,11 @@ struct EngineConfiguration: Sendable {
 /// the clip itself is never discarded here, that is the caller's job.
 final class TranscriptionPipeline {
     private let parakeet = ParakeetRecognizer.shared
+    private let cloud: CloudAvailability
+
+    init(cloud: CloudAvailability = .shared) {
+        self.cloud = cloud
+    }
 
     func transcribe(_ clip: AudioClip,
                     settings: PipelineSettings,
@@ -38,8 +43,18 @@ final class TranscriptionPipeline {
         let voiceCheck = startVoiceLanguageCheck(clip: clip, settings: settings)
 
         defer { voiceCheck?.cancel() }
+        let localReady = settings.engineOrder.contains(EngineID.parakeet) && parakeet.isConfigured()
         for engineID in settings.engineOrder {
             if Task.isCancelled { break }
+            // With the on-device model ready, do not upload audio the cloud is known to refuse
+            // and do not wait for a timeout while offline.
+            // Коли модель на пристрої готова, не вивантажуємо аудіо, якому хмара точно відмовить,
+            // і не чекаємо на тайм-аут без мережі.
+            if localReady, EngineID.isGateway(engineID), let reason = cloud.blocked() {
+                attempts.append(Attempt(engine: engineID, error: reason.announcement, latency: 0,
+                                        audioQuotaExhausted: reason == .quota))
+                continue
+            }
             guard let recognizer = makeRecognizer(engineID, engines: engines) else {
                 attempts.append(Attempt(engine: engineID, error: "Unknown engine", latency: 0))
                 continue
@@ -49,6 +64,9 @@ final class TranscriptionPipeline {
                 attempts.append(Attempt(engine: engineID,
                                         error: recognizer.configurationIssue() ?? "Not configured",
                                         latency: 0))
+                // Without a connected account there is no on-device dictation either.
+                // Без підключеного акаунта диктування на пристрої теж немає.
+                if EngineID.isGateway(engineID) { break }
                 continue
             }
 
@@ -92,15 +110,20 @@ final class TranscriptionPipeline {
                 }
 
                 attempts.append(Attempt(engine: engineID, error: nil, latency: Date().timeIntervalSince(started)))
+                if EngineID.isGateway(engineID) { cloud.noteAllowanceAvailable() }
                 return .success(PipelineResult(transcript: transcript, attempts: attempts))
             } catch {
-                let quotaExhausted: Bool
-                if case .gatewayAudioQuota? = error as? RecognitionError { quotaExhausted = true }
-                else { quotaExhausted = false }
+                let reason = LocalFallback.reason(for: error)
+                if reason == .quota { cloud.noteQuotaExhausted() }
                 attempts.append(Attempt(engine: engineID,
                                         error: Self.describe(error),
                                         latency: Date().timeIntervalSince(started),
-                                        audioQuotaExhausted: quotaExhausted))
+                                        audioQuotaExhausted: reason == .quota))
+                // Any other answer from the cloud is final: the on-device model covers an
+                // exhausted allowance or an unreachable service, nothing else.
+                // Будь-яка інша відповідь хмари остаточна: модель на пристрої покриває лише
+                // вичерпаний ліміт або недосяжний сервіс.
+                if EngineID.isGateway(engineID), reason == nil { break }
             }
         }
 
