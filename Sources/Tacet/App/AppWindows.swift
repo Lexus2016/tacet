@@ -45,7 +45,9 @@ final class AppWindows {
             }
         }
         present(onboardingWindow)
-        Onboarding.shared.windowChanged(open: true, key: true)
+        // Count the window as key only when it really is; the become-key notification updates this.
+        // Вікно вважається ключовим, лише коли воно справді таке; сповіщення про це оновлює стан.
+        Onboarding.shared.windowChanged(open: true, key: onboardingWindow?.isKeyWindow == true)
     }
 
     func closeOnboarding() {

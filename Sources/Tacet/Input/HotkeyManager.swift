@@ -19,6 +19,11 @@ final class HotkeyManager {
     private(set) var isRegistered = false
 
     private var modifierMonitor: Any?
+    /// A global monitor never sees events while Tacet itself is the active app, so the same
+    /// handler also listens locally. Without it the key does nothing inside Tacet's own windows.
+    /// Глобальний монітор не отримує подій, поки активний сам Tacet, тож той самий обробник
+    /// слухає й локально. Без цього клавіша нічого не робить у власних вікнах Tacet.
+    private var localModifierMonitor: Any?
     private var modifierMask: NSEvent.ModifierFlags = []
     private var modifierKeyCode: Int = 0
     private var modifierDown = false
@@ -53,6 +58,10 @@ final class HotkeyManager {
 
         modifierMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             self?.handleModifierEvent(event)
+        }
+        localModifierMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            self?.handleModifierEvent(event)
+            return event
         }
 
         isRegistered = modifierMonitor != nil
@@ -188,6 +197,10 @@ final class HotkeyManager {
         if let modifierMonitor {
             NSEvent.removeMonitor(modifierMonitor)
             self.modifierMonitor = nil
+        }
+        if let localModifierMonitor {
+            NSEvent.removeMonitor(localModifierMonitor)
+            self.localModifierMonitor = nil
         }
         if let hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
