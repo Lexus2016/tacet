@@ -211,6 +211,9 @@ struct AccountPlanView: View {
             try Task.checkCancellation()
             guard generation == refreshGeneration else { return }
             if incoming != info { info = incoming }
+            // A connected account is the moment Tacet Solo may start downloading, also right after sign-in.
+            // Підключений акаунт — момент, коли Tacet Solo може почати завантажуватися, зокрема одразу після входу.
+            _ = await SoloDownload.shared.startIfAppropriate(connected: true, canAsk: false)
         } catch is CancellationError {
         } catch {
             if visible { self.error = error.localizedDescription }
@@ -232,10 +235,7 @@ struct AccountPlanView: View {
 /// Завантаження й вилучення моделі диктування на пристрої — запасного варіанта на випадок
 /// вичерпаного ліміту чи недосяжного сервісу. Без цього явного кроку модель не завантажується.
 struct OnDeviceDictationView: View {
-    private enum Phase { case absent, downloading, ready }
-
-    @State private var phase: Phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
-    @State private var error: String?
+    @ObservedObject private var solo = SoloDownload.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -243,9 +243,9 @@ struct OnDeviceDictationView: View {
             Text("Tacet Solo").font(.subheadline.weight(.semibold))
             Text("When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble.")
                 .font(.footnote).foregroundStyle(.secondary)
-            switch phase {
+            switch solo.phase {
             case .absent:
-                Button("Download Tacet Solo (about 460 MB)") { download() }
+                Button("Download Tacet Solo (about 460 MB)") { solo.download() }
             case .downloading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -255,32 +255,10 @@ struct OnDeviceDictationView: View {
                 HStack {
                     Label("Tacet Solo is ready", systemImage: "checkmark.circle")
                     Spacer()
-                    Button("Remove Tacet Solo", role: .destructive) { remove() }
+                    Button("Remove Tacet Solo", role: .destructive) { solo.remove() }
                 }
             }
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
-        }
-    }
-
-    private func download() {
-        phase = .downloading
-        error = nil
-        Task {
-            do {
-                try await ParakeetRecognizer.shared.downloadIfNeeded()
-                await ParakeetRecognizer.shared.unload()
-                phase = .ready
-            } catch {
-                phase = .absent
-                self.error = error.localizedDescription
-            }
-        }
-    }
-
-    private func remove() {
-        Task {
-            await ParakeetRecognizer.shared.removeModel()
-            phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
+            if let error = solo.error { Text(error).font(.caption).foregroundStyle(.red) }
         }
     }
 }

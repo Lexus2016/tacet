@@ -120,6 +120,11 @@ final class EmailAccountTests: XCTestCase {
         let first = EmailAccountClient.Installation.current(defaults: defaults)
         let next = EmailAccountClient.Installation.current(defaults: defaults)
         XCTAssertEqual(first.deviceID, next.deviceID)
+        // On a Mac the identity comes from the hardware, so clearing the app's settings does not change it.
+        defaults.removePersistentDomain(forName: domain)
+        XCTAssertEqual(EmailAccountClient.Installation.current(defaults: defaults).deviceID, first.deviceID)
+        XCTAssertEqual(DeviceIdentity.derived(from: "A"), DeviceIdentity.derived(from: "A"))
+        XCTAssertNotEqual(DeviceIdentity.derived(from: "A"), DeviceIdentity.derived(from: "B"))
         XCTAssertEqual(first.platform, "macos")
         XCTAssertEqual(EmailAccountClient.Installation.validName(" \u{202e}\n ", fallback: "Mac"), "Mac")
         let emoji = EmailAccountClient.Installation.validName(String(repeating: "🚲", count: 90), fallback: "Mac")

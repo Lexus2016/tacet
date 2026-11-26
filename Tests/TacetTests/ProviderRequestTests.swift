@@ -4,6 +4,24 @@ import XCTest
 
 final class ProviderRequestTests: XCTestCase {
 
+    func testSoloDownloadsItselfOnWiFiAndAsksOnceOnMeteredConnections() {
+        func action(ready: Bool = false, connected: Bool = true, removed: Bool = false, metered: Bool = false,
+                    answer: Bool? = nil, canAsk: Bool = true) -> SoloDownload.Action {
+            SoloDownload.action(ready: ready, connected: connected, removedByUser: removed, metered: metered,
+                                meteredAnswer: answer, canAsk: canAsk)
+        }
+        XCTAssertEqual(action(), .download)
+        XCTAssertEqual(action(ready: true), .none)
+        XCTAssertEqual(action(connected: false), .none)
+        // A model the user removed is never fetched again on its own.
+        XCTAssertEqual(action(removed: true), .none)
+        XCTAssertEqual(action(metered: true), .ask)
+        XCTAssertEqual(action(metered: true, answer: true), .download)
+        XCTAssertEqual(action(metered: true, answer: false), .none)
+        // The Mac never asks: on a metered connection it waits for the next launch.
+        XCTAssertEqual(action(metered: true, canAsk: false), .none)
+    }
+
     func testCloudIsSkippedOnlyWhileThereIsNoNetworkPath() {
         let cloud = CloudAvailability(monitoring: false)
         XCTAssertNil(cloud.blocked())

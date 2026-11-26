@@ -205,3 +205,7 @@
 "Free Tacet Ensemble minutes used" = "Безплатні хвилини Tacet Ensemble використано";
 "Tacet Ensemble minutes for this month used" = "Хвилини Tacet Ensemble цього місяця використано";
 "Dictation continues with Tacet Solo." = "Диктування триває через Tacet Solo.";
+"Download Tacet Solo over mobile data?" = "Завантажити Tacet Solo через мобільну мережу?";
+"Download" = "Завантажити";
+"Wait for Wi-Fi" = "Чекати на Wi-Fi";
+"Tacet Solo keeps dictation working without a connection or when the limit is reached. The download is about 460 MB." = "Tacet Solo дає диктувати без зв’язку або коли ліміт вичерпано. Завантаження — близько 460 МБ.";

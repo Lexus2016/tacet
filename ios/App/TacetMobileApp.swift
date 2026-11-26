@@ -23,6 +23,7 @@ private struct SessionView: View {
     @State private var settingsPath: [MobileSettingsPage] = []
     @State private var hasAccess = MobileGateway.isProvisioned
     @State private var showingAccess = false
+    @State private var askingSoloDownload = false
 
     var body: some View {
         NavigationStack(path: $settingsPath) {
@@ -99,6 +100,17 @@ private struct SessionView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { openedFromKeyboard = false }
+        }
+        // Tacet Solo downloads by itself on Wi-Fi; over mobile data the user is asked once.
+        // Tacet Solo завантажується сам через Wi-Fi; через мобільну мережу питаємо користувача один раз.
+        .task(id: hasAccess) {
+            askingSoloDownload = await SoloDownload.shared.startIfAppropriate(connected: hasAccess, canAsk: true)
+        }
+        .alert("Download Tacet Solo over mobile data?", isPresented: $askingSoloDownload) {
+            Button("Download") { SoloDownload.shared.answerMetered(allow: true) }
+            Button("Wait for Wi-Fi", role: .cancel) { SoloDownload.shared.answerMetered(allow: false) }
+        } message: {
+            Text("Tacet Solo keeps dictation working without a connection or when the limit is reached. The download is about 460 MB.")
         }
         .onOpenURL { url in
             guard DictationBridge.consumeWake(url) else { return }

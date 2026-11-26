@@ -36,9 +36,7 @@ struct EmailAccountClient: Sendable {
         }()
 
         @MainActor static func current(defaults: UserDefaults = .standard) -> Self {
-            let key = "tacet.account.installationID"
-            let id = defaults.string(forKey: key).flatMap(UUID.init(uuidString:)) ?? UUID()
-            defaults.set(id.uuidString, forKey: key)
+            let id = DeviceIdentity.current(defaults: defaults)
             #if os(macOS)
             let name = Self.validName(Host.current().localizedName ?? "", fallback: "Mac")
             #else

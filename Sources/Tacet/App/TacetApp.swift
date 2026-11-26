@@ -31,6 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dictation = DictationController.shared
         dictation?.recoverAtLaunch()
+        // Tacet Solo is part of the product: fetch its model in the background once an account is connected.
+        // Tacet Solo — частина продукту: завантажуємо його модель у фоні, щойно акаунт підключено.
+        Task {
+            let connected = ProviderCatalog.spec(EngineID.hostedGateway).flatMap(ProviderCatalog.key(for:)) != nil
+            _ = await SoloDownload.shared.startIfAppropriate(connected: connected, canAsk: false)
+        }
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(workspaceWillSleep(_:)), name: NSWorkspace.willSleepNotification, object: nil
         )

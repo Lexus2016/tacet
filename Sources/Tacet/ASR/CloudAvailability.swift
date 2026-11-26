@@ -136,6 +136,16 @@ final class CloudAvailability: @unchecked Sendable {
         return online ? nil : .unreachable
     }
 
+    /// True once the system has reported the network path. / True, щойно система повідомила мережевий шлях.
+    var isEvaluated: Bool { lock.withLock { evaluated } }
+
+    /// A cellular or personal-hotspot connection, or Low Data Mode.
+    /// Мобільна мережа, точка доступу з телефона або режим заощадження даних.
+    var isMetered: Bool {
+        guard let path = monitor?.currentPath else { return false }
+        return path.isExpensive || path.isConstrained
+    }
+
     /// Overrides the system path, for tests. / Перекриває системний шлях, для тестів.
     func setOnline(_ value: Bool?) {
         lock.withLock { forcedOnline = value }
