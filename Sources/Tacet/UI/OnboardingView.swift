@@ -38,6 +38,15 @@ struct OnboardingView: View {
         }
         .background(SoftWindowBackground())
         .onAppear { enter(tour.step) }
+        .onChange(of: tour.inbound) { _, item in
+            guard let item else { return }
+            if item.replacesAll || practice.isEmpty {
+                practice = item.text
+            } else {
+                practice += (practice.hasSuffix(" ") || practice.hasSuffix("\n") ? "" : " ") + item.text
+            }
+            practiceFocused = true
+        }
         .onChange(of: tour.step) { old, new in
             leave(old)
             enter(new)

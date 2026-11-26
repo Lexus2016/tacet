@@ -307,6 +307,14 @@ final class OnboardingTests: XCTestCase {
         XCTAssertTrue(tour.blocksDictation)
         tour.windowChanged(open: true, key: true)
         XCTAssertFalse(tour.blocksDictation)
+        XCTAssertTrue(tour.isPracticing)
+        // Dictated text is handed to the practice field; edits replace its content.
+        tour.put("one", replacingAll: false)
+        XCTAssertEqual(tour.inbound?.text, "one")
+        XCTAssertEqual(tour.inbound?.replacesAll, false)
+        tour.windowChanged(open: true, key: false)
+        XCTAssertFalse(tour.isPracticing)
+        tour.windowChanged(open: true, key: true)
 
         tour.advance()
         XCTAssertEqual(tour.step, .key, "A step cannot be passed without doing it")

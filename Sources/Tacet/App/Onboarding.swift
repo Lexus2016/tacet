@@ -46,6 +46,23 @@ final class Onboarding: ObservableObject {
     }
 
     var blocksDictation: Bool { !isComplete && !windowIsKey }
+
+    /// The tour is open and in front: its practice field is where dictated text goes, handed over
+    /// directly because Tacet does not paste into its own windows.
+    /// Знайомство відкрите й попереду: тренувальне поле — місце, куди потрапляє продиктований текст;
+    /// його передають напряму, бо Tacet не вставляє текст у власні вікна.
+    var isPracticing: Bool { !isComplete && windowIsKey }
+
+    struct Inbound: Equatable {
+        let id = UUID()
+        let text: String
+        let replacesAll: Bool
+    }
+    @Published private(set) var inbound: Inbound?
+
+    func put(_ text: String, replacingAll: Bool) {
+        inbound = Inbound(text: text, replacesAll: replacingAll)
+    }
     var canContinue: Bool { finished.contains(step) }
     var isLast: Bool { step == Step.allCases.last }
 

@@ -328,9 +328,18 @@ final class DictationController: ObservableObject {
             }
 
             do {
-                targetFocus = startingApp.flatMap { SelectionReader.Focus(for: $0) }
-                if settings.selectionEditing, TextInserter.isAccessibilityTrusted(), let targetFocus {
-                    capturedSelection = await SelectionReader.read(in: targetFocus)
+                if Onboarding.shared.isPracticing {
+                    // Inside the tour the practice field is the target; read its selection from the
+                    // text view itself, not through Accessibility pointed at our own process.
+                    // Усередині знайомства ціль — тренувальне поле; його виділення читаємо з самого
+                    // текстового поля, а не через Accessibility, спрямований на власний процес.
+                    targetFocus = nil
+                    capturedSelection = settings.selectionEditing ? Self.practiceFieldSelection() : .none
+                } else {
+                    targetFocus = startingApp.flatMap { SelectionReader.Focus(for: $0) }
+                    if settings.selectionEditing, TextInserter.isAccessibilityTrusted(), let targetFocus {
+                        capturedSelection = await SelectionReader.read(in: targetFocus)
+                    }
                 }
 
                 if stopRequested {
@@ -425,6 +434,14 @@ final class DictationController: ObservableObject {
         phase = .idle
         status(String(localized: "Cancelled"))
         HUDController.shared.hide()
+    }
+
+    private static func practiceFieldSelection() -> SelectionReader.Selection {
+        guard let view = NSApp.keyWindow?.firstResponder as? NSTextView else { return .none }
+        let range = view.selectedRange()
+        guard range.length > 0 else { return .none }
+        return .text((view.string as NSString).substring(with: range),
+                     range: CFRange(location: range.location, length: range.length))
     }
 
     func interruptRecording() {
@@ -603,7 +620,10 @@ final class DictationController: ObservableObject {
                                     note: String?) async {
         var pasted = false
         var copied = false
-        if settings.pasteAutomatically {
+        if Onboarding.shared.isPracticing {
+            Onboarding.shared.put(replacement, replacingAll: true)
+            pasted = true
+        } else if settings.pasteAutomatically {
             if let focus, await SelectionReader.read(in: focus) == selection, focus.isCurrent {
                 if replacement.isEmpty {
                     pasted = TextInserter.sendKey(0x33, to: focus.application)
@@ -684,6 +704,9 @@ final class DictationController: ObservableObject {
         var deliveryNote = note
         if allowClipboard, !allowPaste || !settings.pasteAutomatically {
             copied = TextInserter.copy(text)
+        } else if allowPaste, Onboarding.shared.isPracticing {
+            Onboarding.shared.put(text, replacingAll: false)
+            pasted = true
         } else if allowPaste, let focus, focus.application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
                   focus.isCurrent, TextInserter.isAccessibilityTrusted() {
             let currentSelection = settings.selectionEditing ? await SelectionReader.read(in: focus) : .none
