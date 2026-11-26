@@ -253,6 +253,10 @@ test('enforces one durable quota and the chosen device counts across desktop and
   assert.equal(freeLimit.textTokens, 75_000);
   assert.equal((await plan(gateway, secondPhone)).deviceAllowed, false);
   assert.equal((await set(gateway, other, 'unlimited')).status, 403);
+  // One price table: everyone sees the same three plans; operator-only plans are never offered for sale.
+  assert.deepEqual((await plan(gateway, other)).available.map(option => [option.id, option.priceCents, option.devices]),
+    [['free', 0, 2], ['basic', 599, 5], ['pro', 999, 8]]);
+  assert.deepEqual(initial.available.map(option => option.id), ['free', 'basic', 'pro', 'paused', 'unlimited']);
   assert.equal((await set(gateway, mac, 'constructor')).status, 400);
   assert.equal((await audio(gateway, secondPhone)).status, 403);
   assert.equal((await audio(gateway, phone, Buffer.from('not wav'))).status, 400);
@@ -278,7 +282,7 @@ test('enforces one durable quota and the chosen device counts across desktop and
   fail = false;
   assert.equal((await set(gateway, phone, 'paused')).status, 200);
   assert.equal((await audio(gateway, mac)).status, 403);
-  assert.equal((await set(gateway, mac, 'plus')).status, 200);
+  assert.equal((await set(gateway, mac, 'basic')).status, 200);
   assert.equal((await plan(gateway, secondPhone)).deviceAllowed, true);
   assert.equal((await gateway.request('/v1/chat/completions', { method: 'POST', token: secondPhone, json: body })).status, 200);
   assert.equal((await plan(gateway, mac)).used.textTokens, 25);
@@ -300,7 +304,7 @@ test('enforces one durable quota and the chosen device counts across desktop and
   now = Date.UTC(2026, 10, 26);
   assert.deepEqual((await plan(restarted, mac)).used, { audioSeconds: 0, textTokens: 25 });
   assert.equal((await audio(restarted, phone)).status, 200);
-  await set(restarted, phone, 'plus');
+  await set(restarted, phone, 'basic');
   const paid = await plan(restarted, mac);
   assert.equal(paid.audioPeriod, 'month');
   assert.equal(paid.audioResetsAt, paid.resetsAt);

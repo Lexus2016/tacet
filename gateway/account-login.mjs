@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { managedPlans } from './account-plans.mjs';
+import { catalog } from './account-plans.mjs';
 import { GatewayError } from './routing.mjs';
 
 const minute = 60_000;
@@ -111,7 +111,8 @@ export function openAccountLogin({ path, sendCode, secret, now = Date.now, allow
   }
 
   function limit(account) {
-    return (managedPlans[getPlan.get(account)?.plan] ?? managedPlans.free).devices;
+    const plan = getPlan.get(account)?.plan;
+    return (Object.hasOwn(catalog, plan) ? catalog[plan] : catalog.free).devices;
   }
 
   function connect(account, device, time) {

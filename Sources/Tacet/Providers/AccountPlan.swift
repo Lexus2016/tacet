@@ -5,8 +5,6 @@ struct AccountPlan: Decodable, Equatable {
         let priceCents: Int
         let audioSeconds: Int?
         let textTokens: Int?
-        let desktopDevices: Int?
-        let mobileDevices: Int?
         let devices: Int?
     }
 
@@ -124,9 +122,6 @@ struct AccountPlanView: View {
                 }
                 if let devices = info.limits.devices {
                     LabeledContent("Connected device limit") { Text(devices.formatted()) }
-                } else if let desktop = info.limits.desktopDevices, let mobile = info.limits.mobileDevices {
-                    LabeledContent("Desktop devices") { Text(desktop.formatted()) }
-                    LabeledContent("Mobile devices") { Text(mobile.formatted()) }
                 }
                 if !info.deviceAllowed {
                     Text("This device exceeds the plan device limit.").foregroundStyle(.red)

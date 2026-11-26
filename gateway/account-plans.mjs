@@ -1,22 +1,23 @@
 import { DatabaseSync } from 'node:sqlite';
 import { GatewayError } from './routing.mjs';
 
-// USD cents and monthly allowances. / Центи США й місячні пакети.
-const freeAllowance = { priceCents: 0, audioSeconds: 30 * 60, textTokens: 75_000 };
+// One price table for every account and platform: USD cents, monthly allowances and a shared
+// limit on connected devices. The free plan's dictation allowance is counted per day.
+// Єдина таблиця тарифів для всіх акаунтів і платформ: центи США, місячні пакети та спільний
+// ліміт під'єднаних пристроїв. Пакет диктування безплатного тарифу рахується за день.
 export const plans = Object.freeze({
-  paused: { priceCents: 0, audioSeconds: 0, textTokens: 0, desktopDevices: 1, mobileDevices: 1 },
-  free: { ...freeAllowance, desktopDevices: 1, mobileDevices: 1 },
-  basic: { priceCents: 199, audioSeconds: 200 * 60, textTokens: 200_000, desktopDevices: 1, mobileDevices: 1 },
-  plus: { priceCents: 499, audioSeconds: 500 * 60, textTokens: 500_000, desktopDevices: 1, mobileDevices: 2 },
-  pro: { priceCents: 999, audioSeconds: 1000 * 60, textTokens: 1_000_000, desktopDevices: 2, mobileDevices: 2 },
-  unlimited: { priceCents: 4999, audioSeconds: null, textTokens: null, desktopDevices: 3, mobileDevices: 3 },
-});
-
-export const managedPlans = Object.freeze({
-  free: { ...freeAllowance, devices: 2 },
+  free: { priceCents: 0, audioSeconds: 30 * 60, textTokens: 75_000, devices: 2 },
   basic: { priceCents: 599, audioSeconds: 500 * 60, textTokens: 1_000_000, devices: 5 },
   pro: { priceCents: 999, audioSeconds: 900 * 60, textTokens: 1_500_000, devices: 8 },
 });
+
+// Never offered for sale: set by the operator only. / Не продаються: призначає лише оператор.
+export const operatorPlans = Object.freeze({
+  paused: { priceCents: 0, audioSeconds: 0, textTokens: 0, devices: 2 },
+  unlimited: { priceCents: 0, audioSeconds: null, textTokens: null, devices: 8 },
+});
+
+export const catalog = Object.freeze({ ...plans, ...operatorPlans });
 
 const pcmSubtype = Buffer.from('0100000000001000800000aa00389b71', 'hex');
 
@@ -120,7 +121,6 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
     const day = date.toISOString().slice(0, 10);
     const month = day.slice(0, 7);
     const resetsAt = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toISOString();
-    const catalog = client.managed ? managedPlans : plans;
     const saved = readPlan.get(client.account)?.plan;
     const plan = Object.hasOwn(catalog, saved) ? saved : 'free';
     const used = readUsage.get(client.account, month) ?? { audio: 0, text: 0 };
@@ -129,17 +129,18 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
       ? new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)).toISOString() : resetsAt;
     const audioUsed = audioPeriod === 'day' ? readDailyAudio.get(client.account, day)?.audio ?? 0 : used.audio;
     const limits = catalog[plan];
-    const deviceAllowed = client.managed || client.seat <= (client.family === 'desktop' ? limits.desktopDevices : limits.mobileDevices);
+    const deviceAllowed = client.managed || client.seat <= limits.devices;
+    const canSwitch = !client.managed && allowed.has(client.account);
     return { plan, day, month, resetsAt, audioPeriod, audioResetsAt, limits,
       used: { audioSeconds: audioUsed, textTokens: used.text }, deviceAllowed,
-      canSwitch: !client.managed && allowed.has(client.account), available: Object.entries(catalog).map(([id, limits]) => ({ id, ...limits })) };
+      canSwitch, available: Object.entries(canSwitch ? catalog : plans).map(([id, limits]) => ({ id, ...limits })) };
   }
 
   return {
     get,
     select(client, id) {
       if (client.managed || !allowed.has(client.account)) throw new GatewayError(403, 'pilot_only', 'Plan switching is limited to pilot accounts');
-      if (typeof id !== 'string' || !Object.hasOwn(plans, id)) throw new GatewayError(400, 'invalid_plan', 'Unknown plan');
+      if (typeof id !== 'string' || !Object.hasOwn(catalog, id)) throw new GatewayError(400, 'invalid_plan', 'Unknown plan');
       savePlan.run(client.account, id);
       return get(client);
     },

@@ -24,14 +24,17 @@
 
 ## Безпека
 
-Адмінка лишається закритою за IP і ключем. Перед тим як у ній з’являться персональні дані й оплати: окремі облікові записи адміністраторів замість одного спільного ключа, другий фактор, підтвердження руйнівних дій. Пошта користувачів не потрапляє в журнали сервера.
+Адмінка лишається закритою за IP і ключем. Перед тим як у ній з’являться персональні дані й оплати: другий фактор для входу власника й підтвердження руйнівних дій. Пошта користувачів не потрапляє в журнали сервера.
+
+## Рішення
+
+- Адмінка лише для власника: один адміністратор, ролей і прав не робимо.
+- Тарифи єдині для всіх пристроїв: free (0 $, 30 хв диктування на день, 75 тис. токенів на місяць, 2 пристрої), basic (5,99 $, 500 хв, 1 млн токенів, 5 пристроїв), pro (9,99 $, 900 хв, 1,5 млн токенів, 8 пристроїв). Один акаунт працює на кількох пристроях у межах ліміту. Безлімітний доступ і пауза не продаються, їх призначає лише власник. Таблицю зведено в коді шлюзу 26.11.2026.
 
 ## Відкриті питання
 
-- Чи потрібні кілька адміністраторів із різними правами, чи адмінка лише для власника.
 - Термін зберігання використання й оплат і порядок видалення даних на запит користувача.
-- Єдина таблиця тарифів: у шлюзі зараз дві з різними цінами; адмінка має працювати з однією.
 
 ## English
 
-An owner console on top of the existing gateway admin: a searchable user list with plan, usage, devices and last activity; a user page with daily usage, device revocation, payment and action history; actions to change plan, grant time-limited unlimited access, record a payment, block or unblock, and delete an account. Needs new account data (created, last active, status, plan source and expiry), an admin-only unlimited plan, an append-only audit log and a payments table that manual entries and, later, the payment provider and Apple purchases both write to. Blocking must take effect on the next request. Before personal data and payments appear there: per-admin accounts, a second factor and confirmation for destructive actions.
+An owner console on top of the existing gateway admin: a searchable user list with plan, usage, devices and last activity; a user page with daily usage, device revocation, payment and action history; actions to change plan, grant time-limited unlimited access, record a payment, block or unblock, and delete an account. Needs new account data (created, last active, status, plan source and expiry), an admin-only unlimited plan, an append-only audit log and a payments table that manual entries and, later, the payment provider and Apple purchases both write to. Blocking must take effect on the next request. Decided: the console is for the owner only, and there is one price table for all devices (free, basic 5.99, pro 9.99 with a shared device limit of 2, 5 and 8; unlimited and paused are operator-only). Before personal data and payments appear there: a second factor and confirmation for destructive actions.

@@ -25,9 +25,10 @@ export function openClientUsage({ registryPath, databasePath, clientToken, admin
         throw new TypeError('Invalid client entry / Некоректний запис клієнта');
       }
       const family = ['macos', 'windows'].includes(entry.platform) ? 'desktop' : 'mobile';
-      const group = `${entry.account}:${family}`;
-      const seat = (seats.get(group) ?? 0) + 1;
-      seats.set(group, seat);
+      // Devices share one limit per account, whatever the platform.
+      // Пристрої мають спільний ліміт на акаунт незалежно від платформи.
+      const seat = (seats.get(entry.account) ?? 0) + 1;
+      seats.set(entry.account, seat);
       clients.set(entry.sha256, { account: entry.account, platform: entry.platform, family, seat });
     }
   }
