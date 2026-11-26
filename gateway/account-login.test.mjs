@@ -79,7 +79,7 @@ test('email login joins platforms, shares quota, rejects reuse and restores sess
   await f.restart();
   assert.equal((await f.request('/models', { token: macToken })).status, 200);
   const before = await f.request('/account/plan', { token: phoneToken });
-  assert.deepEqual(before.body.limits, { priceCents: 0, audioSeconds: 6000, textTokens: 300_000, devices: 2 });
+  assert.deepEqual(before.body.limits, { priceCents: 0, audioSeconds: 6000, textTokens: 1_000_000, devices: 2 });
   assert.equal(before.body.canSwitch, false);
   assert.equal((await f.request('/account/plan', { method: 'PUT', token: phoneToken, data: { plan: 'pro' } })).status, 403);
   assert.equal((await f.request('/chat/completions', { token: macToken,
@@ -143,16 +143,20 @@ test('replacement limits are type-independent and the same installation does not
   const account = db.prepare('SELECT id FROM login_accounts').get().id;
   const plan = db.prepare('INSERT INTO pilot_account_plan VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET plan = excluded.plan');
   plan.run(account, 'basic');
-  for (let i = 0; i < 4; i++) assert.equal((await f.connect(email, f.device())).status, 200);
+  for (let i = 0; i < 2; i++) assert.equal((await f.connect(email, f.device())).status, 200);
   f.advance(60 * 60_000);
   assert.equal((await f.connect(email, f.device())).status, 409);
   const repeat = await f.connect(email, mac);
   assert.equal(repeat.status, 200);
   assert.equal((await f.request('/models', { token: login.body.token })).status, 401);
-  assert.equal((await f.request('/account/devices', { token: repeat.body.token })).body.devices.length, 5);
+  assert.equal((await f.request('/account/devices', { token: repeat.body.token })).body.devices.length, 3);
   plan.run(account, 'pro');
   f.advance(60 * 60_000);
-  for (let i = 0; i < 3; i++) assert.equal((await f.connect(email, f.device('iPhone', 'ios'))).status, 200);
+  for (let i = 0; i < 5; i++) {
+    // Stay under the hourly limit on sign-in codes per address.
+    if (i === 3) f.advance(60 * 60_000);
+    assert.equal((await f.connect(email, f.device('iPhone', 'ios'))).status, 200);
+  }
   assert.equal((await f.connect(email, f.device())).status, 409);
   assert.equal((await f.request('/account/plan', { token: repeat.body.token })).body.limits.devices, 8);
 });
@@ -162,14 +166,20 @@ test('a short selection can be edited within the remaining text allowance', asyn
   const { body: { token } } = await f.connect('first@example.test', f.device());
   const db = new DatabaseSync(f.usagePath);
   const account = db.prepare('SELECT id FROM login_accounts').get().id;
-  db.prepare("INSERT INTO free_allowance (scope, id, audio, text) VALUES ('account', ?, 0, 297000)").run(account);
+  db.prepare("INSERT INTO free_allowance (scope, id, audio, text) VALUES ('account', ?, 0, 997000)").run(account);
   db.close();
   const messages = [{ role: 'system', content: 'Follow the translation instruction. '.repeat(25) },
     { role: 'user', content: 'SELECTED TEXT:\nHello!\n\nSPOKEN:\nTranslate to Ukrainian.' }];
   const send = max_tokens => f.request('/chat/completions', { token, data: { messages, max_tokens } });
   assert.equal((await send(4096)).body.error.code, 'plan_quota');
   assert.equal((await send(530)).body.choices[0].message.content, 'Вітаю!');
-  assert.equal((await f.request('/account/plan', { token })).body.used.textTokens, 297_015);
+  assert.equal((await f.request('/account/plan', { token })).body.used.textTokens, 997_015);
+  // A selection over the word limit is refused before any provider is called.
+  const long = [{ role: 'user', content: `SELECTED TEXT:\n${'слово '.repeat(1001)}\n\nSPOKEN:\nкоротше` }];
+  const refused = await f.request('/chat/completions', { token, data: { messages: long, max_tokens: 64 } });
+  assert.deepEqual([refused.status, refused.body.error.code], [413, 'selection_too_long']);
+  const cjk = [{ role: 'user', content: `SELECTED TEXT:\n${'字'.repeat(2002)}\n\nSPOKEN:\n翻译` }];
+  assert.equal((await f.request('/chat/completions', { token, data: { messages: cjk, max_tokens: 64 } })).status, 413);
 });
 
 test('the free allowance is one-time, follows the device to a new email and can be extended by the owner', async t => {

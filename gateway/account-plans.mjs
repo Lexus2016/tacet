@@ -7,11 +7,33 @@ import { GatewayError } from './routing.mjs';
 // Єдина таблиця тарифів для всіх акаунтів і платформ: центи США, пакети та спільний ліміт
 // під'єднаних пристроїв. Платні пакети поновлюються щомісяця. Безплатний тариф — разовий запас
 // хмарного диктування, який не поновлюється; після нього лишається диктування на пристрої.
+//
+// Minutes are the only allowance the user is sold. Text processing for those minutes is included,
+// so textTokens is not a product limit: it is an abuse guard of 10,000 tokens per allowed minute,
+// about four times typical use, and is never shown to the user. Pro is sold as unlimited for
+// personal use with a published ceiling of 2,000 minutes a month.
+// Користувачеві продаються лише хвилини. Обробка тексту для цих хвилин входить у ціну, тож
+// textTokens — не ліміт продукту, а запобіжник від зловживань: 10 000 токенів на дозволену
+// хвилину, приблизно вчетверо більше за типове використання; користувачеві його не показуємо.
+// Pro продається як безлімітний для особистого користування з опублікованою межею 2000 хв на місяць.
 export const plans = Object.freeze({
-  free: { priceCents: 0, audioSeconds: 100 * 60, textTokens: 300_000, devices: 2 },
-  basic: { priceCents: 499, audioSeconds: 600 * 60, textTokens: 1_000_000, devices: 5 },
-  pro: { priceCents: 999, audioSeconds: 900 * 60, textTokens: 1_500_000, devices: 8 },
+  free: { priceCents: 0, audioSeconds: 100 * 60, textTokens: 1_000_000, devices: 2 },
+  basic: { priceCents: 499, yearlyCents: 3999, audioSeconds: 600 * 60, textTokens: 6_000_000, devices: 3 },
+  pro: { priceCents: 999, yearlyCents: 7999, audioSeconds: 2000 * 60, textTokens: 20_000_000, devices: 8 },
 });
+
+// One voice edit or translation handles a selection of at most this many words; the apps check it
+// before recording, and the gateway repeats the check. CJK text has no spaces, so two of its
+// characters count as a word.
+// Одна голосова правка чи переклад обробляє виділення щонайбільше з такої кількості слів; застосунки
+// перевіряють це до запису, а шлюз повторює перевірку. У тексті CJK немає пробілів, тож два його
+// символи рахуються як слово.
+export const selectionWordLimit = 1000;
+
+export function selectionWords(text) {
+  const spaced = text.trim().split(/\s+/u).filter(Boolean).length;
+  return spaced + Math.floor((text.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/gu)?.length ?? 0) / 2);
+}
 
 // Never offered for sale: set by the operator only. / Не продаються: призначає лише оператор.
 export const operatorPlans = Object.freeze({

@@ -39,9 +39,10 @@ function terms(plan) {
   if (plan.id === 'paused') return 'диктування й обробку тексту вимкнено';
   const tokens = plan.textTokens >= 1_000_000 ? `${number.format(plan.textTokens / 1_000_000)} млн` : `${number.format(plan.textTokens / 1000)} тис.`;
   return [
-    plan.priceCents ? `$${(plan.priceCents / 100).toFixed(2)}/міс` : plan.id === 'free' ? 'безплатно' : 'не продається',
+    plan.priceCents ? `$${(plan.priceCents / 100).toFixed(2)}/міс` + (plan.yearlyCents ? ` або $${(plan.yearlyCents / 100).toFixed(2)}/рік` : '')
+      : plan.id === 'free' ? 'безплатно' : 'не продається',
     plan.audioSeconds === null ? 'диктування без ліміту' : `${number.format(plan.audioSeconds / 60)} хв ${plan.id === 'free' ? 'разово, без поновлення' : 'на місяць'}`,
-    plan.textTokens === null ? 'текст без ліміту' : `${tokens} токенів ${plan.id === 'free' ? 'разово' : 'на місяць'}`,
+    plan.textTokens === null ? 'текст без запобіжника' : `запобіжник тексту ${tokens} токенів`,
     `до ${plan.devices} пристроїв`,
   ].join(' · ');
 }

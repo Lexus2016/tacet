@@ -5,7 +5,7 @@ import { isIP } from 'node:net';
 import { createAdminSessions } from './admin-session.mjs';
 import { openAccountLogin } from './account-login.mjs';
 import { openAccountAdmin } from './account-admin.mjs';
-import { openAccountPlans } from './account-plans.mjs';
+import { openAccountPlans, selectionWordLimit, selectionWords } from './account-plans.mjs';
 import { openClientUsage } from './client-usage.mjs';
 import { ConfigConflict, openRouteStore } from './routes.mjs';
 import { createRouter, GatewayError } from './routing.mjs';
@@ -95,6 +95,14 @@ async function textInput(req, expanded) {
     throw invalid('Provide text messages including a user message');
   }
   if (value.stream === true) throw invalid('Use a non-streaming request');
+  for (const message of value.messages) {
+    if (message.role !== 'user' || !message.content.startsWith('SELECTED TEXT:\n')) continue;
+    const end = message.content.lastIndexOf('\n\nSPOKEN:\n');
+    const selected = message.content.slice('SELECTED TEXT:\n'.length, end < 0 ? undefined : end);
+    if (selectionWords(selected) > selectionWordLimit) {
+      throw new GatewayError(413, 'selection_too_long', `The selected text is too long. Tacet edits up to ${selectionWordLimit} words at a time.`);
+    }
+  }
   const maxTokens = value.max_completion_tokens ?? value.max_tokens ?? 2048;
   const maxCompletion = expanded ? 32_768 : 4_096;
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > maxCompletion) {

@@ -251,12 +251,12 @@ test('enforces one durable quota and the chosen device counts across desktop and
   assert.equal(initial.resetsAt, '2026-12-01T00:00:00.000Z');
   const freeLimit = initial.limits;
   assert.equal(freeLimit.audioSeconds, 6000);
-  assert.equal(freeLimit.textTokens, 300_000);
+  assert.equal(freeLimit.textTokens, 1_000_000);
   assert.equal((await plan(gateway, secondPhone)).deviceAllowed, false);
   assert.equal((await set(gateway, other, 'unlimited')).status, 403);
   // One price table: everyone sees the same three plans; operator-only plans are never offered for sale.
   assert.deepEqual((await plan(gateway, other)).available.map(option => [option.id, option.priceCents, option.devices]),
-    [['free', 0, 2], ['basic', 499, 5], ['pro', 999, 8]]);
+    [['free', 0, 2], ['basic', 499, 3], ['pro', 999, 8]]);
   assert.deepEqual(initial.available.map(option => option.id), ['free', 'basic', 'pro', 'paused', 'unlimited']);
   assert.equal((await set(gateway, mac, 'constructor')).status, 400);
   assert.equal((await audio(gateway, secondPhone)).status, 403);
