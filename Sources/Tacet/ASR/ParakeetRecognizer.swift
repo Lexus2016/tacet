@@ -25,10 +25,17 @@ actor ParakeetRecognizer: SpeechRecognizer {
         AsrModels.modelsExist(at: modelDirectory, version: .v3)
     }
 
-    /// Whether the model can transcribe this ISO 639-1 language.
-    /// Чи може модель розпізнати цю мову (код ISO 639-1).
+    /// Whether Tacet Solo can transcribe this ISO 639-1 language with either of its models.
+    /// Чи може Tacet Solo розпізнати цю мову (код ISO 639-1) котроюсь зі своїх моделей.
     nonisolated static func supports(_ language: String) -> Bool {
-        Language(rawValue: language) != nil
+        Language(rawValue: language) != nil || SenseVoiceEngine.languages.contains(language)
+    }
+
+    /// Whether the model that serves this language is on disk; nil means the main model.
+    /// Чи є на диску модель, що обслуговує цю мову; nil означає основну модель.
+    nonisolated func isConfigured(for language: String?) -> Bool {
+        if let language, SenseVoiceEngine.languages.contains(language) { return SenseVoiceEngine.shared.isReady() }
+        return isConfigured()
     }
 
     nonisolated func configurationIssue() -> String? {
@@ -67,7 +74,8 @@ actor ParakeetRecognizer: SpeechRecognizer {
 
     /// Frees the model after a quiet period. The next dictation reloads it from
     /// disk instead of keeping a gigabyte resident all day.
-    func unload() {
+    func unload() async {
+        await SenseVoiceEngine.shared.unload()
         guard loadTask == nil else { return }
         manager = nil
     }
@@ -81,7 +89,8 @@ actor ParakeetRecognizer: SpeechRecognizer {
     /// them at the same moment.
     /// Звільняє модель і вилучає її файли всередині актора, щоб диктування не могло завантажувати
     /// їх тієї ж миті.
-    func removeModel() {
+    func removeModel() async {
+        await SenseVoiceEngine.shared.remove()
         loadTask?.cancel()
         loadTask = nil
         manager = nil
@@ -89,6 +98,14 @@ actor ParakeetRecognizer: SpeechRecognizer {
     }
 
     func transcribe(_ clip: AudioClip, language: String?) async throws -> Transcript {
+        if let language, SenseVoiceEngine.languages.contains(language) {
+            let started = Date()
+            let text = try await SenseVoiceEngine.shared.transcribe(clip.samples)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw RecognitionError.empty }
+            return Transcript(text: text, language: language, engine: id, score: 1,
+                              latency: Date().timeIntervalSince(started))
+        }
         // Loading would fetch a missing model; a dictation must never start that download.
         // Завантаження в пам'ять підтягнуло б відсутню модель; диктування не має запускати це завантаження.
         guard isConfigured() else { throw RecognitionError.notConfigured(displayName) }

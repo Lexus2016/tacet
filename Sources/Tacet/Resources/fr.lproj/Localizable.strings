@@ -111,7 +111,6 @@
 "This Tacet account is blocked. Contact Tacet support." = "Ce compte Tacet est bloqué. Contactez l’assistance Tacet.";
 "Tacet Ensemble is back." = "Tacet Ensemble est de retour.";
 "Voice edits need Tacet Ensemble. The selected text was kept." = "Les retouches vocales nécessitent Tacet Ensemble. Le texte sélectionné a été conservé.";
-"When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Quand les minutes Tacet Ensemble sont épuisées ou que le service est injoignable, la dictée continue avec Tacet Solo sur cet appareil dans 25 langues européennes. La précision est moindre, et la correction, la traduction et les retouches vocales nécessitent Tacet Ensemble.";
 "Download Tacet Solo (about 460 MB)" = "Télécharger Tacet Solo (environ 460 Mo)";
 "Downloading Tacet Solo…" = "Téléchargement de Tacet Solo…";
 "Tacet Solo is ready" = "Tacet Solo est prêt";
@@ -126,3 +125,4 @@
 "Free Tacet Ensemble minutes used" = "Minutes gratuites Tacet Ensemble épuisées";
 "Tacet Ensemble minutes for this month used" = "Minutes Tacet Ensemble du mois épuisées";
 "Dictation continues with Tacet Solo." = "La dictée continue avec Tacet Solo.";
+"When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Quand les minutes Tacet Ensemble sont épuisées ou que le service est injoignable, la dictée continue avec Tacet Solo sur cet appareil. La précision est moindre, et la correction, la traduction et les retouches vocales nécessitent Tacet Ensemble.";

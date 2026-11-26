@@ -47,7 +47,8 @@ final class TranscriptionPipeline {
         // transcribe keeps the dictation cloud-only.
         // Модель на пристрої покриває лише європейські мови; примусова мова, якої вона не
         // розпізнає, лишає диктування суто хмарним.
-        let localReady = settings.engineOrder.contains(EngineID.parakeet) && parakeet.isConfigured()
+        let localReady = settings.engineOrder.contains(EngineID.parakeet)
+            && parakeet.isConfigured(for: settings.languageOverride)
             && settings.languageOverride.map(ParakeetRecognizer.supports) != false
         for engineID in settings.engineOrder {
             if Task.isCancelled { break }

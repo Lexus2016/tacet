@@ -190,7 +190,6 @@
 "This Tacet account is blocked. Contact Tacet support." = "Цей акаунт Tacet заблоковано. Зверніться до підтримки Tacet.";
 "Tacet Ensemble is back." = "Tacet Ensemble знову працює.";
 "Voice edits need Tacet Ensemble. The selected text was kept." = "Голосові правки потребують Tacet Ensemble. Виділений текст збережено.";
-"When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Коли хвилини Tacet Ensemble вичерпано або сервіс недосяжний, диктування триває через Tacet Solo на цьому пристрої 25 європейськими мовами. Точність нижча, а виправлення, переклад і голосові правки потребують Tacet Ensemble.";
 "Download Tacet Solo (about 460 MB)" = "Завантажити Tacet Solo (близько 460 МБ)";
 "Downloading Tacet Solo…" = "Завантаження Tacet Solo…";
 "Tacet Solo is ready" = "Tacet Solo готовий";
@@ -209,3 +208,4 @@
 "Download" = "Завантажити";
 "Wait for Wi-Fi" = "Чекати на Wi-Fi";
 "Tacet Solo keeps dictation working without a connection or when the limit is reached. The download is about 460 MB." = "Tacet Solo дає диктувати без зв’язку або коли ліміт вичерпано. Завантаження — близько 460 МБ.";
+"When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Коли хвилини Tacet Ensemble вичерпано або сервіс недосяжний, диктування триває через Tacet Solo на цьому пристрої. Точність нижча, а виправлення, переклад і голосові правки потребують Tacet Ensemble.";

@@ -805,7 +805,8 @@ final class DictationController: ObservableObject {
         lastFailure = message
         status(String(localized: "Failed: \(message)"))
         let alert: String
-        if let reason = failure.attempts.cloudFailure, !ParakeetRecognizer.shared.isConfigured(),
+        if let reason = failure.attempts.cloudFailure,
+           !ParakeetRecognizer.shared.isConfigured(for: settings.languageOverride),
            settings.languageOverride.map(ParakeetRecognizer.supports) != false {
             alert = reason.downloadHint
         } else if failure.audioQuotaExhausted {

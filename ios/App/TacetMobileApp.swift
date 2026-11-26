@@ -104,6 +104,8 @@ private struct SessionView: View {
         // Tacet Solo downloads by itself on Wi-Fi; over mobile data the user is asked once.
         // Tacet Solo завантажується сам через Wi-Fi; через мобільну мережу питаємо користувача один раз.
         .task(id: hasAccess) {
+            let layouts = (try? DictationBridge.keyboardLayouts()) ?? KeyboardLayout.defaults
+            SoloDownload.shared.languages = Set(layouts.map(\.rawValue))
             askingSoloDownload = await SoloDownload.shared.startIfAppropriate(connected: hasAccess, canAsk: true)
         }
         .alert("Download Tacet Solo over mobile data?", isPresented: $askingSoloDownload) {

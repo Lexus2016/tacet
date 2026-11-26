@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Tacet Solo — частина продукту: завантажуємо його модель у фоні, щойно акаунт підключено.
         Task {
             let connected = ProviderCatalog.spec(EngineID.hostedGateway).flatMap(ProviderCatalog.key(for:)) != nil
+            SoloDownload.shared.languages = Set([AppSettings.shared.languageOverride].compactMap { $0 })
             _ = await SoloDownload.shared.startIfAppropriate(connected: connected, canAsk: false)
         }
         NSWorkspace.shared.notificationCenter.addObserver(

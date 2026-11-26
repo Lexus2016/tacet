@@ -11,8 +11,23 @@ final class SoloDownload: ObservableObject {
 
     static let shared = SoloDownload()
 
-    @Published private(set) var phase: Phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
+    @Published private(set) var phase: Phase = .absent
     @Published private(set) var error: String?
+
+    /// The languages this user dictates in. Chinese needs a second model of about 230 MB, fetched
+    /// only for those who use it.
+    /// Мови, якими диктує цей користувач. Для китайської потрібна друга модель на близько 230 МБ,
+    /// яку завантажуємо лише тим, хто нею користується.
+    var languages: Set<String> = [] {
+        didSet { if phase != .downloading { phase = isComplete ? .ready : .absent } }
+    }
+
+    private var needsChinese: Bool { !languages.isDisjoint(with: SenseVoiceEngine.languages) }
+    private var isComplete: Bool {
+        ParakeetRecognizer.shared.isConfigured() && (!needsChinese || SenseVoiceEngine.shared.isReady())
+    }
+
+    private init() { phase = isComplete ? .ready : .absent }
 
     private let defaults = UserDefaults.standard
     private static let removedKey = "solo.removedByUser"
@@ -38,7 +53,7 @@ final class SoloDownload: ObservableObject {
         for _ in 0..<10 where !network.isEvaluated { try? await Task.sleep(for: .milliseconds(200)) }
         guard network.isEvaluated, network.blocked() == nil else { return false }
         let answer = defaults.object(forKey: Self.meteredKey) as? Bool
-        switch Self.action(ready: ParakeetRecognizer.shared.isConfigured(), connected: connected,
+        switch Self.action(ready: isComplete, connected: connected,
                            removedByUser: defaults.bool(forKey: Self.removedKey), metered: network.isMetered,
                            meteredAnswer: answer, canAsk: canAsk) {
         case .none: return false
@@ -63,11 +78,14 @@ final class SoloDownload: ObservableObject {
         error = nil
         Task {
             do {
-                try await ParakeetRecognizer.shared.downloadIfNeeded()
-                await ParakeetRecognizer.shared.unload()
-                phase = .ready
+                if !ParakeetRecognizer.shared.isConfigured() {
+                    try await ParakeetRecognizer.shared.downloadIfNeeded()
+                    await ParakeetRecognizer.shared.unload()
+                }
+                if needsChinese, !SenseVoiceEngine.shared.isReady() { try await SenseVoiceEngine.shared.download() }
+                phase = isComplete ? .ready : .absent
             } catch {
-                phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
+                phase = isComplete ? .ready : .absent
                 self.error = error.localizedDescription
             }
         }
@@ -77,7 +95,7 @@ final class SoloDownload: ObservableObject {
         defaults.set(true, forKey: Self.removedKey)
         Task {
             await ParakeetRecognizer.shared.removeModel()
-            phase = ParakeetRecognizer.shared.isConfigured() ? .ready : .absent
+            phase = isComplete ? .ready : .absent
         }
     }
 }

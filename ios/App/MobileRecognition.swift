@@ -99,23 +99,23 @@ enum MobileRecognition {
         guard MobileGateway.isProvisioned else { throw MobileDictationError.gatewayNotProvisioned }
         // The on-device model covers European languages only; other layouts stay cloud-only.
         // Модель на пристрої покриває лише європейські мови; інші розкладки лишаються хмарними.
-        let localReady = ParakeetRecognizer.shared.isConfigured()
+        let localReady = ParakeetRecognizer.shared.isConfigured(for: spokenLanguage)
             && spokenLanguage.map(ParakeetRecognizer.supports) != false
         if localReady, let reason = CloudAvailability.shared.blocked() {
-            return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
+            return try await transcribeLocally(clip, languageHint: spokenLanguage ?? languageHint, reason: reason)
         }
         do {
             return try await transcribeInCloud(clip, languageHint: languageHint)
         } catch {
             guard let reason = fallbackReason(for: error), localReady, !Task.isCancelled else { throw error }
-            return try await transcribeLocally(clip, languageHint: languageHint, reason: reason)
+            return try await transcribeLocally(clip, languageHint: spokenLanguage ?? languageHint, reason: reason)
         }
     }
 
     /// What to tell the user when the cloud failed and no on-device model could take over.
     /// Що сказати користувачеві, коли хмара відмовила, а модель на пристрої не змогла підхопити.
     static func failureMessage(for error: Error, spokenLanguage: String?) -> String {
-        guard let reason = fallbackReason(for: error), !ParakeetRecognizer.shared.isConfigured(),
+        guard let reason = fallbackReason(for: error), !ParakeetRecognizer.shared.isConfigured(for: spokenLanguage),
               spokenLanguage.map(ParakeetRecognizer.supports) != false else { return error.localizedDescription }
         return reason.downloadHint
     }

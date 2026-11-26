@@ -34,3 +34,10 @@ https://opus.nlpl.eu/OpenSubtitles.php
 частоти, залишили слова потрібною писемністю й додали поширені привітання.
 Для китайської використовуємо спрощене письмо та піньїнь без тонів.
 Дякуємо Цін Цай, Марку Брісберту, OpenSubtitles та авторам джерел wordfreq.
+
+Tacet Solo speech models
+Parakeet TDT 0.6b v3 by NVIDIA (CC BY 4.0) and SenseVoiceSmall by the FunASR team, Alibaba Group
+(FunASR Model Open Source License Agreement), converted to Core ML by FluidInference.
+https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+https://huggingface.co/FunAudioLLM/SenseVoiceSmall
+https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE

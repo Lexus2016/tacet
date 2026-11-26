@@ -241,7 +241,7 @@ struct OnDeviceDictationView: View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
             Text("Tacet Solo").font(.subheadline.weight(.semibold))
-            Text("When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble.")
+            Text("When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble.")
                 .font(.footnote).foregroundStyle(.secondary)
             switch solo.phase {
             case .absent:
