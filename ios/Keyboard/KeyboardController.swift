@@ -996,7 +996,16 @@ final class KeyboardController: UIInputViewController {
         language.addGestureRecognizer(layoutHold)
         bottom.addArrangedSubview(language)
         let space = key(layout.space, accessibility: String(localized: "Space"), isModifier: true) { [weak self] in
-            self?.insertBoundary(" ")
+            guard let self else { return }
+            insertBoundary(" ")
+            // Like the system keyboard, a space typed on the numbers or symbols page returns to letters.
+            // Як у системній клавіатурі, пробіл на сторінці цифр чи символів повертає до літер.
+            guard page != .letters else { return }
+            page = .letters
+            manualShift = false
+            uppercase = false
+            refreshAutomaticCase()
+            buildKeys()
         }
         let trackpadHold = UILongPressGestureRecognizer(target: self, action: #selector(holdSpace(_:)))
         trackpadHold.minimumPressDuration = 0.38
