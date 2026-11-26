@@ -42,13 +42,22 @@ if (smtpHost) {
     trustedProxies: process.env.TACET_AUTH_TRUSTED_PROXIES?.split(',').map(value => value.trim()),
     allowedEmails: process.env.TACET_AUTH_ALLOWED_EMAILS?.split(',').map(value => value.trim()).filter(Boolean),
     async sendCode({ email, code }) {
-      const receipt = await transport.sendMail({
-        from, to: email, subject: 'Tacet sign-in code / Код входу в Tacet',
-        text: `Your Tacet sign-in code / Ваш код входу в Tacet\n\n${code}\n\n` +
-          'This code expires in 10 minutes. / Код діє 10 хвилин.\n' +
-          'If you did not ask for a code, you can ignore this message. / Якщо ви не просили код, проігноруйте цей лист.',
-      });
-      if (!receipt.accepted?.length) throw new Error('Mail was not accepted / Поштовий сервер відхилив лист');
+      // Log the outcome without the address or the code: delivery faults must be visible to the operator.
+      // Журналюємо результат без адреси й коду: збої доставки мають бути видимі операторові.
+      const domain = email.slice(email.lastIndexOf('@') + 1);
+      try {
+        const receipt = await transport.sendMail({
+          from, to: email, subject: 'Tacet sign-in code / Код входу в Tacet',
+          text: `Your Tacet sign-in code / Ваш код входу в Tacet\n\n${code}\n\n` +
+            'This code expires in 10 minutes. / Код діє 10 хвилин.\n' +
+            'If you did not ask for a code, you can ignore this message. / Якщо ви не просили код, проігноруйте цей лист.',
+        });
+        if (!receipt.accepted?.length) throw new Error('Mail was not accepted / Поштовий сервер відхилив лист');
+        console.log(`Sign-in mail accepted for @${domain}: ${receipt.response ?? ''}`);
+      } catch (error) {
+        console.error(`Sign-in mail failed for @${domain}: ${error?.responseCode ?? ''} ${error?.message ?? error}`);
+        throw error;
+      }
     },
   };
 }
