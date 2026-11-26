@@ -86,7 +86,8 @@ final class Onboarding: ObservableObject {
         guard !isComplete else { return }
         last = delivery
         attempts += 1
-        if let language = delivery.language, !languages.contains(language) { languages.append(language) }
+        if let language = Self.heardLanguage(reported: delivery.language, text: delivery.text),
+           !languages.contains(language) { languages.append(language) }
         switch step {
         case .key: finished.insert(.key)
         case .dictate: if !delivery.text.isEmpty { finished.insert(.dictate) }
@@ -101,6 +102,32 @@ final class Onboarding: ObservableObject {
         case .edit, .translateSelection: if delivery.edited { finished.insert(step) }
         case .paste: if !delivery.pasted { finished.insert(.paste) }
         case .history, .indicator: break
+        }
+    }
+
+    /// The language to show for a dictation. Recognition gives one label per recording and can get it
+    /// wrong on a short phrase («Good morning» came back as Russian); when the label's writing system
+    /// does not occur in the text, the text decides.
+    /// Мова для показу. Розпізнавання дає одну мітку на запис і може помилитися на короткій фразі
+    /// («Good morning» повернулося як російська); якщо писемності мітки в тексті немає, вирішує текст.
+    nonisolated static func heardLanguage(reported: String?, text: String) -> String? {
+        let scripts = writingSystems(in: text)
+        guard let reported, !scripts.isEmpty else { return reported }
+        if scripts.contains(writingSystem(of: reported)) { return reported }
+        return TextLanguage.detect(text) ?? (scripts == ["latin"] ? "en" : nil)
+    }
+
+    nonisolated static func writingSystem(of language: String) -> String {
+        switch language.lowercased().prefix(2) {
+        case "ru", "uk", "bg", "sr", "be", "mk", "kk", "mn": "cyrillic"
+        case "el": "greek"
+        case "ar", "fa", "ur": "arabic"
+        case "he": "hebrew"
+        case "hi", "mr", "ne": "devanagari"
+        case "th": "thai"
+        case "zh", "ja": "cjk"
+        case "ko": "hangul"
+        default: "latin"
         }
     }
 

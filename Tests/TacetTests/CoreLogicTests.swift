@@ -301,6 +301,17 @@ final class OnboardingTests: XCTestCase {
     }
 
     // «Доброго ранку! Good morning!» said in one go reached the tour as Ukrainian only (owner, 26 Nov 2026).
+    // «Good morning!» was labelled Russian by recognition and shown as RU (owner, 26 Nov 2026).
+    func testLanguageChipFollowsTheTextWhenTheLabelContradictsItsWritingSystem() {
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "ru", text: "Good morning!"), "en")
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "uk", text: "Доброго ранку!"), "uk")
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "en", text: "Good morning!"), "en")
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "uk", text: "Guten Morgen, wie geht es dir?"), "de")
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "zh", text: "你好"), "zh")
+        XCTAssertNil(Onboarding.heardLanguage(reported: nil, text: "Good morning!"))
+        XCTAssertEqual(Onboarding.heardLanguage(reported: "de", text: ""), "de")
+    }
+
     func testOneDictationInTwoWritingSystemsPassesTheLanguagesStep() {
         let (tour, defaults, name) = tour()
         defer { defaults.removePersistentDomain(forName: name) }
