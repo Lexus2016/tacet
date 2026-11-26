@@ -20,21 +20,21 @@
 4. **Переклад під час диктування.** Говорити однією мовою, отримати текст іншою (Mac: мова результату; iPhone: «Перекладати мовою клавіатури»).
 5. **Голосова правка виділеного.** Виділити текст і сказати «Напиши коротше» або «Зроби тон дружнішим».
 6. **Переклад виділеного.** Виділити текст і сказати «Переклади іспанською».
-7. **Режим на пристрої.** Що відбувається, коли ліміт вичерпано або немає зв’язку, чим він слабший за хмару, і як завантажити модель.
-8. **Тариф і використання.** Де видно залишок і як змінити тариф.
 
 Лише Mac:
 
-9. **Клавіша диктування.** Утримання правої ⌘; власна комбінація; режим «натиснути для початку й завершення».
-10. **Вставлення.** Автоматичне вставлення в активне поле або копіювання в буфер, якщо його вимкнено.
-11. **Історія.** Початковий і оброблений текст, прослуховування запису, повторне розпізнавання, текст, який не вдалося вставити.
-12. **Індикатор і звуки.** Що показує індикатор запису, його теми й розташування, приглушення фонового звуку.
+7. **Клавіша диктування.** Утримання правої ⌘; власна комбінація; режим «натиснути для початку й завершення».
+8. **Вставлення.** Автоматичне вставлення в активне поле або копіювання в буфер, якщо його вимкнено.
+9. **Історія.** Початковий і оброблений текст, прослуховування запису, повторне розпізнавання, текст, який не вдалося вставити.
+10. **Індикатор і звуки.** Що показує індикатор запису, його теми й розташування, приглушення фонового звуку.
 
 Лише iPhone:
 
-13. **Увімкнення клавіатури.** Додати клавіатуру Tacet і дозволити повний доступ, із поясненням, навіщо.
-14. **Сесія диктування.** Мікрофон на клавіатурі, 15-хвилинна сесія, повернення до свого поля, кнопка дії та команда Shortcuts.
-15. **Клавіатура.** Мови й перемикання, утримання літери для варіантів, цифри й символи, підказки та виправлення слів, рух курсора утриманням пробілу, швидке видалення.
+11. **Увімкнення клавіатури.** Додати клавіатуру Tacet і дозволити повний доступ, із поясненням, навіщо.
+12. **Сесія диктування.** Мікрофон на клавіатурі, 15-хвилинна сесія, повернення до свого поля, кнопка дії та команда Shortcuts.
+13. **Клавіатура.** Мови й перемикання, утримання літери для варіантів, цифри й символи, підказки та виправлення слів, рух курсора утриманням пробілу, швидке видалення.
+
+Поза онбордингом, за рішенням: режим на пристрої та «Тариф і використання». Їх користувач побачить під час роботи — у момент, коли вичерпається ліміт або зникне зв’язок.
 
 ## План
 
@@ -48,9 +48,9 @@
 
 ## Відкриті питання
 
-- П’ятнадцять обов’язкових кроків подовжують шлях до першого використання. Межу тривалості визначити після перевірки з п. 7.
+- Тринадцять обов’язкових кроків подовжують шлях до першого використання. Межу тривалості визначити після перевірки з п. 7.
 - README для Mac досі описує провайдерів і порядок рушіїв, яких у застосунку вже немає; оновити разом з онбордингом.
 
 ## English
 
-Onboarding is mandatory with no skip, its dictation and text requests do not count against plan allowances, and it must show every mode useful to the user. The checklist above has fifteen modes: eight shared (dictation, automatic correction, per-dictation language, translation while dictating, voice edit of a selection, translation of a selection, on-device mode, plan and usage), four Mac-only (dictation key, pasting, history, indicator and sounds) and three iPhone-only (enabling the keyboard, the dictation session, keyboard features). Each step is completed by doing the action in a practice field. The gateway needs a separately counted, server-capped onboarding allowance so the exemption is not a way around the plan. Persist progress, add a step for every new capability, and test with first-time users.
+Onboarding is mandatory with no skip, its dictation and text requests do not count against plan allowances, and it must show every mode useful to the user. The checklist above has thirteen modes: six shared (dictation, automatic correction, per-dictation language, translation while dictating, voice edit of a selection, translation of a selection), four Mac-only (dictation key, pasting, history, indicator and sounds) and three iPhone-only (enabling the keyboard, the dictation session, keyboard features). On-device mode and Plan and usage are left out by decision: the user meets them while working. Each step is completed by doing the action in a practice field. The gateway needs a separately counted, server-capped onboarding allowance so the exemption is not a way around the plan. Persist progress, add a step for every new capability, and test with first-time users.
