@@ -68,6 +68,21 @@ final class SoloDownload: ObservableObject {
         }
     }
 
+    /// The limit was reached and Solo is not on the device yet: fetch it now, under the same rules
+    /// as the background download. Returns the text to show when a download is under way.
+    /// Ліміт вичерпано, а Solo ще немає на пристрої: завантажуємо зараз за тими самими правилами,
+    /// що й у фоні. Повертає текст для показу, якщо завантаження триває.
+    func startAfterLimit() -> String? {
+        if phase == .absent {
+            let network = CloudAvailability.shared
+            let action = Self.action(ready: isComplete, connected: true,
+                                     removedByUser: defaults.bool(forKey: Self.removedKey), metered: network.isMetered,
+                                     meteredAnswer: defaults.object(forKey: Self.meteredKey) as? Bool, canAsk: false)
+            if action == .download { download() }
+        }
+        return phase == .downloading ? String(localized: "Limit reached. Tacet Solo is downloading; try again in a minute.") : nil
+    }
+
     /// Records the answer to the metered-connection question and acts on it.
     /// Запам'ятовує відповідь на питання про лімітоване з'єднання й діє відповідно.
     func answerMetered(allow: Bool) {

@@ -126,3 +126,4 @@
 "Tacet Ensemble minutes for this month used" = "Minutos do Tacet Ensemble deste mês usados";
 "Dictation continues with Tacet Solo." = "O ditado continua com o Tacet Solo.";
 "When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Quando os minutos do Tacet Ensemble acabam ou o serviço está inacessível, o ditado continua com o Tacet Solo neste dispositivo. A precisão é menor, e a correção, a tradução e as edições por voz precisam do Tacet Ensemble.";
+"Limit reached. Tacet Solo is downloading; try again in a minute." = "Limite atingido. O Tacet Solo está sendo baixado; tente de novo em um minuto.";

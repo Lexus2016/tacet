@@ -808,7 +808,7 @@ final class DictationController: ObservableObject {
         if let reason = failure.attempts.cloudFailure,
            !ParakeetRecognizer.shared.isConfigured(for: settings.languageOverride),
            settings.languageOverride.map(ParakeetRecognizer.supports) != false {
-            alert = reason.downloadHint
+            alert = (reason == .quota ? SoloDownload.shared.startAfterLimit() : nil) ?? reason.downloadHint
         } else if failure.audioQuotaExhausted {
             alert = String(localized: "Dictation limit reached. See Plan and usage.")
         } else {

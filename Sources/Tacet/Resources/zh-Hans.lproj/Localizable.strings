@@ -126,3 +126,4 @@
 "Tacet Ensemble minutes for this month used" = "本月 Tacet Ensemble 分钟数已用完";
 "Dictation continues with Tacet Solo." = "听写将通过 Tacet Solo 继续。";
 "When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "当 Tacet Ensemble 分钟数用完或服务无法连接时，听写会在本设备上通过 Tacet Solo 继续。准确度较低，纠正、翻译和语音编辑需要 Tacet Ensemble。";
+"Limit reached. Tacet Solo is downloading; try again in a minute." = "额度已用完。Tacet Solo 正在下载，请一分钟后重试。";

@@ -406,3 +406,4 @@
 "Tacet Ensemble minutes for this month used" = "Хвилини Tacet Ensemble цього місяця використано";
 "Dictation continues with Tacet Solo." = "Диктування триває через Tacet Solo.";
 "When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Коли хвилини Tacet Ensemble вичерпано або сервіс недосяжний, диктування триває через Tacet Solo на цьому пристрої. Точність нижча, а виправлення, переклад і голосові правки потребують Tacet Ensemble.";
+"Limit reached. Tacet Solo is downloading; try again in a minute." = "Ліміт вичерпано. Tacet Solo завантажується; спробуйте за хвилину.";
