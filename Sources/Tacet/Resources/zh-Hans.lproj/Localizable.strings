@@ -117,8 +117,6 @@
 "Text allowance renews" = "文本额度续期";
 "Daily dictation allowance used" = "今日听写额度已用完";
 "The daily dictation allowance has been used." = "今日听写额度已用完。";
-"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "听写额度已用完。Tacet 现在在本设备上听写：准确度较低，纠正、翻译和语音编辑已关闭，直到额度恢复或更换套餐。";
-"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "无法连接 Tacet。正在本设备上听写：准确度较低，纠正、翻译和语音编辑已关闭，直到连接恢复。";
 "On-device mode" = "设备模式";
 "Cloud dictation is back." = "云端听写已恢复。";
 "Voice edits need the Tacet cloud. The selected text was kept." = "语音编辑需要 Tacet 云端。所选文本已保留。";
@@ -127,3 +125,7 @@
 "Download the model (about 460 MB)" = "下载模型（约 460 MB）";
 "Downloading the model…" = "正在下载模型…";
 "Remove the model" = "移除模型";
+"Limit reached: dictating on this device, without correction or translation." = "额度已用完：正在本设备上听写，不含纠正和翻译。";
+"No connection: dictating on this device, without correction or translation." = "无法连接：正在本设备上听写，不含纠正和翻译。";
+"Limit reached. Download the on-device model in Plan and usage to keep dictating." = "额度已用完。请在“套餐与用量”中下载设备模型以继续听写。";
+"No connection. Download the on-device model in Plan and usage to dictate offline." = "无法连接。请在“套餐与用量”中下载设备模型以离线听写。";

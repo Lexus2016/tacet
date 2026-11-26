@@ -199,7 +199,8 @@ final class MobileDictationSession: ObservableObject {
                 complete(request: request, phase: .result, text: result.text,
                          warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : note)
             } catch {
-                complete(request: request, phase: .error, text: error.localizedDescription)
+                complete(request: request, phase: .error,
+                         text: MobileRecognition.failureMessage(for: error, spokenLanguage: language))
             }
         }
     }

@@ -789,9 +789,14 @@ final class DictationController: ObservableObject {
         phase = .idle
         lastFailure = message
         status(String(localized: "Failed: \(message)"))
-        let alert = failure.audioQuotaExhausted
-            ? String(localized: "Dictation limit reached. See Plan and usage.")
-            : String(localized: "Not transcribed, recording kept")
+        let alert: String
+        if let reason = failure.attempts.cloudFailure, !ParakeetRecognizer.shared.isConfigured() {
+            alert = reason.downloadHint
+        } else if failure.audioQuotaExhausted {
+            alert = String(localized: "Dictation limit reached. See Plan and usage.")
+        } else {
+            alert = String(localized: "Not transcribed, recording kept")
+        }
         HUDController.shared.finish(error: settings.showHUD ? alert : nil)
         if settings.playSounds { SoundService.shared.play(.error, style: settings.soundStyle) }
         if autoRetry, !failure.audioQuotaExhausted, let failedID {

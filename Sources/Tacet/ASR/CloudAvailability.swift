@@ -9,13 +9,29 @@ enum LocalFallback: String, Sendable, Equatable {
     /// No network, or the Tacet service did not answer. / Немає мережі або сервіс Tacet не відповів.
     case unreachable
 
-    /// Shown once, when dictation moves to the device. / Показуємо раз, коли диктування переходить на пристрій.
+    /// Shown once, when dictation moves to the device. Kept short: the iPhone keyboard strip and the
+    /// Mac indicator show two lines, about 90 characters; the full explanation is in Plan and usage.
+    /// Показуємо раз, коли диктування переходить на пристрій. Текст короткий: смуга клавіатури iPhone
+    /// та індикатор Mac вміщують два рядки, близько 90 символів; повне пояснення — у «Тариф і використання».
     var announcement: String {
         switch self {
         case .quota:
-            String(localized: "Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes.")
+            String(localized: "Limit reached: dictating on this device, without correction or translation.")
         case .unreachable:
-            String(localized: "No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns.")
+            String(localized: "No connection: dictating on this device, without correction or translation.")
+        }
+    }
+
+    /// Shown instead of a bare failure while the on-device model is not downloaded, so the user
+    /// learns the mode exists at the moment it would have helped.
+    /// Показуємо замість голої помилки, доки модель на пристрої не завантажена, щоб користувач
+    /// дізнався про цей режим саме тоді, коли він допоміг би.
+    var downloadHint: String {
+        switch self {
+        case .quota:
+            String(localized: "Limit reached. Download the on-device model in Plan and usage to keep dictating.")
+        case .unreachable:
+            String(localized: "No connection. Download the on-device model in Plan and usage to dictate offline.")
         }
     }
 

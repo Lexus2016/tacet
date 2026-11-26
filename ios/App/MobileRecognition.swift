@@ -116,6 +116,14 @@ enum MobileRecognition {
         }
     }
 
+    /// What to tell the user when the cloud failed and no on-device model could take over.
+    /// Що сказати користувачеві, коли хмара відмовила, а модель на пристрої не змогла підхопити.
+    static func failureMessage(for error: Error, spokenLanguage: String?) -> String {
+        guard let reason = fallbackReason(for: error), !ParakeetRecognizer.shared.isConfigured(),
+              spokenLanguage.map(ParakeetRecognizer.supports) != false else { return error.localizedDescription }
+        return reason.downloadHint
+    }
+
     static func fallbackReason(for error: Error) -> LocalFallback? {
         if case MobileDictationError.unavailable = error { return .unreachable }
         return LocalFallback.reason(for: error)

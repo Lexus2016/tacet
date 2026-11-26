@@ -63,6 +63,8 @@ struct Attempt: Sendable {
     let error: String?
     let latency: TimeInterval
     var audioQuotaExhausted = false
+    /// The gateway could not be reached for this attempt. / Шлюз був недосяжний під час цієї спроби.
+    var unreachable = false
 }
 
 extension Array where Element == Attempt {
@@ -70,7 +72,7 @@ extension Array where Element == Attempt {
     /// Чому хмара не виконала це диктування, якщо спроба через шлюз не вдалася.
     var cloudFailure: LocalFallback? {
         if contains(where: \.audioQuotaExhausted) { return .quota }
-        return contains { EngineID.isGateway($0.engine) && $0.error != nil } ? .unreachable : nil
+        return contains(where: \.unreachable) ? .unreachable : nil
     }
 }
 

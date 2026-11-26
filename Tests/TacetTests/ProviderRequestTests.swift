@@ -42,6 +42,14 @@ final class ProviderRequestTests: XCTestCase {
         XCTAssertNil(LocalFallback.reason(for: RecognitionError.missingKey("Tacet")))
         XCTAssertNil(LocalFallback.reason(for: RecognitionError.noSpeech))
         XCTAssertNil(LocalFallback.reason(for: CancellationError()))
+        // A refused key is a failed gateway attempt, but not a reason to offer the on-device model.
+        XCTAssertNil([Attempt(engine: EngineID.hostedGateway, error: "HTTP 401", latency: 0)].cloudFailure)
+        // Messages must fit the two-line keyboard strip and Mac indicator.
+        for text in [LocalFallback.quota.announcement, LocalFallback.unreachable.announcement,
+                     LocalFallback.quota.downloadHint, LocalFallback.unreachable.downloadHint,
+                     LocalFallback.editsNeedCloud] {
+            XCTAssertLessThanOrEqual(text.count, 95, text)
+        }
         XCTAssertTrue(ParakeetRecognizer.supports("uk"))
         XCTAssertFalse(ParakeetRecognizer.supports("zh"))
     }
@@ -51,7 +59,7 @@ final class ProviderRequestTests: XCTestCase {
         let quota = [Attempt(engine: EngineID.hostedGateway, error: "limit", latency: 0, audioQuotaExhausted: true),
                      Attempt(engine: EngineID.parakeet, error: nil, latency: 0)]
         XCTAssertEqual(PipelineResult(transcript: local, attempts: quota).localFallback, .quota)
-        let failed = [Attempt(engine: EngineID.hostedGateway, error: "timed out", latency: 0),
+        let failed = [Attempt(engine: EngineID.hostedGateway, error: "timed out", latency: 0, unreachable: true),
                       Attempt(engine: EngineID.parakeet, error: nil, latency: 0)]
         XCTAssertEqual(PipelineResult(transcript: local, attempts: failed).localFallback, .unreachable)
         let cloud = Transcript(text: "привіт", language: "uk", engine: EngineID.hostedGateway, score: 1, latency: 0)

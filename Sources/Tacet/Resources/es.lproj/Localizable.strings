@@ -117,8 +117,6 @@
 "Text allowance renews" = "El texto se renueva";
 "Daily dictation allowance used" = "Límite diario de dictado agotado";
 "The daily dictation allowance has been used." = "Se agotó el límite diario de dictado.";
-"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "Límite de dictado alcanzado. Tacet dicta ahora en este dispositivo: la precisión es menor, y la corrección, la traducción y las ediciones por voz están desactivadas hasta que se renueve la asignación o cambie el plan.";
-"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Sin conexión con Tacet. Dictando en este dispositivo: la precisión es menor, y la corrección, la traducción y las ediciones por voz están desactivadas hasta que vuelva la conexión.";
 "On-device mode" = "Modo en el dispositivo";
 "Cloud dictation is back." = "El dictado en la nube vuelve a funcionar.";
 "Voice edits need the Tacet cloud. The selected text was kept." = "Las ediciones por voz necesitan la nube de Tacet. El texto seleccionado se conservó.";
@@ -127,3 +125,7 @@
 "Download the model (about 460 MB)" = "Descargar el modelo (unos 460 MB)";
 "Downloading the model…" = "Descargando el modelo…";
 "Remove the model" = "Eliminar el modelo";
+"Limit reached: dictating on this device, without correction or translation." = "Límite alcanzado: dictado en este dispositivo, sin corrección ni traducción.";
+"No connection: dictating on this device, without correction or translation." = "Sin conexión: dictado en este dispositivo, sin corrección ni traducción.";
+"Limit reached. Download the on-device model in Plan and usage to keep dictating." = "Límite alcanzado. Descarga el modelo local en Plan y uso para seguir dictando.";
+"No connection. Download the on-device model in Plan and usage to dictate offline." = "Sin conexión. Descarga el modelo local en Plan y uso para dictar sin red.";

@@ -52,7 +52,7 @@ final class TranscriptionPipeline {
             // і не чекаємо на тайм-аут без мережі.
             if localReady, EngineID.isGateway(engineID), let reason = cloud.blocked() {
                 attempts.append(Attempt(engine: engineID, error: reason.announcement, latency: 0,
-                                        audioQuotaExhausted: reason == .quota))
+                                        audioQuotaExhausted: reason == .quota, unreachable: reason == .unreachable))
                 continue
             }
             guard let recognizer = makeRecognizer(engineID, engines: engines) else {
@@ -118,7 +118,7 @@ final class TranscriptionPipeline {
                 attempts.append(Attempt(engine: engineID,
                                         error: Self.describe(error),
                                         latency: Date().timeIntervalSince(started),
-                                        audioQuotaExhausted: reason == .quota))
+                                        audioQuotaExhausted: reason == .quota, unreachable: reason == .unreachable))
                 // Any other answer from the cloud is final: the on-device model covers an
                 // exhausted allowance or an unreachable service, nothing else.
                 // Будь-яка інша відповідь хмари остаточна: модель на пристрої покриває лише

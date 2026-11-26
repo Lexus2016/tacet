@@ -197,8 +197,6 @@
 "Text allowance renews" = "Поновлення ліміту для тексту";
 "Daily dictation allowance used" = "Денний ліміт диктування вичерпано";
 "The daily dictation allowance has been used." = "Денний ліміт диктування вичерпано.";
-"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "Ліміт диктування вичерпано. Tacet диктує на цьому пристрої: точність нижча, а виправлення, переклад і голосові правки вимкнено, доки ліміт не поновиться або не зміниться тариф.";
-"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Немає зв’язку з Tacet. Диктування йде на цьому пристрої: точність нижча, а виправлення, переклад і голосові правки вимкнено, доки зв’язок не відновиться.";
 "On-device mode" = "Режим на пристрої";
 "Cloud dictation is back." = "Хмарне диктування знову працює.";
 "Voice edits need the Tacet cloud. The selected text was kept." = "Голосові правки потребують хмари Tacet. Виділений текст збережено.";
@@ -208,3 +206,7 @@
 "Downloading the model…" = "Завантаження моделі…";
 "Model ready" = "Модель готова";
 "Remove the model" = "Вилучити модель";
+"Limit reached: dictating on this device, without correction or translation." = "Ліміт вичерпано: диктую на пристрої, без виправлень і перекладу.";
+"No connection: dictating on this device, without correction or translation." = "Немає зв’язку: диктую на пристрої, без виправлень і перекладу.";
+"Limit reached. Download the on-device model in Plan and usage to keep dictating." = "Ліміт вичерпано. Завантажте модель у «Тариф і використання», щоб диктувати далі.";
+"No connection. Download the on-device model in Plan and usage to dictate offline." = "Немає зв’язку. Завантажте модель у «Тариф і використання» для диктування без мережі.";

@@ -117,8 +117,6 @@
 "Text allowance renews" = "Textkontingent wird erneuert am";
 "Daily dictation allowance used" = "Tägliches Diktierkontingent aufgebraucht";
 "The daily dictation allowance has been used." = "Das tägliche Diktierkontingent ist aufgebraucht.";
-"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "Diktierlimit erreicht. Tacet diktiert jetzt auf diesem Gerät: Die Genauigkeit ist geringer, und Korrektur, Übersetzung und Sprachbearbeitung sind aus, bis das Kontingent erneuert oder der Tarif geändert wird.";
-"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Keine Verbindung zu Tacet. Diktat läuft auf diesem Gerät: Die Genauigkeit ist geringer, und Korrektur, Übersetzung und Sprachbearbeitung sind aus, bis die Verbindung zurück ist.";
 "On-device mode" = "Gerätemodus";
 "Cloud dictation is back." = "Das Cloud-Diktat ist wieder verfügbar.";
 "Voice edits need the Tacet cloud. The selected text was kept." = "Sprachbearbeitung benötigt die Tacet-Cloud. Der ausgewählte Text wurde beibehalten.";
@@ -127,3 +125,7 @@
 "Download the model (about 460 MB)" = "Modell laden (ca. 460 MB)";
 "Downloading the model…" = "Modell wird geladen …";
 "Remove the model" = "Modell entfernen";
+"Limit reached: dictating on this device, without correction or translation." = "Limit erreicht: Diktat auf diesem Gerät, ohne Korrektur und Übersetzung.";
+"No connection: dictating on this device, without correction or translation." = "Keine Verbindung: Diktat auf diesem Gerät, ohne Korrektur und Übersetzung.";
+"Limit reached. Download the on-device model in Plan and usage to keep dictating." = "Limit erreicht. Laden Sie das Gerätemodell unter „Tarif und Nutzung“, um weiter zu diktieren.";
+"No connection. Download the on-device model in Plan and usage to dictate offline." = "Keine Verbindung. Laden Sie das Gerätemodell unter „Tarif und Nutzung“ für Offline-Diktat.";

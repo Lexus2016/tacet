@@ -117,8 +117,6 @@
 "Text allowance renews" = "Renouvellement du quota de texte";
 "Daily dictation allowance used" = "Quota quotidien de dictée épuisé";
 "The daily dictation allowance has been used." = "Le quota quotidien de dictée est épuisé.";
-"Dictation limit reached. Tacet now dictates on this device: accuracy is lower, and correction, translation and voice edits are off until the allowance renews or the plan changes." = "Limite de dictée atteinte. Tacet dicte maintenant sur cet appareil : la précision est moindre, et la correction, la traduction et les modifications vocales sont désactivées jusqu’au renouvellement du quota ou au changement de forfait.";
-"No connection to Tacet. Dictating on this device: accuracy is lower, and correction, translation and voice edits are off until the connection returns." = "Aucune connexion à Tacet. Dictée sur cet appareil : la précision est moindre, et la correction, la traduction et les modifications vocales sont désactivées jusqu’au retour de la connexion.";
 "On-device mode" = "Mode sur l’appareil";
 "Cloud dictation is back." = "La dictée dans le cloud est de retour.";
 "Voice edits need the Tacet cloud. The selected text was kept." = "Les modifications vocales nécessitent le cloud Tacet. Le texte sélectionné a été conservé.";
@@ -127,3 +125,7 @@
 "Download the model (about 460 MB)" = "Télécharger le modèle (environ 460 Mo)";
 "Downloading the model…" = "Téléchargement du modèle…";
 "Remove the model" = "Supprimer le modèle";
+"Limit reached: dictating on this device, without correction or translation." = "Limite atteinte : dictée sur cet appareil, sans correction ni traduction.";
+"No connection: dictating on this device, without correction or translation." = "Pas de connexion : dictée sur cet appareil, sans correction ni traduction.";
+"Limit reached. Download the on-device model in Plan and usage to keep dictating." = "Limite atteinte. Téléchargez le modèle local dans Forfait et utilisation pour continuer.";
+"No connection. Download the on-device model in Plan and usage to dictate offline." = "Hors ligne. Téléchargez le modèle local dans Forfait et utilisation pour dicter.";
