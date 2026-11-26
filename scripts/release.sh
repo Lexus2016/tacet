@@ -24,6 +24,17 @@ ARCHS_LIST=(arm64 x86_64)
 DMG_WIDTH=660
 DMG_HEIGHT=400
 NOTARY_PROFILE=${NOTARY_PROFILE:-murable}
+# Automatic update checks reach users in seven daily groups, so a faulty release can be stopped
+# before it reaches everyone. A manual "Check for Updates" always sees the release at once.
+# Set PHASED_ROLLOUT_INTERVAL=0 to release to everyone immediately.
+# Автоматичні перевірки оновлень досягають користувачів сімома щоденними групами, тож хибний
+# випуск можна зупинити до того, як він дійде до всіх. Ручна перевірка бачить випуск одразу.
+PHASED_ROLLOUT_INTERVAL=${PHASED_ROLLOUT_INTERVAL:-86400}
+NOTES_FILE=${RELEASE_NOTES_FILE:-release-notes/$VERSION.md}
+if [ ! -f "$NOTES_FILE" ]; then
+  echo "Release notes are missing: $NOTES_FILE" >&2
+  exit 1
+fi
 
 if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   echo "Sparkle tools are missing. Expected $SPARKLE_BIN/generate_appcast" >&2
@@ -199,9 +210,16 @@ for ARCH in "${ARCHS_LIST[@]}"; do
 
   mkdir -p "$DIST/appcast-$ARCH"
   cp "$ZIP" "$DIST/appcast-$ARCH/"
+  # The update dialog shows these notes next to the Install button.
+  # Діалог оновлення показує ці нотатки поруч із кнопкою встановлення.
+  cp "$NOTES_FILE" "$DIST/appcast-$ARCH/Tacet-$VERSION-$ARCH.md"
+  PHASED=()
+  [ "$PHASED_ROLLOUT_INTERVAL" != "0" ] && PHASED=(--phased-rollout-interval "$PHASED_ROLLOUT_INTERVAL")
   "$SPARKLE_BIN/generate_appcast" "$DIST/appcast-$ARCH" \
     --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
-    --link "https://github.com/$REPO"
+    --link "https://github.com/$REPO" \
+    --embed-release-notes \
+    ${PHASED[@]+"${PHASED[@]}"}
   GENERATED=$(find "$DIST/appcast-$ARCH" -maxdepth 1 -name "*.xml" | head -1)
   [ -n "$GENERATED" ] || { echo "generate_appcast produced nothing for $ARCH" >&2; exit 1; }
   cp "$GENERATED" "$DIST/appcast-$ARCH.xml"
@@ -231,7 +249,7 @@ ASSETS=("$DIST/Tacet-$VERSION-arm64.zip" "$DIST/Tacet-$VERSION-arm64.dmg" \
         "$DIST/Tacet-$VERSION-x86_64.zip" "$DIST/Tacet-$VERSION-x86_64.dmg" \
         "$DIST/appcast-arm64.xml" "$DIST/appcast-x86_64.xml")
 gh release create "$TAG" "${ASSETS[@]}" --repo "$REPO" --title "Tacet $VERSION" --verify-tag --draft \
-  --notes "Tacet $VERSION. Apple Silicon and Intel builds with separate update feeds."
+  --notes-file "$NOTES_FILE"
 
 for ASSET in "${ASSETS[@]}"; do
   NAME=$(basename "$ASSET")
