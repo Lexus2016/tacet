@@ -16,9 +16,9 @@ enum LocalFallback: String, Sendable, Equatable {
     var announcement: String {
         switch self {
         case .quota:
-            String(localized: "Limit reached: dictating on this device, without correction or translation.")
+            String(localized: "Limit reached: dictating with Tacet Solo, without correction or translation.")
         case .unreachable:
-            String(localized: "No connection: dictating on this device, without correction or translation.")
+            String(localized: "No connection: dictating with Tacet Solo, without correction or translation.")
         }
     }
 
@@ -29,20 +29,20 @@ enum LocalFallback: String, Sendable, Equatable {
     var downloadHint: String {
         switch self {
         case .quota:
-            String(localized: "Limit reached. Download the on-device model in Plan and usage to keep dictating.")
+            String(localized: "Limit reached. Download Tacet Solo in Plan and usage to keep dictating.")
         case .unreachable:
-            String(localized: "No connection. Download the on-device model in Plan and usage to dictate offline.")
+            String(localized: "No connection. Download Tacet Solo in Plan and usage to dictate offline.")
         }
     }
 
     /// Shown on every later on-device dictation. / Показуємо на кожному наступному диктуванні на пристрої.
-    static var reminder: String { String(localized: "On-device mode") }
+    static var reminder: String { String(localized: "Tacet Solo") }
 
     /// Shown once, when the cloud serves a dictation again. / Показуємо раз, коли хмара знову виконала диктування.
-    static var restored: String { String(localized: "Cloud dictation is back.") }
+    static var restored: String { String(localized: "Tacet Ensemble is back.") }
 
     static var editsNeedCloud: String {
-        String(localized: "Voice edits need the Tacet cloud. The selected text was kept.")
+        String(localized: "Voice edits need Tacet Ensemble. The selected text was kept.")
     }
 
     /// Network failures that mean the service could not be reached. A cancelled request, a refused

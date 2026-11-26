@@ -293,15 +293,25 @@ final class TranslatorTests: XCTestCase {
 }
 
 final class AccountPlanTests: XCTestCase {
-    func testDailyDictationAndMonthlyTextRenewAtDifferentTimes() throws {
-        let data = Data(#"{"plan":"free","audioPeriod":"day","audioResetsAt":"2026-11-26T00:00:00.000Z","resetsAt":"2026-12-01T00:00:00Z","limits":{"priceCents":0,"audioSeconds":1800,"textTokens":75000,"devices":2},"used":{"audioSeconds":1800,"textTokens":15},"deviceAllowed":true,"canSwitch":false,"available":[]}"#.utf8)
-        let plan = try JSONDecoder().decode(AccountPlan.self, from: data)
-        XCTAssertTrue(plan.isDailyAudio)
-        XCTAssertTrue(plan.hasExhaustedAllowance)
-        XCTAssertEqual(plan.audioRemaining, 0)
-        XCTAssertEqual(plan.textRemaining, 74_985)
-        XCTAssertEqual(plan.audioRenewalDate?.formatted(.iso8601), "2026-11-26T00:00:00Z")
-        XCTAssertEqual(plan.textRenewalDate?.formatted(.iso8601), "2026-12-01T00:00:00Z")
+    func testFreeMinutesAreOneTimeAndPaidMinutesRenewMonthly() throws {
+        func plan(_ json: String) throws -> AccountPlan { try JSONDecoder().decode(AccountPlan.self, from: Data(json.utf8)) }
+        let free = try plan(#"{"plan":"free","audioPeriod":"once","audioResetsAt":null,"resetsAt":"2026-12-01T00:00:00Z","limits":{"priceCents":0,"audioSeconds":6000,"textTokens":1000000,"devices":2},"used":{"audioSeconds":6000,"textTokens":15},"deviceAllowed":true,"canSwitch":false,"available":[]}"#)
+        XCTAssertTrue(free.isOneTime)
+        XCTAssertTrue(free.hasExhaustedAllowance)
+        XCTAssertEqual(free.audioRemaining, 0)
+        XCTAssertNil(free.renewalDate)
+        let paid = try plan(#"{"plan":"pro","audioPeriod":"month","audioResetsAt":"2026-12-01T00:00:00.000Z","resetsAt":"2026-12-01T00:00:00Z","limits":{"priceCents":999,"audioSeconds":120000,"textTokens":20000000,"devices":8},"used":{"audioSeconds":60,"textTokens":20000000},"deviceAllowed":true,"canSwitch":false,"available":[]}"#)
+        XCTAssertFalse(paid.isOneTime)
+        // The text figure is an internal guard and never marks the plan as used up for the user.
+        XCTAssertFalse(paid.hasExhaustedAllowance)
+        XCTAssertEqual(paid.renewalDate?.formatted(.iso8601), "2026-12-01T00:00:00Z")
+    }
+
+    func testVoiceEditsTakeAtMostAThousandWords() {
+        XCTAssertFalse(SelectionEditLimits.isTooLong(String(repeating: "слово ", count: 1000)))
+        XCTAssertTrue(SelectionEditLimits.isTooLong(String(repeating: "слово ", count: 1001)))
+        XCTAssertFalse(SelectionEditLimits.isTooLong(String(repeating: "字", count: 1998)))
+        XCTAssertTrue(SelectionEditLimits.isTooLong(String(repeating: "字", count: 2002)))
     }
 }
 

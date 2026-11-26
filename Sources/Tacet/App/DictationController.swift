@@ -516,6 +516,9 @@ final class DictationController: ObservableObject {
                 switch selection {
                 case .text where local != nil:
                     notes.append(LocalFallback.editsNeedCloud)
+                case .text(let selectedText, _) where SelectionEditLimits.isTooLong(selectedText):
+                    // Refused here, before anything is sent. / Відмовляємо тут, до будь-якого надсилання.
+                    notes.append(SelectionEditLimits.tooLongMessage)
                 case .text(let selectedText, _):
                     do {
                         if settings.hostedGatewayEnabled,

@@ -35,11 +35,12 @@ struct AccountPlan: Decodable, Equatable {
 
     var paidOptions: [Option] { available.filter { $0.priceCents > 0 && $0.audioSeconds != nil } }
     var audioRemaining: Int? { limits.audioSeconds.map { max(0, $0 - used.audioSeconds) } }
-    var textRemaining: Int? { limits.textTokens.map { max(0, $0 - used.textTokens) } }
-    var hasExhaustedAllowance: Bool { plan != "paused" && (audioRemaining == 0 || textRemaining == 0) }
-    var isDailyAudio: Bool { audioPeriod == "day" }
-    var textRenewalDate: Date? { Self.renewalDate(resetsAt) }
-    var audioRenewalDate: Date? { Self.renewalDate(audioResetsAt ?? resetsAt) }
+    // Minutes are the only allowance the user sees; the text figure is an internal abuse guard.
+    // Користувач бачить лише хвилини; число для тексту — внутрішній запобіжник від зловживань.
+    var hasExhaustedAllowance: Bool { plan != "paused" && audioRemaining == 0 }
+    /// The free plan's minutes are granted once and never renew. / Хвилини безплатного тарифу видаються раз і не поновлюються.
+    var isOneTime: Bool { audioPeriod == "once" }
+    var renewalDate: Date? { isOneTime ? nil : Self.renewalDate(audioResetsAt ?? resetsAt) }
 
     private static func renewalDate(_ value: String) -> Date? {
         (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(value))
@@ -88,7 +89,7 @@ struct AccountPlanView: View {
                 if info.plan == "paused" {
                     Text("Dictation and text processing are paused.").foregroundStyle(.secondary)
                 } else if let limit = info.limits.audioSeconds, limit > 0, let remaining = info.audioRemaining {
-                    let title: LocalizedStringKey = info.isDailyAudio ? "Daily dictation remaining" : "Monthly dictation remaining"
+                    let title: LocalizedStringKey = info.isOneTime ? "Tacet Ensemble remaining" : "Tacet Ensemble remaining this month"
                     LabeledContent(title) {
                         let available = Duration.seconds(remaining).formatted(.time(pattern: .hourMinuteSecond))
                         let total = Duration.seconds(limit).formatted(.time(pattern: .hourMinuteSecond))
@@ -99,11 +100,6 @@ struct AccountPlanView: View {
                 } else {
                     LabeledContent("Dictation remaining") { Text("Unlimited") }
                 }
-                if info.plan != "paused", let remaining = info.textRemaining, let limit = info.limits.textTokens {
-                    LabeledContent("Tokens remaining for text correction and translation") {
-                        Text("\(remaining.formatted()) of \(limit.formatted())").monospacedDigit()
-                    }
-                }
                 if info.plan != "paused" {
                     if info.hasExhaustedAllowance {
                         exhaustedAllowance(info)
@@ -112,12 +108,8 @@ struct AccountPlanView: View {
                             paidPlanMenu(info)
                         }
                     }
-                    if info.isDailyAudio, let reset = info.audioRenewalDate {
-                        LabeledContent("Dictation renews") { Text(reset, format: .dateTime.day().month().hour().minute()) }
-                    }
-                    if let reset = info.textRenewalDate {
-                        let title: LocalizedStringKey = info.isDailyAudio ? "Text allowance renews" : "Renews"
-                        LabeledContent(title) { Text(reset, format: .dateTime.day().month().year().hour().minute()) }
+                    if let reset = info.renewalDate {
+                        LabeledContent("Renews") { Text(reset, format: .dateTime.day().month().year().hour().minute()) }
                     }
                 }
                 if let devices = info.limits.devices {
@@ -168,17 +160,9 @@ struct AccountPlanView: View {
 
     @ViewBuilder
     private func exhaustedAllowance(_ info: AccountPlan) -> some View {
-        if !info.isDailyAudio && info.audioRemaining == 0 && info.textRemaining == 0 {
-            allowanceNotice("Monthly allowances used", reset: info.textRenewalDate)
-        } else {
-            if info.audioRemaining == 0 {
-                allowanceNotice(info.isDailyAudio ? "Daily dictation allowance used" : "Monthly dictation allowance used",
-                                reset: info.audioRenewalDate)
-            }
-            if info.textRemaining == 0 {
-                allowanceNotice("Monthly text allowance used", reset: info.textRenewalDate)
-            }
-        }
+        allowanceNotice(info.isOneTime ? "Free Tacet Ensemble minutes used" : "Tacet Ensemble minutes for this month used",
+                        reset: info.renewalDate)
+        Text("Dictation continues with Tacet Solo.").font(.footnote).foregroundStyle(.secondary)
     }
 
     private func allowanceNotice(_ title: LocalizedStringKey, reset: Date?) -> some View {
@@ -256,22 +240,22 @@ struct OnDeviceDictationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
-            Text("On-device dictation").font(.subheadline.weight(.semibold))
-            Text("When the allowance runs out or Tacet cannot be reached, dictation continues on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits stay in the cloud.")
+            Text("Tacet Solo").font(.subheadline.weight(.semibold))
+            Text("When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device in 25 European languages. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble.")
                 .font(.footnote).foregroundStyle(.secondary)
             switch phase {
             case .absent:
-                Button("Download the model (about 460 MB)") { download() }
+                Button("Download Tacet Solo (about 460 MB)") { download() }
             case .downloading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Downloading the model…").font(.footnote)
+                    Text("Downloading Tacet Solo…").font(.footnote)
                 }
             case .ready:
                 HStack {
-                    Label("Model ready", systemImage: "checkmark.circle")
+                    Label("Tacet Solo is ready", systemImage: "checkmark.circle")
                     Spacer()
-                    Button("Remove the model", role: .destructive) { remove() }
+                    Button("Remove Tacet Solo", role: .destructive) { remove() }
                 }
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }

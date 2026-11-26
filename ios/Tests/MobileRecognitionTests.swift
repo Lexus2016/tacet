@@ -33,14 +33,30 @@ final class MobileRecognitionTests: XCTestCase {
         try XCTSkipUnless(ProviderCatalog.usesPilotGateway, "The installed build must use the private pilot.")
         XCTAssertTrue(MobileGateway.isProvisioned)
         let plan = try await AccountPlansClient.request()
-        XCTAssertEqual(plan.plan, "free")
-        XCTAssertEqual(plan.limits.audioSeconds, 1_800)
-        XCTAssertEqual(plan.limits.textTokens, 75_000)
-        XCTAssertTrue(plan.isDailyAudio)
-        XCTAssertNotNil(plan.audioRenewalDate)
-        XCTAssertNotNil(plan.textRenewalDate)
-        XCTAssertNotEqual(plan.audioRenewalDate, plan.textRenewalDate)
+        XCTAssertFalse(plan.plan.isEmpty)
         XCTAssertTrue(plan.deviceAllowed)
+    }
+
+    func testFreePlanIsAOneTimeAllowanceAndPaidPlansRenew() throws {
+        func plan(_ json: String) throws -> AccountPlan { try JSONDecoder().decode(AccountPlan.self, from: Data(json.utf8)) }
+        let free = try plan(#"{"plan":"free","resetsAt":"2026-12-01T00:00:00.000Z","audioPeriod":"once","audioResetsAt":null,"limits":{"priceCents":0,"audioSeconds":6000,"textTokens":1000000,"devices":2},"used":{"audioSeconds":6000,"textTokens":5},"deviceAllowed":true,"canSwitch":false,"available":[]}"#)
+        XCTAssertTrue(free.isOneTime)
+        XCTAssertNil(free.renewalDate)
+        XCTAssertTrue(free.hasExhaustedAllowance)
+        let paid = try plan(#"{"plan":"basic","resetsAt":"2026-12-01T00:00:00.000Z","audioPeriod":"month","audioResetsAt":"2026-12-01T00:00:00.000Z","limits":{"priceCents":499,"audioSeconds":36000,"textTokens":6000000,"devices":3},"used":{"audioSeconds":60,"textTokens":6000000},"deviceAllowed":true,"canSwitch":false,"available":[]}"#)
+        XCTAssertFalse(paid.isOneTime)
+        XCTAssertNotNil(paid.renewalDate)
+        // The text figure is an internal guard: it never marks the plan as used up for the user.
+        XCTAssertFalse(paid.hasExhaustedAllowance)
+    }
+
+    func testVoiceEditsTakeAtMostAThousandWords() {
+        XCTAssertFalse(SelectionEditLimits.isTooLong(String(repeating: "слово ", count: 1000)))
+        XCTAssertTrue(SelectionEditLimits.isTooLong(String(repeating: "слово ", count: 1001)))
+        // CJK text has no spaces: two characters count as a word.
+        XCTAssertFalse(SelectionEditLimits.isTooLong(String(repeating: "字", count: 1998)))
+        XCTAssertTrue(SelectionEditLimits.isTooLong(String(repeating: "字", count: 2002)))
+        XCTAssertEqual(SelectionEditLimits.words(in: "  one two\nthree  "), 3)
     }
 
     func testOnlyQuotaAndAnUnreachableServiceHandDictationToTheDevice() {

@@ -61,7 +61,7 @@ enum DictationBridge {
             switch self {
             case .missingGroup: return "The shared dictation access group is unavailable."
             case .keychain(let status): return "The dictation connection could not open (\(status))."
-            case .selectionTooLong: return String(localized: "The selection is too large for one voice command.")
+            case .selectionTooLong: return SelectionEditLimits.tooLongMessage
             }
         }
     }

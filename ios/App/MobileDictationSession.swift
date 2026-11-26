@@ -125,8 +125,7 @@ final class MobileDictationSession: ObservableObject {
             currentRequest = command.request
             requestLayout = command.layout
             requestSelection = command.selection.flatMap { $0.isEmpty ? nil : $0 }
-            if let requestSelection,
-               requestSelection.utf8.count > SelectionEditLimits.maximumInputBytes {
+            if let requestSelection, SelectionEditLimits.isTooLong(requestSelection) {
                 complete(request: command.request, phase: .error, text: DictationBridge.BridgeError.selectionTooLong.localizedDescription)
                 return
             }

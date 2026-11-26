@@ -20,8 +20,7 @@
 "Insert this Chinese candidate." = "Вставити цей китайський варіант.";
 "Hold and drag to move the cursor." = "Утримуйте й перетягніть, щоб перемістити курсор.";
 "Trackpad · Drag to move the cursor" = "Трекпад · Проведіть, щоб перемістити курсор";
-"The selection is too large for one voice command." = "Для однієї голосової команди виділено забагато тексту.";
 "Keyboard languages" = "Мови клавіатури";
 "Hold to see all enabled keyboard languages." = "Затисніть, щоб побачити всі ввімкнені мови клавіатури.";
 "Close" = "Закрити";
-"On-device mode" = "Режим на пристрої";
+"The selected text is too long." = "Текст занадто довгий.";

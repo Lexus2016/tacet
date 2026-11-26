@@ -1624,7 +1624,7 @@ final class KeyboardController: UIInputViewController {
     private func beginDictation(_ status: DictationBridge.Status, layout: KeyboardLayout) throws {
         let request = Request(session: status.session, id: UUID(), field: Field(textDocumentProxy))
         let selection = request.field.selection
-        if let selection, selection.utf8.count > SelectionEditLimits.maximumInputBytes {
+        if let selection, SelectionEditLimits.isTooLong(selection) {
             throw DictationBridge.BridgeError.selectionTooLong
         }
         try DictationBridge.send(.init(session: request.session, request: request.id, action: .start,
@@ -1820,7 +1820,7 @@ final class KeyboardController: UIInputViewController {
         }
         localBadge.isHidden = !state.local
         placeLocalBadge()
-        dictationButton.accessibilityValue = state.local ? String(localized: "On-device mode") : nil
+        dictationButton.accessibilityValue = state.local ? String(localized: "Tacet Solo") : nil
         dictationButton.accessibilityLabel = title
         dictationButton.accessibilityHint = !state.hasSession
             ? String(localized: "Opens Tacet to enable dictation.") : nil
