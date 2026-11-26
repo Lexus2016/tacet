@@ -39,6 +39,20 @@ private final class TypingKey: UIButton {
     }
 }
 
+extension UITextDocumentProxy {
+    /// `documentIdentifier` is declared non-optional, but the host can hand over a proxy without
+    /// one while a keyboard is still appearing; reading it directly then traps in the bridge
+    /// (crash report of 2026-11-26, build 56). Read it through the Objective-C runtime instead.
+    /// `documentIdentifier` оголошено неопціональним, але застосунок може передати проксі без нього,
+    /// поки клавіатура ще з'являється; пряме читання тоді аварійно завершує процес на мосту
+    /// (звіт про збій від 26.11.2026, збірка 56). Тому читаємо через середовище Objective-C.
+    var documentID: UUID? {
+        let key = "documentIdentifier"
+        guard let object = self as? NSObject, object.responds(to: NSSelectorFromString(key)) else { return nil }
+        return object.value(forKey: key) as? UUID
+    }
+}
+
 /// A prediction slot whose title sits at a fixed height in the strip, like the system keyboard's.
 /// Комірка підказки, текст якої стоїть на сталій висоті смуги, як у системній клавіатурі.
 private final class SuggestionKey: UIButton {
@@ -183,13 +197,13 @@ final class KeyboardController: UIInputViewController {
     }
 
     private struct Field: Equatable {
-        let document: UUID
+        let document: UUID?
         let before: String?
         let after: String?
         let selection: String?
 
         init(_ proxy: UITextDocumentProxy) {
-            document = proxy.documentIdentifier
+            document = proxy.documentID
             before = proxy.documentContextBeforeInput
             after = proxy.documentContextAfterInput
             selection = proxy.selectedText
@@ -228,7 +242,7 @@ final class KeyboardController: UIInputViewController {
     }
 
     private struct Trackpad {
-        let document: UUID
+        let document: UUID?
         var anchor: CGPoint
     }
 
@@ -854,7 +868,7 @@ final class KeyboardController: UIInputViewController {
             }
             if !word.trailing.isEmpty {
                 proxy.adjustTextPosition(byCharacterOffset: word.trailing.utf16.count)
-                guard proxy.documentIdentifier == suggestions.context.field.document,
+                guard proxy.documentID == suggestions.context.field.document,
                       let moved = suggestionContext(in: proxy)?.word, moved.text == word.text, moved.trailing.isEmpty,
                       !moved.selected else { return }
             }
@@ -1370,14 +1384,14 @@ final class KeyboardController: UIInputViewController {
                 return
             }
             let start = ContinuousClock.now
-            let document = textDocumentProxy.documentIdentifier
+            let document = textDocumentProxy.documentID
             deleteRepeat?.cancel()
             cancelSuggestionRefresh()
             displaySuggestions(nil)
             deleteRepeat = Task { [weak self] in
                 var crossedEmptyContext = false
                 while !Task.isCancelled {
-                    guard let self, visible, textDocumentProxy.documentIdentifier == document else {
+                    guard let self, visible, textDocumentProxy.documentID == document else {
                         self?.endDeleteRepeat()
                         return
                     }
@@ -1427,7 +1441,7 @@ final class KeyboardController: UIInputViewController {
             endDeleteRepeat()
             cancelPending()
             Self.wakeRequest = nil
-            trackpad = Trackpad(document: textDocumentProxy.documentIdentifier, anchor: point)
+            trackpad = Trackpad(document: textDocumentProxy.documentID, anchor: point)
             keys.alpha = 0.35
             clearPreview()
             cancelSuggestionRefresh()
@@ -1446,7 +1460,7 @@ final class KeyboardController: UIInputViewController {
     private func moveCursor(to point: CGPoint) {
         guard var trackpad, verticalCursorMove == nil else { return }
         let proxy = textDocumentProxy
-        guard proxy.documentIdentifier == trackpad.document else {
+        guard proxy.documentID == trackpad.document else {
             endTrackpad()
             return
         }
@@ -1482,12 +1496,12 @@ final class KeyboardController: UIInputViewController {
         let direction = down ? 1 : -1
         let distance = down ? after.utf16.count : before.utf16.count
         let column = KeyboardCursor.column(before: before)
-        let document = proxy.documentIdentifier
+        let document = proxy.documentID
         proxy.adjustTextPosition(byCharacterOffset: direction * (distance + 1))
         verticalCursorMove = Task { [weak self] in
             defer { self?.verticalCursorMove = nil }
             do { try await Task.sleep(for: .milliseconds(40)) } catch { return }
-            guard let self, visible, textDocumentProxy.documentIdentifier == document,
+            guard let self, visible, textDocumentProxy.documentID == document,
                   textDocumentProxy.selectedText?.isEmpty != false else { return }
             let adjacentBefore = textDocumentProxy.documentContextBeforeInput ?? ""
             let adjacentAfter = textDocumentProxy.documentContextAfterInput ?? ""
