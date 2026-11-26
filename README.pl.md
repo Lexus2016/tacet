@@ -12,7 +12,7 @@
 
 Przytrzymaj prawy klawisz Command, powiedz, co chcesz napisać, i puść klawisz. Tacet wstawi Twoje słowa do otwartego czatu, e-maila lub dokumentu. Podyktuj wiadomość w jednym języku, a kolejnego e-maila w innym. Tacet może za każdym razem rozpoznać język bez zmiany ustawień.
 
-Zaznacz zdanie i powiedz „Skróć to”, „Napisz to przyjaźniej” lub „Przetłumacz na hiszpański”. Aby wprowadzać zmiany głosem, skonfiguruj usługę przetwarzania tekstu.
+Zaznacz zdanie i poproś Tacet, by je skrócił, uprzejmiej sformułował albo przetłumaczył na hiszpański. Do tego Tacet używa Tacet Ensemble, swojego silnika w chmurze.
 
 [W czym pomaga](https://lexus2016.github.io/tacet/?lang=pl#features)
 
@@ -29,8 +29,8 @@ Zobacz wskaźnik nagrywania, automatyczne wykrywanie języka i przykład tłumac
 ## Funkcje
 
 - **Zmieniaj język w ciągu dnia** Pozwól Tacet wykrywać język przy każdym dyktowaniu lub ustaw wybrany język.
-- **Mów w jednym języku. Pisz w innym.** Wybierz język wyjściowy i podłącz usługę przetwarzania tekstu. Tacet może wstawić tłumaczenie w tej samej aplikacji.
-- **Wybierz miejsce rozpoznawania mowy** Pobierz Parakeet, by rozpoznawać mowę na Macu, lub skonfiguruj usługę w chmurze. Opcjonalne funkcje chmurowe przesyłają dane do wybranej usługi.
+- **Mów w jednym języku. Pisz w innym.** Wybierz język wyjściowy. Tacet Ensemble może wstawić tłumaczenie do tej samej aplikacji.
+- **W chmurze lub na Macu** Tacet Ensemble daje najlepszy wynik online i w tym celu wysyła dźwięk i tekst do usługi Tacet oraz jej dostawców modeli. Bez połączenia lub gdy skończą się minuty, Tacet Solo dyktuje dalej na Macu.
 - **Zachowaj zawartość schowka** Tacet przywraca schowek po automatycznym wstawianiu i zapisuje transkrypcje w historii.
 
 ## Instalacja
@@ -40,6 +40,6 @@ macOS 14+ · Apple Silicon i Intel · Notaryzacja Apple
 - Apple Silicon · `arm64.dmg`
 - Intel · `x86_64.dmg`
 
-Otwórz obraz dysku dla swojego Maca, przeciągnij Tacet do Aplikacji i zezwól na dostęp do mikrofonu. Aby włączać automatyczne wstawianie, nadaj uprawnienia dostępności.
+Otwórz obraz dysku dla swojego Maca, przeciągnij Tacet do Aplikacji i przy pierwszym uruchomieniu zaloguj się adresem e-mail. Zezwól na dostęp do mikrofonu, a dla automatycznego wstawiania także do Dostępności. Plan Free zawiera jednorazowo 100 minut Tacet Ensemble i nieograniczony Tacet Solo; płatne plany pojawią się wkrótce.
 
 [Wydania](https://github.com/Lexus2016/tacet/releases/latest) · [GPL-3.0](LICENSE)

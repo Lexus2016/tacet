@@ -15,7 +15,7 @@ English · [Українська](README.uk.md) · [Deutsch](README.de.md) · [E
 
 Hold the right Command key, speak, then let go. Tacet puts your words into the chat, email or document you already have open. It can detect the language each time, so you can dictate your next message in a different language without changing settings.
 
-Select a sentence and tell Tacet what to do with it: “Make this shorter,” “Make it friendlier,” or “Translate this into Spanish.” Voice edits and translation use a text service you set up. For dictation, you can recognize speech on your Mac with Parakeet or connect an online speech service.
+Select a sentence and tell Tacet what to do with it: “Make this shorter,” “Make it friendlier,” or “Translate this into Spanish.” Voice edits and translation use Tacet Ensemble, our cloud engine. When you are offline or out of minutes, Tacet Solo keeps dictation going on your Mac.
 
 [See the voice features in GIFs](https://lexus2016.github.io/tacet/#features)
 
@@ -32,19 +32,24 @@ See the recording indicator, automatic language detection and an example of opti
 ## Install on macOS 14 or later
 
 1. On the [latest release page](https://github.com/Lexus2016/tacet/releases/latest), download the Apple-notarized disk image ending in `arm64.dmg` for Apple Silicon or `x86_64.dmg` for Intel. Open it and drag Tacet to Applications.
-2. In **Settings → Providers**, download Parakeet for on-device recognition or configure a cloud provider. Check **Engines** to see the order in which Tacet tries them.
-3. In **Settings → General**, grant microphone and Accessibility access. Hold the right Command key to dictate. You can record a different shortcut or switch to start-and-stop mode.
+2. Open Tacet and sign in with your email: Tacet sends you a code. A short tour of ten steps then shows each feature. Dictation stays locked until the tour is finished, and Tacet Solo downloads in the background.
+3. The tour asks for microphone and Accessibility access. Hold the right Command key to dictate. You can record a different shortcut or switch to start-and-stop mode in **Settings → General**.
 4. Place the cursor in the editor and speak. When automatic insertion is off, Tacet copies the result for you to paste. If the original editor is unavailable, find the transcript in **History**.
 
 ## Dictation and editing
 
-- **Recognition.** Choose a language or let Tacet detect it for each dictation. Set the recognition order to fall back to another engine when one fails.
-- **Cleanup and translation.** Pick a configured chat provider to fix punctuation or translate the result. The original transcript remains available in History.
-- **Edit a selection.** Select text and dictate a change. Tacet checks the original editor and selection before replacing it through automatic insertion. If it cannot verify the selection, it saves a result or the instruction in History.
+- **Recognition.** Tacet Ensemble recognizes speech in the cloud, detects the language of each dictation and fixes punctuation and wording. Tacet Solo is a model on your Mac that keeps dictation going without a connection.
+- **Cleanup and translation.** Tacet Ensemble fixes punctuation and wording or translates the result. The original transcript remains available in History.
+- **Edit a selection.** Select up to 1,000 words and dictate a change. Tacet checks the original editor and selection before replacing it through automatic insertion. If it cannot verify the selection, it saves a result or the instruction in History.
 - **Recover a recording.** History can play saved audio and retry a failed recording. Configure audio retention under **General**.
 - **Indicator.** Choose Classic, Glass, or Light and place the indicator at the top or bottom of the screen.
 
-On-device recognition runs on your Mac after downloading the model. Audio goes to configured cloud services when you use cloud recognition or the optional voice-language check. Cleanup, translation, and selection editing send text to the configured chat provider. Provider credentials live in the macOS Keychain.
+Tacet Ensemble sends your audio and the transcribed text to Tacet’s service and to the third-party model providers it uses to produce the result. Tacet Solo processes audio on your Mac after its model is downloaded. Your Tacet account is your email address; its sign-in token lives in the macOS Keychain.
+
+## Plans
+
+- **Free:** 100 minutes of Tacet Ensemble once, then Tacet Solo without limits. 2 devices.
+- **Basic and Pro:** more Tacet Ensemble minutes and devices. Paid plans are coming soon; until then every account is on Free.
 
 ## Updates
 
