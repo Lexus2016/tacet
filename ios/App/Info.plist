@@ -29,6 +29,8 @@
             <array><string>tacet-dictation</string></array>
         </dict>
     </array>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Tacet uses the microphone during sessions you start so you can dictate from its keyboard.</string>
     <key>TacetDictationAccessGroup</key>
