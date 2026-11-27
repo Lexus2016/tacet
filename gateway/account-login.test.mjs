@@ -109,6 +109,26 @@ test('an account owner can delete the account from the app, and a deleted accoun
   assert.equal((await f.connect('owner@example.test', phone)).status, 200);
 });
 
+test('the App Review address signs in with a fixed code, sends no mail and cannot be used by anyone else', async t => {
+  const f = await fixture(t, { reviewer: { email: 'AppReview@Example.test', code: '424242' } });
+  const phone = f.device('Review iPhone', 'ios');
+  f.advance(61_000);
+  const started = await f.request('/auth/code', { data: { email: 'appreview@example.test' } });
+  assert.equal(started.status, 200);
+  assert.equal(f.outbox.length, 0);
+  const wrong = await f.request('/auth/verify', { data: { challengeID: started.body.challengeID, code: '000000', ...phone } });
+  assert.equal(wrong.status, 401);
+  const ok = await f.request('/auth/verify', { data: { challengeID: started.body.challengeID, code: '424242', ...phone } });
+  assert.equal(ok.status, 200);
+  assert.equal((await f.request('/models', { token: ok.body.token })).status, 200);
+  // Repeated requests are never rate limited for the reviewer, and the fixed code only works for that address.
+  for (let i = 0; i < 7; i += 1) assert.equal((await f.request('/auth/code', { data: { email: 'appreview@example.test' } })).status, 200);
+  const other = await f.request('/auth/code', { data: { email: 'someone@example.test' } });
+  assert.equal(f.outbox.length, 1);
+  const stolen = await f.request('/auth/verify', { data: { challengeID: other.body.challengeID, code: '424242', ...f.device() } });
+  assert.equal(stolen.status, 401);
+});
+
 test('a full account can replace an explicitly named device and revoke tokens without crossing accounts', async t => {
   const f = await fixture(t);
   const old = f.device('Old Mac');

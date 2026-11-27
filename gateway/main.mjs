@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { createGateway } from './server.mjs';
@@ -18,6 +19,17 @@ const ollamaKey = process.env.OLLAMA_API_KEY?.trim();
 const localAdmin = loopback && process.env.TACET_GATEWAY_PUBLIC_ADMIN !== '1';
 const registryPath = process.env.TACET_GATEWAY_CLIENT_REGISTRY;
 const usagePath = process.env.TACET_GATEWAY_USAGE_DATABASE;
+// Optional App Review access: review-access.json next to the usage database, {"email": "...", "code": "123456"}.
+// Remove the file to switch it off. / Необов'язковий доступ для App Review: файл review-access.json поруч із базою.
+function readReviewer() {
+  if (!usagePath) return undefined;
+  try {
+    const value = JSON.parse(readFileSync(resolve(dirname(usagePath), 'review-access.json'), 'utf8'));
+    return typeof value?.email === 'string' && /^\d{6}$/.test(String(value?.code)) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 const smtpHost = process.env.TACET_AUTH_SMTP_HOST?.trim();
 let emailLogin;
 if (smtpHost) {
@@ -41,6 +53,7 @@ if (smtpHost) {
     secret: process.env.TACET_AUTH_CODE_SECRET,
     trustedProxies: process.env.TACET_AUTH_TRUSTED_PROXIES?.split(',').map(value => value.trim()),
     allowedEmails: process.env.TACET_AUTH_ALLOWED_EMAILS?.split(',').map(value => value.trim()).filter(Boolean),
+    reviewer: readReviewer(),
     async sendCode({ email, code }) {
       // Log the outcome without the address or the code: delivery faults must be visible to the operator.
       // Журналюємо результат без адреси й коду: збої доставки мають бути видимі операторові.

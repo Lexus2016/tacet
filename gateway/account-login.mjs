@@ -33,10 +33,16 @@ function deviceFields(input) {
   return { id: input.deviceID.toLowerCase(), name, platform: input.platform };
 }
 
-export function openAccountLogin({ path, sendCode, secret, now = Date.now, allowedEmails, isBlocked = () => false }) {
+export function openAccountLogin({ path, sendCode, secret, now = Date.now, allowedEmails, reviewer, isBlocked = () => false }) {
   if (!path || typeof sendCode !== 'function' || typeof secret !== 'string' || Buffer.byteLength(secret) < 32) {
     throw new TypeError('Email login needs a database, mail delivery and a secret / Для входу потрібні база, пошта й секрет');
   }
+  // App Review cannot read mail, so one named address signs in with a fixed code. It sends no mail,
+  // is not counted against send limits, and exists only while the operator keeps the file in place.
+  // Рецензент Apple не читає пошту, тож одна названа адреса входить зі сталим кодом. Лист не
+  // надсилається, ліміти надсилань не рахуються, а доступ існує, лише поки оператор тримає файл.
+  const review = reviewer && /^\d{6}$/.test(String(reviewer.code))
+    ? { email: emailAddress(reviewer.email), code: String(reviewer.code) } : undefined;
   const allowed = allowedEmails?.length ? new Set(allowedEmails.map(emailAddress)) : undefined;
   const eligible = email => !allowed || allowed.has(email);
   const db = new DatabaseSync(path);
@@ -126,6 +132,16 @@ export function openAccountLogin({ path, sendCode, secret, now = Date.now, allow
     async start(value, source) {
       const email = emailAddress(value);
       const challengeID = opaque();
+      if (review && email === review.email) {
+        const time = now();
+        transaction(() => {
+          removeExpiredCodes.run(time);
+          invalidateCodes.run(email);
+          addCode.run(challengeID, email, codeDigest(challengeID, email, review.code), time + 60 * minute);
+          readyCode.run(challengeID);
+        });
+        return { challengeID };
+      }
       if (!eligible(email)) return { challengeID };
       const code = String(randomInt(1_000_000)).padStart(6, '0');
       const time = now();
