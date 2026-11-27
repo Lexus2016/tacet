@@ -24,6 +24,9 @@ private struct SessionView: View {
     @State private var hasAccess = MobileGateway.isProvisioned
     @State private var showingAccess = false
     @State private var askingSoloDownload = false
+    @ObservedObject private var tour = MobileOnboarding.shared
+    @State private var consentGiven = MobileConsent.isGiven
+    @State private var consentDeferred = false
 
     var body: some View {
         NavigationStack(path: $settingsPath) {
@@ -56,6 +59,24 @@ private struct SessionView: View {
                     }
                 }
 
+                Section("Privacy") {
+                    Link(destination: URL(string: "https://lexus2016.github.io/tacet/privacy.html")!) {
+                        Label("Privacy policy", systemImage: "hand.raised")
+                    }
+                    if consentGiven {
+                        Button("Withdraw consent to cloud processing", role: .destructive) {
+                            MobileConsent.withdraw()
+                            consentGiven = false
+                            consentDeferred = true
+                            if session.deadline != nil { session.end() }
+                        }
+                    } else {
+                        Button("Agree to cloud processing") {
+                            consentDeferred = false
+                        }
+                    }
+                }
+
                 Section {
                     NavigationLink(value: MobileSettingsPage.keyboard) {
                         Label("Keyboard", systemImage: "keyboard")
@@ -81,6 +102,24 @@ private struct SessionView: View {
             .navigationDestination(for: MobileSettingsPage.self) { page in
                 page.destination
             }
+        }
+        // Sign-in, consent and the tour come before anything else; plain typing needs none of them.
+        // Вхід, згода й знайомство йдуть перед усім іншим; для звичайного набору вони не потрібні.
+        .fullScreenCover(isPresented: .init(
+            get: { hasAccess && !consentDeferred && (!consentGiven || !tour.isComplete) },
+            set: { _ in }
+        )) {
+            if !consentGiven {
+                MobileConsentView(onAgree: {
+                    MobileConsent.give()
+                    consentGiven = true
+                }, onDecline: { consentDeferred = true })
+            } else {
+                MobileOnboardingView(tour: tour, session: session)
+            }
+        }
+        .task {
+            if !hasAccess { showingAccess = true }
         }
         .sheet(isPresented: $showingAccess) {
             MobileAccessSheet { connected in

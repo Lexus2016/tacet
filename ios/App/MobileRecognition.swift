@@ -68,7 +68,7 @@ enum MobileGateway {
 
 enum MobileDictationError: LocalizedError {
     case microphoneDenied, noInput, tooShort, unavailable
-    case gatewayNotProvisioned, selectionEditFailed
+    case gatewayNotProvisioned, selectionEditFailed, consentRequired
 
     var errorDescription: String? {
         switch self {
@@ -78,6 +78,7 @@ enum MobileDictationError: LocalizedError {
         case .unavailable: return String(localized: "The Tacet gateway is unavailable. Try again.")
         case .gatewayNotProvisioned: return String(localized: "This iPhone is not connected to Tacet Gateway yet.")
         case .selectionEditFailed: return String(localized: "The voice command could not be applied. The selected text was kept.")
+        case .consentRequired: return String(localized: "Agree to cloud processing in the Tacet app to use voice.")
         }
     }
 }

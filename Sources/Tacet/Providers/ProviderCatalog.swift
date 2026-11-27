@@ -37,6 +37,8 @@ struct ProviderSpec: Identifiable, Sendable {
         // Practice requests of the first-run tour are not charged to the plan (capped by the gateway).
         // Тренувальні запити знайомства не списуються з тарифу (шлюз обмежує їх обсяг).
         if EngineID.isGateway(id), Onboarding.isRunning { request.setValue("1", forHTTPHeaderField: "X-Tacet-Onboarding") }
+        #elseif os(iOS)
+        if EngineID.isGateway(id), MobileOnboarding.isRunning { request.setValue("1", forHTTPHeaderField: "X-Tacet-Onboarding") }
         #endif
         if id == "openrouter" {
             request.setValue("https://github.com/Lexus2016/tacet", forHTTPHeaderField: "HTTP-Referer")

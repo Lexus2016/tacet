@@ -9,6 +9,8 @@ final class MobileDictationSession: ObservableObject {
     @Published private(set) var deadline: Date?
     @Published private(set) var working = false
     @Published private(set) var message: String?
+    /// The latest finished dictation, for the first-run tour. / Останнє завершене диктування, для знайомства.
+    @Published private(set) var delivery: DictationDelivery?
 
     private let audio = SessionAudio()
     private var session: UUID?
@@ -35,6 +37,8 @@ final class MobileDictationSession: ObservableObject {
         defer { working = false }
         do {
             guard MobileGateway.isProvisioned else { throw MobileDictationError.gatewayNotProvisioned }
+            // Nothing leaves the device before the user has agreed. / До згоди користувача з пристрою нічого не йде.
+            guard MobileConsent.isGiven else { throw MobileDictationError.consentRequired }
             guard await AVAudioApplication.requestRecordPermission() else {
                 throw MobileDictationError.microphoneDenied
             }
@@ -198,7 +202,8 @@ final class MobileDictationSession: ObservableObject {
                     if selection != nil {
                         complete(request: request, phase: .error, text: LocalFallback.editsNeedCloud)
                     } else {
-                        complete(request: request, phase: .result, text: transcript.text, warning: note, shown: shown)
+                        complete(request: request, phase: .result, text: transcript.text, warning: note, shown: shown,
+                                 delivery: .init(text: transcript.text, raw: transcript.text, language: transcript.language))
                     }
                     return
                 }
@@ -207,13 +212,17 @@ final class MobileDictationSession: ObservableObject {
                     let replacement = try await output.editSelection(
                         selection, instruction: transcript.text
                     )
-                    complete(request: request, phase: .result, text: replacement, warning: note, shown: shown)
+                    complete(request: request, phase: .result, text: replacement, warning: note, shown: shown,
+                             delivery: .init(text: replacement, raw: transcript.text, language: transcript.language, edited: true))
                     return
                 }
                 let result = await output.prepare(transcript, target: target)
+                let source = TextLanguage.source(in: transcript.text, reported: transcript.language)
                 complete(request: request, phase: .result, text: result.text,
                          warning: result.translationFailed ? String(localized: "Translation unavailable. The original dictation was inserted.") : note,
-                         shown: result.translationFailed ? nil : shown)
+                         shown: result.translationFailed ? nil : shown,
+                         delivery: .init(text: result.text, raw: transcript.text, language: transcript.language,
+                                         translated: target != nil && source != target && !result.translationFailed))
             } catch {
                 scheduleModelUnload()
                 complete(request: request, phase: .error,
@@ -250,8 +259,9 @@ final class MobileDictationSession: ObservableObject {
     }
 
     private func complete(request: UUID, phase: DictationBridge.Status.Phase, text: String, warning: String? = nil,
-                          shown: LocalFallback?? = nil) {
+                          shown: LocalFallback?? = nil, delivery: DictationDelivery? = nil) {
         guard !Task.isCancelled, currentRequest == request else { return }
+        if let delivery { self.delivery = delivery }
         if let shown { localNotice.shown(shown) }
         recognition = nil
         requestSelection = nil
