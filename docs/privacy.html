@@ -63,7 +63,7 @@ footer{border-top:2px solid var(--rule);padding:20px 0 40px;color:var(--muted);f
       <li><strong>Акаунт.</strong> Адреса електронної пошти (для коду входу), дата реєстрації та останнього входу, тариф і, коли з’являться платні тарифи, дати й суми оплат.</li>
       <li><strong>Пристрої.</strong> Випадковий ідентифікатор пристрою, його назва, платформа (Mac чи iPhone) і час входу. На iPhone ідентифікатор зберігається у Зв’язці ключів; на Mac його обчислено з апаратного номера, а сам номер ми не отримуємо.</li>
       <li><strong>Використання.</strong> Кількість секунд диктування й оброблених токенів за днем, платформою та моделлю — для лімітів і тарифу. Окремий лічильник разового безплатного запасу ведеться для акаунта й для пристрою.</li>
-      <li><strong>Голос і текст у хмарі.</strong> Коли ви користуєтеся хмарними функціями (Tacet Ensemble), на наш сервер надходить звук диктування, а для виправлення, перекладу чи голосової правки — текст, зокрема виділений фрагмент. Ми не зберігаємо ні звук, ні текст: вони лишаються в пам’яті сервера, доки триває обробка.</li>
+      <li><strong>Голос і текст у хмарі.</strong> Коли ви користуєтеся хмарними функціями (Tacet Ensemble), на наш сервер надходить звук диктування, а для виправлення, перекладу чи голосової правки — текст, зокрема виділений фрагмент. Наш сервер не зберігає ні звук, ні текст: вони лишаються в пам’яті, доки триває обробка. Про постачальників, до яких вони потрапляють далі, див. розділ 4.</li>
       <li><strong>Технічні журнали сервера.</strong> IP-адреса, час, адреса запиту й код відповіді. Журнали доступу зберігаються до 14 днів і використовуються для безпеки та усунення збоїв. У службовому журналі шлюзу немає адрес пошти: для листів входу в ньому лише домен і результат надсилання.</li>
     </ul>
     <p><strong>Що лишається на вашому пристрої.</strong> Історія диктувань на Mac (текст і записи), налаштування та модель Tacet Solo зберігаються локально; ми їх не отримуємо. Звичайний набір на клавіатурі iPhone, підказки слів і виправлення одруківок працюють на пристрої. Клавіатура просить «Дозволити повний доступ» лише для голосових функцій; набір працює й без нього.</p>
@@ -76,15 +76,16 @@ footer{border-top:2px solid var(--rule);padding:20px 0 40px;color:var(--muted);f
     <table>
       <tr><th>Постачальник</th><th>Для чого</th></tr>
       <tr><td>OpenRouter</td><td>Маршрутизація запитів до моделей</td></tr>
-      <tr><td>Groq</td><td>Розпізнавання мовлення (Whisper Large V3) і обробка тексту</td></tr>
+      <tr><td>Groq</td><td>Розпізнавання мовлення (Whisper) і обробка тексту, напряму й через OpenRouter</td></tr>
       <tr><td>Together</td><td>Резервне розпізнавання мовлення</td></tr>
       <tr><td>Amazon Web Services (Bedrock)</td><td>Обробка тексту</td></tr>
       <tr><td>Cerebras</td><td>Обробка тексту</td></tr>
+      <tr><td>Ollama (Ollama Cloud)</td><td>Обробка тексту</td></tr>
       <tr><td>Amazon Web Services (SES)</td><td>Надсилання листів із кодом входу</td></tr>
       <tr><td>GitHub</td><td>Розповсюдження оновлень для Mac і цей сайт</td></tr>
     </table>
     <p>Коли з’являться оплати, платежі обробляють Apple (App Store) і Stripe (Mac); ми не бачимо даних вашої картки.</p>
-    <p>Наш обліковий запис OpenRouter налаштовано так, щоб запити йшли лише на кінцеві точки, які не зберігають дані (нульове зберігання даних) і не навчаються на них. Якщо постачальник цим умовам не відповідає, запит не виконується. Умови кожного постачальника діють окремо. Ми не продаємо дані й не показуємо рекламу.</p>
+    <p>Запити йдуть до постачальників у порядку, який ми налаштували; частина — напряму, а не через OpenRouter. У нашому обліковому записі OpenRouter увімкнено нульове зберігання даних (запит виконується лише на кінцевих точках, що не зберігають дані) і вимкнено навчання на запитах. За умовами Groq вміст запитів за замовчуванням не зберігається, але вхідні й вихідні дані можуть тимчасово записуватися до 30 днів для усунення збоїв чи розслідування зловживань, якщо не ввімкнено режим нульового зберігання. Ollama Cloud, за своєю політикою, обробляє запити тимчасово й не використовує їх для навчання. Тож ми не можемо обіцяти, що жоден із постачальників ніде не збереже запит, окрім випадків, де це прямо сказано вище; умови кожного постачальника діють окремо. Ми не продаємо дані й не показуємо рекламу.</p>
 
     <h2>5. Згода на хмарну обробку</h2>
     <p>Хмарні функції потребують передавання звуку й тексту зазначеним постачальникам. Користуючись ними, ви на це погоджуєтеся. Відмовитися можна, користуючись лише Tacet Solo або не користуючись голосовими функціями взагалі.</p>
@@ -123,7 +124,7 @@ footer{border-top:2px solid var(--rule);padding:20px 0 40px;color:var(--muted);f
       <li><strong>Account.</strong> Your email address (for the sign-in code), registration and last sign-in dates, your plan and, once paid plans exist, payment dates and amounts.</li>
       <li><strong>Devices.</strong> A random device identifier, its name, its platform (Mac or iPhone) and the sign-in time. On iPhone the identifier is kept in the Keychain; on Mac it is derived from a hardware identifier, and we never receive that identifier itself.</li>
       <li><strong>Usage.</strong> Seconds of dictation and processed tokens per day, platform and model, to apply limits and your plan. A one-time free allowance is counted for the account and for the device.</li>
-      <li><strong>Voice and text in the cloud.</strong> When you use the cloud features (Tacet Ensemble), your dictation audio reaches our server and, for correction, translation or voice edits, so does text, including the selected passage. We do not store audio or text: they stay in server memory only while they are processed.</li>
+      <li><strong>Voice and text in the cloud.</strong> When you use the cloud features (Tacet Ensemble), your dictation audio reaches our server and, for correction, translation or voice edits, so does text, including the selected passage. Our server does not store audio or text: they stay in memory only while they are processed. For the providers that receive them next, see section 4.</li>
       <li><strong>Server logs.</strong> IP address, time, request path and response code, access logs are kept up to 14 days for security and troubleshooting. The gateway’s service log holds no email addresses: for sign-in emails it records only the domain and the delivery result.</li>
     </ul>
     <p><strong>What stays on your device.</strong> Dictation history on Mac (text and recordings), settings and the Tacet Solo model are stored locally and never reach us. Normal typing on the iPhone keyboard, word suggestions and typo correction run on the device. The keyboard asks for “Allow Full Access” only for voice features; typing works without it.</p>
@@ -136,15 +137,16 @@ footer{border-top:2px solid var(--rule);padding:20px 0 40px;color:var(--muted);f
     <table>
       <tr><th>Provider</th><th>Purpose</th></tr>
       <tr><td>OpenRouter</td><td>Routing requests to models</td></tr>
-      <tr><td>Groq</td><td>Speech recognition (Whisper Large V3) and text processing</td></tr>
+      <tr><td>Groq</td><td>Speech recognition (Whisper) and text processing, directly and through OpenRouter</td></tr>
       <tr><td>Together</td><td>Fallback speech recognition</td></tr>
       <tr><td>Amazon Web Services (Bedrock)</td><td>Text processing</td></tr>
       <tr><td>Cerebras</td><td>Text processing</td></tr>
+      <tr><td>Ollama (Ollama Cloud)</td><td>Text processing</td></tr>
       <tr><td>Amazon Web Services (SES)</td><td>Sending sign-in code emails</td></tr>
       <tr><td>GitHub</td><td>Delivering Mac updates and hosting this site</td></tr>
     </table>
     <p>Once payments exist, Apple (App Store) and Stripe (Mac) process them; we never see your card details.</p>
-    <p>Our OpenRouter account is configured so that requests go only to endpoints that do not retain data (zero data retention) and do not train on it. If a provider does not meet this, the request is not carried out. Each provider’s own terms also apply. We do not sell data and show no ads.</p>
+    <p>Requests go to providers in an order we configure; some go directly rather than through OpenRouter. Our OpenRouter account uses zero data retention (a request is carried out only on endpoints that do not retain data) and has training on requests turned off. Under Groq’s terms the content of requests is not retained by default, but inputs and outputs may be logged temporarily for up to 30 days to troubleshoot failures or investigate abuse unless zero data retention is enabled. Ollama Cloud states that it processes requests transiently and does not train on them. We therefore cannot promise that no provider keeps a request anywhere beyond what is stated above; each provider’s own terms also apply. We do not sell data and show no ads.</p>
 
     <h2>5. Consent to cloud processing</h2>
     <p>The cloud features require sending audio and text to the providers listed above. By using them you agree to this. You can decline by using Tacet Solo only, or by not using voice features at all.</p>
