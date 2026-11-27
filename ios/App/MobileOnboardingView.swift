@@ -88,6 +88,7 @@ struct MobileOnboardingView: View {
     @State private var practice = ""
     @State private var selectAll = 0
     @State private var savedTranslation: Bool?
+    @State private var canSkip = false
     @FocusState private var focused: Bool
 
     private static let sample = "hello, this is a quick note i wrote yesterday it is a bit long and could be shorter"
@@ -120,6 +121,11 @@ struct MobileOnboardingView: View {
             tour.configureTyping(layouts: (try? DictationBridge.keyboardLayouts()) ?? KeyboardLayout.defaults)
             tour.refreshKeyboard()
             enter(tour.step)
+        }
+        // Only the App Review account is told it may skip the tour; nobody else sees the button.
+        // Лише акаунту рецензента App Review дозволено пропустити знайомство; решта кнопки не бачить.
+        .task {
+            canSkip = (try? await AccountPlan.request())?.review == true
         }
         .onDisappear {
             leave(tour.step)
@@ -183,6 +189,9 @@ struct MobileOnboardingView: View {
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
                 .disabled(!tour.canContinue)
+            }
+            if canSkip {
+                Button("Skip the tour") { tour.skip() }.font(.system(size: 15))
             }
         }
         .padding(.horizontal, 22)

@@ -190,7 +190,7 @@ export function openAccountPlans({ path, pilotAccounts, managed = false, now = D
     const limits = once?.bonus ? { ...catalog[plan], audioSeconds: catalog[plan].audioSeconds + once.bonus } : catalog[plan];
     const deviceAllowed = client.managed || client.seat <= limits.devices;
     const canSwitch = !client.managed && allowed.has(client.account);
-    return { plan, day, month, resetsAt, audioPeriod, audioResetsAt, limits,
+    return { plan, day, month, resetsAt, audioPeriod, audioResetsAt, limits, ...(client.review && { review: true }),
       used: { audioSeconds: used.audio, textTokens: used.text }, deviceAllowed,
       canSwitch, available: Object.entries(canSwitch ? catalog : plans).map(([id, limits]) => ({ id, ...limits })) };
   }

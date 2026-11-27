@@ -32,6 +32,8 @@ struct AccountPlan: Decodable, Equatable {
     let deviceAllowed: Bool
     let canSwitch: Bool
     let available: [Option]
+    /// Set for the App Review account only: it may skip the first-run tour. / Лише для акаунта рецензента: він може пропустити знайомство.
+    var review: Bool? = nil
 
     var paidOptions: [Option] { available.filter { $0.priceCents > 0 && $0.audioSeconds != nil } }
     var audioRemaining: Int? { limits.audioSeconds.map { max(0, $0 - used.audioSeconds) } }

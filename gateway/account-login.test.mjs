@@ -79,6 +79,8 @@ test('email login joins platforms, shares quota, rejects reuse and restores sess
   await f.restart();
   assert.equal((await f.request('/models', { token: macToken })).status, 200);
   const before = await f.request('/account/plan', { token: phoneToken });
+  // Only the App Review account is marked; an ordinary account is not.
+  assert.equal(before.body.review, undefined);
   assert.deepEqual(before.body.limits, { priceCents: 0, audioSeconds: 6000, textTokens: 1_000_000, devices: 2 });
   assert.equal(before.body.canSwitch, false);
   assert.equal((await f.request('/account/plan', { method: 'PUT', token: phoneToken, data: { plan: 'pro' } })).status, 403);
@@ -121,6 +123,10 @@ test('the App Review address signs in with a fixed code, sends no mail and canno
   const ok = await f.request('/auth/verify', { data: { challengeID: started.body.challengeID, code: '424242', ...phone } });
   assert.equal(ok.status, 200);
   assert.equal((await f.request('/models', { token: ok.body.token })).status, 200);
+  // The reviewer, and nobody else, is marked in the plan the apps read.
+  const reviewerPlan = await f.request('/account/plan', { token: ok.body.token });
+  assert.equal(reviewerPlan.status, 200);
+  assert.equal(reviewerPlan.body.review, true);
   // Repeated requests are never rate limited for the reviewer, and the fixed code only works for that address.
   for (let i = 0; i < 7; i += 1) assert.equal((await f.request('/auth/code', { data: { email: 'appreview@example.test' } })).status, 200);
   const other = await f.request('/auth/code', { data: { email: 'someone@example.test' } });

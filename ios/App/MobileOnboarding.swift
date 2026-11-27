@@ -130,6 +130,14 @@ final class MobileOnboarding: ObservableObject {
         }
     }
 
+    /// For the App Review account only: the gateway marks it, and it may leave the tour unfinished.
+    /// Лише для акаунта рецензента App Review: шлюз його позначає, і він може залишити знайомство незавершеним.
+    func skip() {
+        isComplete = true
+        defaults.set(Self.version, forKey: Self.doneKey)
+        defaults.set(false, forKey: Self.openKey)
+    }
+
     func advance() {
         guard canContinue else { return }
         if let next = Step(rawValue: step.rawValue + 1) {

@@ -224,7 +224,12 @@ export function openAccountLogin({ path, sendCode, secret, now = Date.now, allow
       const token = /^Bearer (tacet_device_[A-Za-z0-9_-]{43})$/.exec(header ?? '')?.[1];
       if (!token) return undefined;
       const row = identifyDevice.get(digest(token));
-      if (row && eligible(row.email)) return { account: row.account, platform: row.platform, device: row.device, managed: true };
+      // The App Review account is marked so the apps can offer it a way past the first-run tour.
+      // Акаунт рецензента App Review позначено, щоб застосунки могли дати йому шлях повз знайомство.
+      if (row && eligible(row.email)) {
+        return { account: row.account, platform: row.platform, device: row.device, managed: true,
+                 ...(review && row.email === review.email && { review: true }) };
+      }
     },
 
     devices: client => ({ devices: devices(client.account, client.device) }),
