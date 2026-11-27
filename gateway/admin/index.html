@@ -66,14 +66,23 @@
     <template id="route-template">
       <li class="route">
         <span class="position"></span>
-        <div class="identity"><strong></strong><span class="model"></span></div>
+        <div class="identity"><strong></strong><span class="model"></span><select class="model-choice" hidden></select></div>
         <div class="health"><span class="badge"></span><span class="detail"></span></div>
         <div class="controls">
           <label class="enabled"><input type="checkbox"><span>Увімкнено</span></label>
           <button data-move="-1" type="button">↑</button>
           <button data-move="1" type="button">↓</button>
+          <button class="remove" type="button" hidden>Прибрати</button>
         </div>
       </li>
+    </template>
+    <template id="add-template">
+      <form class="add-route">
+        <strong>Додати резервний маршрут</strong>
+        <select class="add-base" aria-label="Підключення"></select>
+        <select class="add-model" aria-label="Модель"></select>
+        <button type="submit">Додати</button>
+      </form>
     </template>
   </body>
 </html>

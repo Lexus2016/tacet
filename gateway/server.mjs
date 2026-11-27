@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { isIP } from 'node:net';
 import { createAdminSessions } from './admin-session.mjs';
+import { dirname, join } from 'node:path';
 import { openAccountLogin } from './account-login.mjs';
 import { openAccountAdmin } from './account-admin.mjs';
 import { openAccountPlans, selectionWordLimit, selectionWords } from './account-plans.mjs';
@@ -204,7 +205,7 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
     return client;
   };
   const router = createRouter({ store, credentials, fetchUpstream, now, cooldown, timeouts });
-  const sessions = createAdminSessions({ secure: !localAdmin, now });
+  const sessions = createAdminSessions({ secure: !localAdmin, now, path: join(dirname(configPath), 'admin-sessions.json') });
   const snapshot = () => ({ ...store.get(), health: router.health(), configured, connections, accounts: Boolean(accounts) });
   let inFlight = 0;
   let audioBytesInFlight = 0;

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -112,13 +113,17 @@ async function fixture(t, handle, parameters = {}, saved) {
       body: form ?? (json && JSON.stringify(json)),
     });
     return {
-      request, calls, start, base, stop: () => new Promise(resolve => server.close(resolve)),
+      request, calls, start, base, root, stop: () => new Promise(resolve => server.close(resolve)),
       text: (json = body) => request('/v1/chat/completions', { method: 'POST', token: clientToken, json }),
       admin: () => request('/admin/api/routes', { token: adminToken }).then(res => res.json()),
       save: json => request('/admin/api/routes', { method: 'PUT', token: adminToken, json }),
     };
   }
   return start();
+}
+
+function routeSettings(routes) {
+  return routes.map(({ id, enabled, selection, base }) => ({ id, enabled, ...(selection && { selection }), ...(base && { base }) }));
 }
 
 async function chooseRoutes(gateway, kind, enabled) {
@@ -408,8 +413,29 @@ test('issues Secure cookies for public mode and rejects expired browser sessions
   assert.match(cookie, /^__Secure-tacet_admin=.+; HttpOnly; SameSite=Strict; Secure$/);
   const headers = { cookie: cookie.split(';')[0] };
   assert.equal((await gateway.request('/admin/api/routes', { headers })).status, 200);
-  now += 8 * 60 * 60 * 1_000;
-  assert.equal((await gateway.request('/admin/api/routes', { headers })).status, 401);
+  const day = 24 * 60 * 60 * 1_000;
+  now += 29 * day;
+  assert.equal((await gateway.request('/admin/api/routes', { headers })).status, 200);
+  // A restart does not sign the owner out.
+  const restarted = await gateway.start();
+  assert.equal((await restarted.request('/admin/api/routes', { headers })).status, 200);
+  assert.match(cookie, /Max-Age=2592000/);
+  now += day;
+  assert.equal((await restarted.request('/admin/api/routes', { headers })).status, 401);
+});
+
+test('keeps only hashes of admin sessions on disk and drops a session on logout', async t => {
+  const gateway = await fixture(t, () => assert.fail('unexpected upstream request'));
+  const login = await gateway.request('/admin/api/session', {
+    method: 'POST', json: { key: adminToken }, headers: { 'x-tacet-admin': '1' },
+  });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const value = cookie.slice(cookie.indexOf('=') + 1);
+  const file = readFileSync(join(gateway.root, 'admin-sessions.json'), 'utf8');
+  assert.ok(!file.includes(value), 'the cookie value must not be stored');
+  assert.equal(Object.keys(JSON.parse(file).sessions).length, 1);
+  await gateway.request('/admin/api/session', { method: 'DELETE', headers: { cookie, 'x-tacet-admin': '1' } });
+  assert.deepEqual(JSON.parse(readFileSync(join(gateway.root, 'admin-sessions.json'), 'utf8')).sessions, {});
 });
 
 test('tries Groq, Bedrock and Cerebras in order and tracks the reason and actual usage', async t => {
@@ -596,6 +622,65 @@ test('accepts valid JSON audio and rejects ambiguous encodings before contacting
   assert.equal(gateway.calls.length, 1);
   assert.equal(gateway.calls[0].input.model, 'openai/whisper-large-v3');
   assert.deepEqual(gateway.calls[0].input.provider, { only: ['groq'], allow_fallbacks: false });
+});
+
+test('lets the owner choose a model per route and add a backup route with another model', async t => {
+  const gateway = await fixture(t, input => (input.provider?.only?.[0] === 'groq' ? new Response('down', { status: 503 }) : Response.json({ text: 'Done' })));
+  const send = () => gateway.request('/v1/audio/transcriptions', { method: 'POST', token: clientToken,
+    json: { input_audio: { data: 'YQ==', format: 'wav' } } });
+  const base = await gateway.admin();
+  const whisper = base.routes.audio.find(route => route.id === 'audio-whisper');
+  assert.deepEqual(whisper.models.map(model => model.id), ['openai/whisper-large-v3', 'openai/whisper-large-v3-turbo']);
+  assert.equal(whisper.model, 'openai/whisper-large-v3');
+
+  // A model outside the route's own list is refused and nothing changes.
+  const bad = structuredClone(base);
+  bad.routes.audio[0].selection = 'openai/whisper-1';
+  assert.equal((await gateway.save(bad)).status, 400);
+  const together = structuredClone(base);
+  together.routes.audio.find(route => route.id === 'audio-whisper-together').selection = 'openai/whisper-large-v3-turbo';
+  assert.equal((await gateway.save(together)).status, 400);
+  assert.deepEqual(await gateway.admin(), base);
+
+  // Turbo on the first route, plus a backup copy of the direct Groq route with turbo.
+  const update = structuredClone(base);
+  const first = update.routes.audio.find(route => route.id === 'audio-whisper');
+  first.selection = 'openai/whisper-large-v3-turbo';
+  const direct = update.routes.audio.find(route => route.id === 'audio-groq-direct');
+  direct.enabled = true;
+  update.routes.audio.push({ id: 'x-0a1b2c3d', base: 'audio-groq-direct', selection: 'whisper-large-v3-turbo', enabled: true });
+  assert.equal((await gateway.save(update)).status, 200);
+  const saved = (await gateway.admin()).routes.audio;
+  assert.equal(saved.find(route => route.id === 'audio-whisper').model, 'openai/whisper-large-v3-turbo');
+  const extra = saved.find(route => route.id === 'x-0a1b2c3d');
+  assert.deepEqual([extra.custom, extra.base, extra.model, extra.connection], [true, 'audio-groq-direct', 'whisper-large-v3-turbo', 'groq']);
+
+  // A copy cannot duplicate an existing target, nor point at an unknown base or an unlisted model.
+  for (const entry of [
+    { id: 'x-0a1b2c3e', base: 'audio-groq-direct', selection: 'whisper-large-v3-turbo', enabled: true },
+    { id: 'x-0a1b2c3f', base: 'audio-unknown', selection: 'whisper-large-v3-turbo', enabled: true },
+    { id: 'x-0a1b2c40', base: 'audio-groq-direct', selection: 'other', enabled: true },
+    { id: 'custom-1', base: 'audio-groq-direct', selection: 'whisper-large-v3', enabled: true },
+  ]) {
+    const again = await gateway.admin();
+    assert.equal((await gateway.save({ revision: again.revision, routes: { ...again.routes, audio: [...routeSettings(again.routes.audio), entry] } })).status, 400);
+  }
+
+  // The chosen model is the one that reaches the provider; the failed first route falls through to turbo.
+  const restarted = await gateway.start();
+  assert.equal((await send()).status, 200);
+  assert.deepEqual(gateway.calls.map(({ input }) => input.model).slice(0, 1), ['openai/whisper-large-v3-turbo']);
+  assert.equal((await restarted.admin()).routes.audio.find(route => route.id === 'x-0a1b2c3d').model, 'whisper-large-v3-turbo');
+
+  // Removing the copy and returning to the default model leaves a clean configuration.
+  const clean = await restarted.admin();
+  const reset = { revision: clean.revision, routes: { ...clean.routes, audio: routeSettings(clean.routes.audio)
+    .filter(route => route.id !== 'x-0a1b2c3d').map(({ selection, ...route }) => (route.id === 'audio-whisper' ? route : { ...route, ...(selection && { selection }) })) } };
+  reset.routes.audio.find(route => route.id === 'audio-whisper').selection = undefined;
+  assert.equal((await restarted.save(reset)).status, 200);
+  const after = (await restarted.admin()).routes.audio;
+  assert.equal(after.some(route => route.custom), false);
+  assert.equal(after.find(route => route.id === 'audio-whisper').model, 'openai/whisper-large-v3');
 });
 
 test('ignores forged route metadata and refuses a duplicate route without changing the active policy', async t => {

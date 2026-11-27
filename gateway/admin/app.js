@@ -51,9 +51,14 @@ async function api(method, data, path = 'api/routes') {
 
 function routeSettings(routes) {
   return Object.fromEntries(Object.entries(routes).map(([kind, routes]) => [
-    kind, routes.map(({ id, enabled }) => ({ id, enabled })),
+    kind, routes.map(({ id, enabled, selection, base }) => ({
+      id, enabled, ...(selection && { selection }), ...(base && { base }),
+    })),
   ]));
 }
+
+const modelLabel = (route, id) => route.models.find(model => model.id === id)?.label ?? id;
+const unsaved = () => flash(changed() ? 'Є незбережені зміни' : '');
 
 function changed() {
   return JSON.stringify(routeSettings(draft)) !== JSON.stringify(routeSettings(current.routes));
@@ -108,7 +113,35 @@ function render() {
       row.dataset.id = route.id;
       row.querySelector('.position').textContent = `${index + 1}`;
       row.querySelector('strong').textContent = route.label;
-      row.querySelector('.model').textContent = `${connectionNames[route.connection]} · ${route.model}`;
+      const modelText = row.querySelector('.model');
+      const choice = row.querySelector('.model-choice');
+      modelText.textContent = `${connectionNames[route.connection]} · ${route.model}`;
+      if (route.models.length > 1) {
+        // A route with a single known model shows it as text; with several, the model can be chosen.
+        // Маршрут з однією відомою моделлю показує її текстом; з кількома — модель можна обрати.
+        modelText.textContent = connectionNames[route.connection];
+        choice.hidden = false;
+        choice.setAttribute('aria-label', `Модель для ${route.label}`);
+        choice.replaceChildren(...route.models.map(model => new Option(model.label, model.id, false, model.id === route.model)));
+        choice.addEventListener('change', () => {
+          const base = route.custom ? draft[kind].find(item => item.id === route.base) : route;
+          route.model = choice.value;
+          if (route.custom) route.label = `${base.label} · ${modelLabel(route, choice.value)}`;
+          // The first model of a route is its default and needs no saved choice.
+          // Перша модель маршруту — типова, окремо її зберігати не треба.
+          route.selection = route.custom || choice.value !== route.models[0].id ? choice.value : undefined;
+          render();
+          unsaved();
+        });
+      }
+      const remove = row.querySelector('.remove');
+      remove.hidden = !route.custom;
+      remove.setAttribute('aria-label', `Прибрати ${route.label}`);
+      remove.addEventListener('click', () => {
+        draft[kind] = draft[kind].filter(item => item.id !== route.id);
+        render();
+        unsaved();
+      });
       const checkbox = row.querySelector('input');
       checkbox.checked = route.enabled;
       checkbox.setAttribute('aria-label', `Увімкнути ${route.label}`);
@@ -116,7 +149,7 @@ function render() {
         route.enabled = checkbox.checked;
         renderHealth();
         updateActions();
-        flash(changed() ? 'Є незбережені зміни' : '');
+        unsaved();
       });
       for (const button of row.querySelectorAll('[data-move]')) {
         const offset = Number(button.dataset.move);
@@ -129,11 +162,12 @@ function render() {
           render();
           const controls = groups.querySelector(`[data-id="${route.id}"] .controls`);
           (controls.querySelector(`[data-move="${offset}"]:enabled`) ?? controls.querySelector('button:enabled'))?.focus();
-          flash(changed() ? 'Є незбережені зміни' : '');
+          unsaved();
         });
       }
       group.querySelector('ol').append(row);
     }
+    group.querySelector('.group').append(addRouteForm(kind));
     fragment.append(group);
   }
   groups.replaceChildren(fragment);
@@ -141,10 +175,73 @@ function render() {
   updateActions();
 }
 
+// Adds a backup route: another model from the list of one of the standard routes.
+// Додає резервний маршрут: іншу модель зі списку одного зі стандартних маршрутів.
+function addRouteForm(kind) {
+  const form = document.querySelector('#add-template').content.firstElementChild.cloneNode(true);
+  const bases = draft[kind].filter(route => !route.custom && route.models.length > 1);
+  const baseSelect = form.querySelector('.add-base');
+  const modelSelect = form.querySelector('.add-model');
+  const fill = () => {
+    const base = bases.find(route => route.id === baseSelect.value);
+    modelSelect.replaceChildren(...(base?.models ?? []).map(model => new Option(model.label, model.id)));
+  };
+  baseSelect.replaceChildren(...bases.map(route => new Option(`${route.label} · ${connectionNames[route.connection]}`, route.id)));
+  baseSelect.addEventListener('change', fill);
+  fill();
+  const extras = draft[kind].filter(route => route.custom).length;
+  form.hidden = !bases.length;
+  form.querySelector('button').disabled = extras >= 6;
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const base = bases.find(route => route.id === baseSelect.value);
+    const model = modelSelect.value;
+    if (!base || !model || busy) return;
+    if (draft[kind].some(route => route.connection === base.connection && route.provider === base.provider && route.model === model)) {
+      flash('Такий маршрут уже є в списку.', true);
+      return;
+    }
+    const id = `x-${[...crypto.getRandomValues(new Uint8Array(4))].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+    const added = { ...base, id, base: base.id, custom: true, model, selection: model, enabled: true };
+    added.label = `${base.label} · ${modelLabel(base, model)}`;
+    draft[kind].push(added);
+    render();
+    unsaved();
+  });
+  return form;
+}
+
+// Unsaved changes survive a forced sign-out: they are kept for this tab and restored after signing
+// in again, as long as nobody saved a newer configuration in the meantime.
+// Незбережені зміни переживають примусовий вихід: їх тримаємо для цієї вкладки й відновлюємо після
+// нового входу, якщо за цей час ніхто не зберіг новішу конфігурацію.
+const draftKey = 'tacet.admin.routes.draft';
+
+function stashDraft() {
+  try {
+    if (current && draft && changed()) sessionStorage.setItem(draftKey, JSON.stringify({ revision: current.revision, draft }));
+  } catch {
+    // Storage may be unavailable; the changes are then lost as before.
+  }
+}
+
+function restoreDraft(revision) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? 'null');
+    sessionStorage.removeItem(draftKey);
+    return saved?.revision === revision ? saved.draft : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function load(snapshot) {
   current = snapshot;
   draft = structuredClone(snapshot.routes);
+  const kept = restoreDraft(snapshot.revision);
+  if (kept) draft = kept;
   render();
+  if (kept) flash('Незбережені зміни відновлено. Натисніть «Зберегти зміни».');
 }
 
 const tabs = document.querySelector('#tabs');
@@ -172,6 +269,7 @@ function showDashboard(snapshot) {
 
 function showLogin(message = '') {
   session++;
+  stashDraft();
   current = draft = undefined;
   busy = false;
   users.reset();
