@@ -125,7 +125,7 @@ struct MobileOnboardingView: View {
         // Only the App Review account is told it may skip the tour; nobody else sees the button.
         // Лише акаунту рецензента App Review дозволено пропустити знайомство; решта кнопки не бачить.
         .task {
-            canSkip = (try? await AccountPlan.request())?.review == true
+            canSkip = (try? await AccountPlansClient.request())?.review == true
         }
         .onDisappear {
             leave(tour.step)
