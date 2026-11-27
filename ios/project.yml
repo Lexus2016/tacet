@@ -9,8 +9,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "30"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "66"
 packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
