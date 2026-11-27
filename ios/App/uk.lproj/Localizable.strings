@@ -211,3 +211,10 @@
 "When Tacet Ensemble minutes run out or the service cannot be reached, dictation continues with Tacet Solo on this device. Accuracy is lower, and correction, translation and voice edits need Tacet Ensemble." = "Коли хвилини Tacet Ensemble вичерпано або сервіс недосяжний, диктування триває через Tacet Solo на цьому пристрої. Точність нижча, а виправлення, переклад і голосові правки потребують Tacet Ensemble.";
 "Limit reached. Tacet Solo is downloading; try again in a minute." = "Ліміт вичерпано. Tacet Solo завантажується; спробуйте за хвилину.";
 "Gift for moving to the new Tacet" = "Подарунок за перехід на новий Tacet, діє до";
+"Delete account…" = "Видалити акаунт…";
+"Delete your Tacet account?" = "Видалити акаунт Tacet?";
+"Account email" = "Електронна пошта акаунта";
+"Delete account" = "Видалити акаунт";
+"This permanently deletes your account, plan, usage and device list, and signs out every device. Type the account email to confirm. This cannot be undone." = "Це остаточно видалить акаунт, тариф, використання й перелік пристроїв та вийде з акаунта на всіх пристроях. Введіть пошту акаунта для підтвердження. Скасувати це неможливо.";
+"Deleting account…" = "Видалення акаунта…";
+"The email does not match this account. Nothing was deleted." = "Пошта не збігається з цим акаунтом. Нічого не видалено.";

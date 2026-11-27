@@ -115,6 +115,19 @@ export function openAccountAdmin({ path, now = Date.now }) {
     // видалений акаунт заради нового запасу.
     "DELETE FROM free_allowance WHERE scope = 'account' AND id = ?",
   ].map(sql => db.prepare(sql));
+  function erase(account, reason) {
+    const time = now();
+    transaction(() => {
+      for (const statement of removals) statement.run(account);
+      // Free text typed by the operator may name the person; amounts, dates and references stay.
+      // Вільний текст оператора може називати людину; суми, дати й номери платежів лишаються.
+      scrubPayments.run(account);
+      scrubActions.run(account);
+      log.run(time, account, 'account_deleted', '{}', reason);
+    });
+    seen.delete(account);
+    return { ok: true };
+  }
   const addBonus = db.prepare(`INSERT INTO free_allowance (scope, id, bonus_audio) VALUES ('account', ?, ?)
     ON CONFLICT(scope, id) DO UPDATE SET bonus_audio = bonus_audio + excluded.bonus_audio`);
 
@@ -381,21 +394,21 @@ export function openAccountAdmin({ path, now = Date.now }) {
     // Видаляє акаунт і його використання. Оплати й журнал дій лишаються як облікові записи,
     // пов'язані лише з непрозорим ідентифікатором акаунта.
     remove(account, input) {
-      const time = now();
       const row = find(account);
       if (!row.email) throw new GatewayError(400, 'invalid_admin_input', 'Only email accounts can be deleted here');
       if (input?.confirm !== row.email) throw new GatewayError(400, 'confirmation_required', 'Type the account email to confirm');
-      const reason = text(input?.reason, 'reason', 200);
-      transaction(() => {
-        for (const statement of removals) statement.run(account);
-        // Free text typed by the operator may name the person; amounts, dates and references stay.
-        // Вільний текст оператора може називати людину; суми, дати й номери платежів лишаються.
-        scrubPayments.run(account);
-        scrubActions.run(account);
-        log.run(time, account, 'account_deleted', '{}', reason);
-      });
-      seen.delete(account);
-      return { ok: true };
+      return erase(account, text(input?.reason, 'reason', 200));
+    },
+
+    // Deletion requested by the account owner from the app. The email typed back must match.
+    // Видалення за запитом власника акаунта із застосунку. Введена пошта має збігатися.
+    removeOwn(account, input) {
+      const row = find(account);
+      const typed = typeof input?.confirm === 'string' ? input.confirm.trim().toLowerCase() : '';
+      if (!row.email || typed !== row.email) {
+        throw new GatewayError(400, 'confirmation_required', 'Type the account email to confirm');
+      }
+      return erase(account, 'Requested by the user in the app');
     },
 
     close: () => db.close(),

@@ -63,7 +63,7 @@ struct EmailAccountClient: Sendable {
     }
 
     enum Failure: LocalizedError, Equatable {
-        case invalidEmail, invalidCode, rateLimited, unavailable, deviceNotFound, deviceLimit, unauthorized, malformed, storage, blocked
+        case invalidEmail, invalidCode, rateLimited, unavailable, deviceNotFound, deviceLimit, unauthorized, malformed, storage, blocked, confirmationMismatch
 
         var errorDescription: String? {
             switch self {
@@ -77,6 +77,7 @@ struct EmailAccountClient: Sendable {
             case .malformed: String(localized: "Tacet returned an unexpected account response.")
             case .storage: String(localized: "The Tacet sign-in could not be updated in Keychain.")
             case .blocked: String(localized: "This Tacet account is blocked. Contact Tacet support.")
+            case .confirmationMismatch: String(localized: "The email does not match this account. Nothing was deleted.")
             }
         }
     }
@@ -163,6 +164,16 @@ struct EmailAccountClient: Sendable {
         guard try decode(Removed.self, data: data).ok else { throw Failure.malformed }
     }
 
+    /// Deletes the account and everything stored for it; the email typed back confirms it.
+    /// Видаляє акаунт і все збережене для нього; підтвердженням слугує повторно введена пошта.
+    func deleteAccount(confirmingEmail email: String, token: String) async throws {
+        struct Body: Encodable { let confirm: String }
+        let (data, status) = try await request("account", method: "DELETE",
+                                               body: try JSONEncoder().encode(Body(confirm: email)), token: token)
+        try check(status, data: data)
+        guard try decode(Removed.self, data: data).ok else { throw Failure.malformed }
+    }
+
     static func isValidEmail(_ email: String) -> Bool {
         let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = email.split(separator: "@", omittingEmptySubsequences: false)
@@ -218,6 +229,7 @@ struct EmailAccountClient: Sendable {
         guard !(200..<300).contains(status) else { return }
         let code = (try? JSONDecoder().decode(ServerError.self, from: data))?.error.code
         switch code {
+        case "confirmation_required": throw Failure.confirmationMismatch
         case "invalid_email": throw Failure.invalidEmail
         case "invalid_code": throw Failure.invalidCode
         case "code_rate_limit": throw Failure.rateLimited
@@ -305,6 +317,8 @@ struct EmailAccountConnection<Legacy: View>: View {
     @State private var action: Task<Void, Never>?
     @State private var confirming: DeviceChange?
     @State private var showsConfirmation = false
+    @State private var showsDeletion = false
+    @State private var deletionEmail = ""
     @FocusState private var codeFocused: Bool
 
     private let client: EmailAccountClient
@@ -336,6 +350,17 @@ struct EmailAccountConnection<Legacy: View>: View {
             else if enabled == nil { await perform("Checking sign-in…", checkAvailability) }
         }
         .onDisappear { action?.cancel() }
+        .alert("Delete your Tacet account?", isPresented: $showsDeletion) {
+            TextField("Account email", text: $deletionEmail)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.emailAddress)
+                #endif
+            Button("Delete account", role: .destructive) { deleteAccount() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your account, plan, usage and device list, and signs out every device. Type the account email to confirm. This cannot be undone.")
+        }
         .confirmationDialog("Tacet account", isPresented: $showsConfirmation, presenting: confirming) { change in
             Button(change.label, role: .destructive) { apply(change) }
         } message: { change in
@@ -430,6 +455,10 @@ struct EmailAccountConnection<Legacy: View>: View {
             }
             Button("Refresh devices") { run("Loading devices…", loadDevices) }
             Button("Sign out", role: .destructive) { confirm(.signOut) }
+            Button("Delete account…", role: .destructive) {
+                deletionEmail = ""
+                showsDeletion = true
+            }
         }.disabled(pending != nil)
     }
 
@@ -494,6 +523,20 @@ struct EmailAccountConnection<Legacy: View>: View {
         #if os(macOS)
         AppWindows.shared.showOnboarding()
         #endif
+    }
+
+    private func deleteAccount() {
+        let typed = deletionEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        run("Deleting account…") {
+            guard let token = client.storedToken else { throw EmailAccountClient.Failure.unauthorized }
+            try await client.deleteAccount(confirmingEmail: typed, token: token)
+            try Task.checkCancellation()
+            try client.storeToken(nil)
+            devices = []
+            signedIn = false
+            deletionEmail = ""
+            onCredentialChanged(false)
+        }
     }
 
     private func confirm(_ change: DeviceChange) {

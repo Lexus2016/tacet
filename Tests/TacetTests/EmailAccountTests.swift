@@ -80,6 +80,29 @@ final class EmailAccountTests: XCTestCase {
         }
     }
 
+    func testAccountDeletionSendsTheTypedEmailAndReportsAMismatch() async throws {
+        let fixture = Fixture([
+            .init(status: 400, body: #"{"error":{"code":"confirmation_required"}}"#),
+            .init(status: 200, body: #"{"ok":true}"#),
+            .init(status: 403, body: #"{"error":{"code":"account_blocked"}}"#),
+        ])
+        let client = Self.client(fixture)
+        do {
+            try await client.deleteAccount(confirmingEmail: "wrong@example.com", token: "fixture-token")
+            XCTFail("A mismatching email must not delete the account.")
+        } catch let error as EmailAccountClient.Failure { XCTAssertEqual(error, .confirmationMismatch) }
+        try await client.deleteAccount(confirmingEmail: "owner@example.com", token: "fixture-token")
+        do {
+            try await client.deleteAccount(confirmingEmail: "owner@example.com", token: "fixture-token")
+            XCTFail("A blocked account has to go through support.")
+        } catch let error as EmailAccountClient.Failure { XCTAssertEqual(error, .blocked) }
+        let requests = await fixture.requests
+        XCTAssertEqual(requests.map(\.httpMethod), ["DELETE", "DELETE", "DELETE"])
+        XCTAssertEqual(requests.map { $0.url?.path }, Array(repeating: "/pilot/v1/account", count: 3))
+        XCTAssertEqual(try body(requests[1]), ["confirm": "owner@example.com"])
+        XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer fixture-token")
+    }
+
     func testBadCodeAndRateLimitHaveDistinctErrors() async throws {
         let fixture = Fixture([
             .init(status: 429, body: #"{"error":{"code":"code_rate_limit"}}"#),

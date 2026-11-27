@@ -87,6 +87,28 @@ test('email login joins platforms, shares quota, rejects reuse and restores sess
   assert.equal((await f.request('/account/plan', { token: phoneToken })).body.used.textTokens, 15);
 });
 
+test('an account owner can delete the account from the app, and a deleted account cannot be used or re-created for free minutes', async t => {
+  const f = await fixture(t);
+  const phone = f.device('Phone', 'ios');
+  const token = (await f.connect('owner@example.test', phone)).body.token;
+  const other = (await f.connect('keep@example.test', f.device('Laptop'))).body.token;
+  assert.equal((await f.request('/account', { method: 'DELETE', data: { confirm: 'owner@example.test' } })).status, 401);
+  assert.equal((await f.request('/account', { method: 'DELETE', token, data: {} })).body.error.code, 'confirmation_required');
+  assert.equal((await f.request('/account', { method: 'DELETE', token, data: { confirm: 'wrong@example.test' } })).status, 400);
+  assert.equal((await f.request('/models', { token })).status, 200);
+  const deleted = await f.request('/account', { method: 'DELETE', token, data: { confirm: ' Owner@Example.test ' } });
+  assert.deepEqual(deleted, { status: 200, body: { ok: true } });
+  // The credential stops working at once; other accounts are untouched.
+  assert.equal((await f.request('/models', { token })).status, 401);
+  assert.equal((await f.request('/models', { token: other })).status, 200);
+  const db = new DatabaseSync(f.usagePath, { readOnly: true });
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM login_accounts WHERE email = 'owner@example.test'").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM admin_actions WHERE action = 'account_deleted'").get().count, 1);
+  db.close();
+  // Signing in again starts a new account on the same device.
+  assert.equal((await f.connect('owner@example.test', phone)).status, 200);
+});
+
 test('a full account can replace an explicitly named device and revoke tokens without crossing accounts', async t => {
   const f = await fixture(t);
   const old = f.device('Old Mac');

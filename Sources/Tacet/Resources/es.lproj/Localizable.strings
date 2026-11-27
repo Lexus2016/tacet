@@ -193,3 +193,11 @@
 "That phrase was not translated. Choose a language different from the one you speak." = "Esa frase no se tradujo. Elige un idioma distinto del que hablas.";
 "Now dictate the second phrase, in another language." = "Ahora dicta la segunda frase en otro idioma.";
 "Waiting for your first phrase" = "Esperando tu primera frase";
+"Delete account…" = "Eliminar cuenta…";
+"Delete your Tacet account?" = "¿Eliminar tu cuenta de Tacet?";
+"Account email" = "Correo electrónico de la cuenta";
+"Delete account" = "Eliminar cuenta";
+"Cancel" = "Cancelar";
+"This permanently deletes your account, plan, usage and device list, and signs out every device. Type the account email to confirm. This cannot be undone." = "Esto elimina de forma permanente tu cuenta, plan, uso y lista de dispositivos, y cierra la sesión en todos los dispositivos. Escribe el correo de la cuenta para confirmar. No se puede deshacer.";
+"Deleting account…" = "Eliminando la cuenta…";
+"The email does not match this account. Nothing was deleted." = "El correo no coincide con esta cuenta. No se eliminó nada.";

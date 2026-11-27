@@ -193,3 +193,11 @@
 "That phrase was not translated. Choose a language different from the one you speak." = "वह वाक्य अनूदित नहीं हुआ। ऐसी भाषा चुनें जो आपकी बोली हुई भाषा से अलग हो।";
 "Now dictate the second phrase, in another language." = "अब दूसरा वाक्य किसी और भाषा में बोलें।";
 "Waiting for your first phrase" = "आपके पहले वाक्य की प्रतीक्षा";
+"Delete account…" = "खाता हटाएँ…";
+"Delete your Tacet account?" = "अपना Tacet खाता हटाएँ?";
+"Account email" = "खाते का ईमेल";
+"Delete account" = "खाता हटाएँ";
+"Cancel" = "रद्द करें";
+"This permanently deletes your account, plan, usage and device list, and signs out every device. Type the account email to confirm. This cannot be undone." = "इससे आपका खाता, प्लान, उपयोग और डिवाइस सूची हमेशा के लिए हट जाएगी और सभी डिवाइस साइन आउट हो जाएँगे। पुष्टि के लिए खाते का ईमेल लिखें। इसे वापस नहीं किया जा सकता।";
+"Deleting account…" = "खाता हटाया जा रहा है…";
+"The email does not match this account. Nothing was deleted." = "ईमेल इस खाते से मेल नहीं खाता। कुछ भी नहीं हटाया गया।";

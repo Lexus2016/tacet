@@ -472,3 +472,10 @@
 "That phrase was not translated. Choose a language different from the one you speak." = "Ту фразу не перекладено. Виберіть мову, відмінну від тієї, якою ви говорите.";
 "Now dictate the second phrase, in another language." = "Тепер продиктуйте другу фразу, іншою мовою.";
 "Waiting for your first phrase" = "Чекаю на першу фразу";
+"Delete account…" = "Видалити акаунт…";
+"Delete your Tacet account?" = "Видалити акаунт Tacet?";
+"Account email" = "Електронна пошта акаунта";
+"Delete account" = "Видалити акаунт";
+"This permanently deletes your account, plan, usage and device list, and signs out every device. Type the account email to confirm. This cannot be undone." = "Це остаточно видалить акаунт, тариф, використання й перелік пристроїв та вийде з акаунта на всіх пристроях. Введіть пошту акаунта для підтвердження. Скасувати це неможливо.";
+"Deleting account…" = "Видалення акаунта…";
+"The email does not match this account. Nothing was deleted." = "Пошта не збігається з цим акаунтом. Нічого не видалено.";

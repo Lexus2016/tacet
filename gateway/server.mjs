@@ -251,6 +251,14 @@ export function createGateway({ configPath, registryPath, usagePath, pilotAccoun
       if (login && req.method === 'POST' && path === '/v1/auth/device') {
         return send(res, 200, login.replace(await readJson(req, 1024)));
       }
+      if (login && accounts && req.method === 'DELETE' && path === '/v1/account') {
+        const client = login.identify(req.headers.authorization);
+        if (!client) throw new GatewayError(401, 'unauthorized', 'Device sign-in is required');
+        // A blocked account has to go through support, so a block cannot be shed by deleting.
+        // Заблокований акаунт звертається до підтримки, щоб блокування не можна було зняти видаленням.
+        accounts.guard(client.account);
+        return send(res, 200, accounts.removeOwn(client.account, await readJson(req, 1024)));
+      }
       if (login && ((req.method === 'GET' && path === '/v1/account/devices') ||
           (req.method === 'DELETE' && path?.startsWith('/v1/account/devices/')))) {
         const client = login.identify(req.headers.authorization);
